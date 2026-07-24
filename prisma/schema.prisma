@@ -1,0 +1,55 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Order {
+  id                    String   @id @default(uuid())
+  customerName          String
+  platform              String?
+  crispyPorkPiece       String?
+  crispyPorkWeight      String?
+  packedPork            String?
+  promotion             String?
+  price                 Float?
+  shippingMethod        String?
+  additionalShippingCost Float?
+  additionalFoamBoxCost Float?
+  actualReceivedAmount  Float?
+  transferSlip          String?
+  paymentStatus         String?
+  customerAddress       String?
+  orderStatus           String?
+  rackDetails           String?
+  sellerName            String?
+  trackingNumber        String?
+  createdAt             DateTime @default(now())
+}
+
+model User {
+  id       String @id @default(uuid())
+  name     String
+  role     String @default("ADMIN") // "SUPER_ADMIN" | "ADMIN"
+  racks    RackAssignment[]
+}
+
+model RackAssignment {
+  id              String   @id @default(uuid())
+  rackNo          String
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  initialWeight   Float    @default(0)
+  remainingWeight Float    @default(0)
+  isUsedUp        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, rackNo])
+}
