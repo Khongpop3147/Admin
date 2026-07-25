@@ -21,6 +21,18 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    // Ensure Central Inventory exists
+    let centralUser = await prisma.user.findFirst({ where: { role: 'CENTRAL_INVENTORY' } });
+    if (!centralUser) {
+      centralUser = await prisma.user.create({
+        data: {
+          id: 'central-inventory-id',
+          name: 'Central Inventory',
+          role: 'CENTRAL_INVENTORY'
+        }
+      });
+    }
+
     const users = await prisma.user.findMany({
       include: {
         racks: true,

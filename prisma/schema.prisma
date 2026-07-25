@@ -13,8 +13,10 @@ datasource db {
 
 model Order {
   id                    String   @id @default(uuid())
+  orderNo               Int      @default(0)
   customerName          String
   platform              String?
+  socialMediaName       String?
   crispyPorkPiece       String?
   crispyPorkWeight      String?
   packedPork            String?
@@ -22,7 +24,7 @@ model Order {
   price                 Float?
   shippingMethod        String?
   additionalShippingCost Float?
-  additionalFoamBoxCost Float?
+  codAmount             Float?
   actualReceivedAmount  Float?
   transferSlip          String?
   paymentStatus         String?
@@ -31,6 +33,7 @@ model Order {
   rackDetails           String?
   sellerName            String?
   trackingNumber        String?
+  adminNote             String?
   createdAt             DateTime @default(now())
 }
 
@@ -39,6 +42,11 @@ model User {
   name     String
   role     String @default("ADMIN") // "SUPER_ADMIN" | "ADMIN"
   racks    RackAssignment[]
+}
+
+model DailyCounter {
+  date      String @id
+  lastOrder Int    @default(0)
 }
 
 model RackAssignment {

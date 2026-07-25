@@ -8,7 +8,10 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const orders = await prisma.order.findMany({ select: { id: true, customerName: true, sellerName: true }});
-  console.log(orders);
+  await prisma.user.updateMany({
+    where: { name: "Employee A (Admin)" },
+    data: { name: "Employee A" }
+  });
+  console.log("Renamed user");
 }
 main();

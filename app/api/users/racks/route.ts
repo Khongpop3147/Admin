@@ -19,17 +19,36 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export async function POST(req: Request) {
   try {
-    const { userId, rackNo } = await req.json();
+    const { userId, rackNo, weight } = await req.json();
 
     if (!userId || !rackNo) {
       return NextResponse.json({ error: "User ID and Rack No are required" }, { status: 400 });
     }
 
-    const assignment = await prisma.rackAssignment.create({
-      data: {
-        userId,
+    // Check if this rack is already active anywhere globally
+    const existingActiveRack = await prisma.rackAssignment.findFirst({
+      where: {
         rackNo,
-      },
+        isUsedUp: false
+      }
+    });
+
+    if (existingActiveRack) {
+      return NextResponse.json({ error: `ไม่สามารถเพิ่มได้ เนื่องจากมีชิ้นหมู ${rackNo} กำลังถูกใช้งานอยู่` }, { status: 400 });
+    }
+
+    const data: any = {
+      userId,
+      rackNo,
+    };
+    
+    if (weight !== undefined) {
+      data.initialWeight = Number(weight);
+      data.remainingWeight = Number(weight);
+    }
+
+    const assignment = await prisma.rackAssignment.create({
+      data,
     });
 
     return NextResponse.json({ success: true, assignment }, { status: 201 });
@@ -58,6 +77,32 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
     console.error("Error revoking rack:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const { id, rackNo, weight } = await req.json();
+
+    if (!id || !rackNo) {
+      return NextResponse.json({ error: "Assignment ID and new Rack No are required" }, { status: 400 });
+    }
+
+    const dataToUpdate: any = { rackNo };
+    if (weight !== undefined) {
+      dataToUpdate.remainingWeight = Number(weight);
+      dataToUpdate.isUsedUp = Number(weight) <= 0;
+    }
+
+    const updated = await prisma.rackAssignment.update({
+      where: { id },
+      data: dataToUpdate,
+    });
+
+    return NextResponse.json({ success: true, updated }, { status: 200 });
+  } catch (error) {
+    console.error("Error updating rack name:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

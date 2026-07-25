@@ -3,28 +3,28 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
+const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 
 let prisma: PrismaClient;
 
-if (globalForPrisma.prisma) {
-  prisma = globalForPrisma.prisma;
+if (globalForPrisma.prisma2) {
+  prisma = globalForPrisma.prisma2;
 } else {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const adapter = new PrismaPg(pool);
   prisma = new PrismaClient({ adapter });
 }
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma2 = prisma;
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { 
-      customerName, platform, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price, 
-      shippingMethod, additionalShippingCost, additionalFoamBoxCost, actualReceivedAmount, 
+      customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price, 
+      shippingMethod, additionalShippingCost, codAmount, actualReceivedAmount, 
       transferSlip, paymentStatus, customerAddress, orderStatus, rackDetails, sellerName, trackingNumber,
-      bypassDuplicateCheck
+      bypassDuplicateCheck, adminNote
     } = body;
 
     if (!customerName) {
@@ -64,10 +64,28 @@ export async function POST(req: Request) {
 
     // Save the order and deduct rack weights in a transaction
     const newOrder = await prisma.$transaction(async (tx) => {
+      // 1. Get today's date in Thai time for the daily counter
+      const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      // 2. Increment DailyCounter atomically ONLY for non-storefront orders
+      let currentOrderNo = 0;
+      if (platform !== 'Storefront') {
+        const counter = await tx.dailyCounter.upsert({
+          where: { date: dateKey },
+          update: { lastOrder: { increment: 1 } },
+          create: { date: dateKey, lastOrder: 1 }
+        });
+        currentOrderNo = counter.lastOrder;
+      }
+
+      // 3. Create the order
       const order = await tx.order.create({
         data: {
+          orderNo: currentOrderNo,
           customerName,
           platform,
+          socialMediaName,
           crispyPorkPiece,
           crispyPorkWeight,
           packedPork,
@@ -75,7 +93,7 @@ export async function POST(req: Request) {
           price: price ? parseFloat(price) : null,
           shippingMethod,
           additionalShippingCost: additionalShippingCost ? parseFloat(additionalShippingCost) : null,
-          additionalFoamBoxCost: additionalFoamBoxCost ? parseFloat(additionalFoamBoxCost) : null,
+          codAmount: codAmount ? parseFloat(codAmount) : null,
           actualReceivedAmount: actualReceivedAmount ? parseFloat(actualReceivedAmount) : null,
           transferSlip,
           paymentStatus,
@@ -84,26 +102,35 @@ export async function POST(req: Request) {
           rackDetails, // Store the JSON string directly
           sellerName,
           trackingNumber,
+          adminNote,
         },
       });
 
-      // Deduct weight from assigned racks
+      // 4. Deduct weight from assigned racks atomically
       for (const rack of parsedRackDetails) {
         if (!rack.assignmentId || !rack.weight) continue;
+        const weightToDeduct = parseFloat(rack.weight);
         
-        const currentRack = await tx.rackAssignment.findUnique({ where: { id: rack.assignmentId }});
-        if (!currentRack) throw new Error("Rack not found");
-        
-        const newWeight = currentRack.remainingWeight - parseFloat(rack.weight);
-        if (newWeight < 0) throw new Error(`Rack ${currentRack.rackNo} does not have enough remaining weight (has ${currentRack.remainingWeight}kg, tried to use ${rack.weight}kg).`);
-
-        await tx.rackAssignment.update({
-          where: { id: rack.assignmentId },
+        // Use updateMany for safe atomic decrement with condition
+        const updatedCount = await tx.rackAssignment.updateMany({
+          where: { 
+            id: rack.assignmentId,
+            remainingWeight: { gte: weightToDeduct - 0.001 } // Add slight tolerance for float issues
+          },
           data: {
-            remainingWeight: newWeight,
-            isUsedUp: newWeight <= 0
+            remainingWeight: { decrement: weightToDeduct }
           }
         });
+
+        if (updatedCount.count === 0) {
+           throw new Error(`ออเดอร์ถูกยกเลิก: ชิ้นส่วนหมูที่คุณเลือกถูกใช้งานโดยแอดมินคนอื่นไปแล้ว (น้ำหนักคงเหลือไม่พอ)`);
+        }
+
+        // Check if we need to set isUsedUp (if weight is practically 0)
+        const updatedRack = await tx.rackAssignment.findUnique({ where: { id: rack.assignmentId } });
+        if (updatedRack && updatedRack.remainingWeight <= 0.001) {
+           await tx.rackAssignment.update({ where: { id: rack.assignmentId }, data: { isUsedUp: true, remainingWeight: 0 } });
+        }
       }
 
       return order;
@@ -125,15 +152,27 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const sellerName = searchParams.get("sellerName");
+    const dateStr = searchParams.get("date"); // format: YYYY-MM-DD
     
-    const whereClause = sellerName ? { sellerName } : {};
+    let whereClause: any = sellerName ? { sellerName } : {};
+
+    if (dateStr) {
+      // Parse the date in Thai timezone (approximate by using UTC+7 offset or just treating input as local date)
+      // Since server might be UTC, best to create start and end boundaries for the date string.
+      const startDate = new Date(`${dateStr}T00:00:00+07:00`);
+      const endDate = new Date(`${dateStr}T23:59:59.999+07:00`);
+      whereClause.createdAt = {
+        gte: startDate,
+        lte: endDate
+      };
+    }
 
     const orders = await prisma.order.findMany({
       where: whereClause,
       orderBy: {
         createdAt: "desc",
       },
-      take: 20,
+      ...(dateStr ? {} : { take: 20 }), // only limit if no date filter
     });
     return NextResponse.json({ orders }, { status: 200 });
   } catch (error) {

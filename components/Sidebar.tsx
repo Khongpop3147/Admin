@@ -30,12 +30,21 @@ export default function Sidebar() {
           <span className={styles.icon}>📝</span>
           Order Details
         </Link>
-        
+        <Link href="/packing" className={`${styles.navItem} ${pathname === '/packing' ? styles.active : ''}`}>
+          <span className={styles.icon}>📦</span>
+          Packing & Export
+        </Link>
         {currentUser?.role === "SUPER_ADMIN" && (
-          <Link href="/racks" className={`${styles.navItem} ${pathname === '/racks' ? styles.active : ''}`}>
-            <span className={styles.icon}>⚙️</span>
-            Rack Management
-          </Link>
+          <>
+            <Link href="/storefront" className={`${styles.navItem} ${pathname === '/storefront' ? styles.active : ''}`}>
+              <span className={styles.icon}>🏪</span>
+              Storefront Orders
+            </Link>
+            <Link href="/racks" className={`${styles.navItem} ${pathname === '/racks' ? styles.active : ''}`}>
+              <span className={styles.icon}>⚙️</span>
+              Rack Management
+            </Link>
+          </>
         )}
       </nav>
 
@@ -59,11 +68,16 @@ export default function Sidebar() {
                 marginTop: "4px"
               }}
             >
-              {users.map(u => (
-                <option key={u.id} value={u.id} style={{ color: "black" }}>
-                  {u.name} ({u.role})
-                </option>
-              ))}
+              {users.filter(u => u.role !== "CENTRAL_INVENTORY").map(u => {
+                const remaining = u.role !== "SUPER_ADMIN" && u.racks 
+                  ? u.racks.reduce((sum, r) => sum + (!r.isUsedUp ? r.remainingWeight : 0), 0).toFixed(2)
+                  : null;
+                return (
+                  <option key={u.id} value={u.id} style={{ color: "black" }}>
+                    {u.name} ({u.role}){remaining !== null ? ` | ${remaining} kg` : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
         </div>
