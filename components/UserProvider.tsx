@@ -6,7 +6,7 @@ export interface User {
   id: string;
   name: string;
   role: string;
-  racks: { id: string; rackNo: string; userId: string }[];
+  racks: { id: string; rackNo: string; userId: string; remainingWeight?: number; initialWeight?: number; isUsedUp?: boolean }[];
 }
 
 interface UserContextType {

@@ -70,7 +70,7 @@ export default function Sidebar() {
             >
               {users.filter(u => u.role !== "CENTRAL_INVENTORY").map(u => {
                 const remaining = u.role !== "SUPER_ADMIN" && u.racks 
-                  ? u.racks.reduce((sum, r) => sum + (!r.isUsedUp ? r.remainingWeight : 0), 0).toFixed(2)
+                  ? u.racks.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2)
                   : null;
                 return (
                   <option key={u.id} value={u.id} style={{ color: "black" }}>

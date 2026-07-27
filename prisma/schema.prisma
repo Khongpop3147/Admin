@@ -61,3 +61,11 @@ model RackAssignment {
 
   @@unique([userId, rackNo])
 }
+
+model DeletedPorkLog {
+  id              String   @id @default(uuid())
+  rackNo          String
+  weight          Float
+  userName        String
+  deletedAt       DateTime @default(now())
+}

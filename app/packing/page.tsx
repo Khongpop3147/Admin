@@ -24,7 +24,7 @@ interface Order {
   price: number;
   additionalShippingCost: number;
   actualReceivedAmount: number;
-  codAmount: number;
+  rackDetails: string;
 }
 
 export default function PackingPage() {

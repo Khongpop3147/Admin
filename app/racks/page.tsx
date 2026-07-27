@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { useUser } from "../../components/UserProvider";
 import styles from "../page.module.css";
@@ -88,7 +88,7 @@ function getRackSequence(basePrefix: string, baseStartNum: number, rackOffset: n
       num += 999;
       pfx = decrementPrefix(pfx);
   }
-  return { prefix: pfx, MathMaxZeroNum: Math.max(num, 0) };
+  return { prefix: pfx, num: Math.max(num, 0) };
 }
 
 export default function RacksPage() {
@@ -123,6 +123,185 @@ export default function RacksPage() {
   const [manualAddRackNo, setManualAddRackNo] = useState("");
   const [manualAddWeight, setManualAddWeight] = useState<number | "">("");
   const [isAddingManual, setIsAddingManual] = useState(false);
+
+  const [deletedLogs, setDeletedLogs] = useState<any[]>([]);
+
+  const fetchDeletedLogs = async () => {
+    try {
+      const res = await fetch("/api/racks/deleted");
+      const data = await res.json();
+      if (data.success) {
+        setDeletedLogs(data.logs);
+      }
+    } catch (e) {
+      console.error("Failed to fetch deleted logs", e);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser?.role === "SUPER_ADMIN") {
+      fetchDeletedLogs();
+    }
+  }, [currentUser]);
+
+  const allRackNos = useMemo(() => {
+    return Array.from(new Set([
+      ...users.flatMap(u => u.racks?.map(r => r.rackNo) || []),
+      ...(centralRacks.map((r: any) => r.rackNo) || [])
+    ])).sort();
+  }, [users, centralRacks]);
+
+  const currentAdminPiecesWithGaps = useMemo(() => {
+    if (!currentUser) return [];
+    const sourceRacks = users.find(u => u.id === selectedUserId)?.racks || (selectedUserId === currentUser.id ? currentUser.racks : []);
+    const sorted = [...sourceRacks].sort((a: any, b: any) => {
+      if (a.isUsedUp !== b.isUsedUp) return a.isUsedUp ? 1 : -1;
+      const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+      const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+      if (aM && bM && aM[1] === bM[1]) {
+        const aNum = parseInt(aM[2], 10) * 10 + parseInt(aM[3], 10);
+        const bNum = parseInt(bM[2], 10) * 10 + parseInt(bM[3], 10);
+        return aNum - bNum;
+      }
+      return a.rackNo.localeCompare(b.rackNo);
+    });
+
+    const displayList: any[] = [];
+    for (let i = 0; i < sorted.length; i++) {
+      displayList.push(sorted[i]);
+      if (i < sorted.length - 1) {
+        const a = sorted[i];
+        const b = sorted[i+1];
+        if (!a.isUsedUp && !b.isUsedUp) {
+          const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+          const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+          if (aM && bM && aM[1] === bM[1]) {
+            const p = aM[1];
+            const anum = parseInt(aM[2], 10) * 5 + parseInt(aM[3], 10);
+            const bnum = parseInt(bM[2], 10) * 5 + parseInt(bM[3], 10);
+            if (bnum - anum > 1 && bnum - anum < 10) {
+              for (let n = anum + 1; n < bnum; n++) {
+                let pNum = n % 5;
+                let rNum = Math.floor(n / 5);
+                if (pNum === 0) { pNum = 5; rNum--; }
+                const missingName = `${p}${String(rNum).padStart(aM[2].length, '0')}-${pNum}`;
+                if (!allRackNos.includes(missingName)) {
+                  displayList.push({ isMissingPlaceholder: true, rackNo: missingName, id: 'missing-' + missingName });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    if (assignmentsSearch) {
+      const s = assignmentsSearch.toLowerCase();
+      return displayList.filter(rack => 
+        rack.rackNo.toLowerCase().includes(s) || 
+        (rack.remainingWeight !== undefined && String(rack.remainingWeight).includes(s))
+      );
+    }
+    return displayList;
+  }, [users, selectedUserId, currentUser, assignmentsSearch, allRackNos]);
+
+  const centralPiecesWithGaps = useMemo(() => {
+    const sorted = [...centralRacks].sort((a: any, b: any) => {
+      const matchA = a.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
+      const matchB = b.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
+      if (matchA && matchB) {
+        if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
+        if (parseInt(matchA[2]) !== parseInt(matchB[2])) return parseInt(matchA[2]) - parseInt(matchB[2]);
+        if (matchA[3] && matchB[3]) return parseInt(matchA[3]) - parseInt(matchB[3]);
+      }
+      return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
+    });
+
+    const displayList: any[] = [];
+    for (let i = 0; i < sorted.length; i++) {
+      displayList.push(sorted[i]);
+      if (i < sorted.length - 1) {
+        const a = sorted[i];
+        const b = sorted[i+1];
+        if (!a.isUsedUp && !b.isUsedUp) {
+          const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+          const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+          if (aM && bM && aM[1] === bM[1]) {
+            const p = aM[1];
+            const anum = parseInt(aM[2], 10) * 5 + parseInt(aM[3], 10);
+            const bnum = parseInt(bM[2], 10) * 5 + parseInt(bM[3], 10);
+            if (bnum - anum > 1 && bnum - anum < 10) {
+              for (let n = anum + 1; n < bnum; n++) {
+                let pNum = n % 5;
+                let rNum = Math.floor(n / 5);
+                if (pNum === 0) { pNum = 5; rNum--; }
+                const missingName = `${p}${String(rNum).padStart(aM[2].length, '0')}-${pNum}`;
+                if (!allRackNos.includes(missingName)) {
+                  displayList.push({ isMissingPlaceholder: true, rackNo: missingName, id: 'missing-' + missingName });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    if (distributeSearch) {
+      const s = distributeSearch.toLowerCase();
+      return displayList.filter(rack => 
+        rack.rackNo.toLowerCase().includes(s) || 
+        (rack.remainingWeight !== undefined && String(rack.remainingWeight).includes(s))
+      );
+    }
+    return displayList;
+  }, [centralRacks, distributeSearch, allRackNos]);
+
+  const globalMissingPieces = useMemo(() => {
+    const missing = new Set<string>();
+    
+    const findGaps = (rackList: any[]) => {
+      const sorted = [...rackList].sort((a: any, b: any) => {
+        const matchA = a.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
+        const matchB = b.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
+        if (matchA && matchB) {
+          if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
+          if (parseInt(matchA[2]) !== parseInt(matchB[2])) return parseInt(matchA[2]) - parseInt(matchB[2]);
+          if (matchA[3] && matchB[3]) return parseInt(matchA[3]) - parseInt(matchB[3]);
+        }
+        return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
+      });
+
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const a = sorted[i];
+        const b = sorted[i+1];
+        if (!a.isUsedUp && !b.isUsedUp) {
+          const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+          const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+          if (aM && bM && aM[1] === bM[1]) {
+            const p = aM[1];
+            const anum = parseInt(aM[2], 10) * 5 + parseInt(aM[3], 10);
+            const bnum = parseInt(bM[2], 10) * 5 + parseInt(bM[3], 10);
+            if (bnum - anum > 1 && bnum - anum < 10) {
+              for (let n = anum + 1; n < bnum; n++) {
+                let pNum = n % 5;
+                let rNum = Math.floor(n / 5);
+                if (pNum === 0) { pNum = 5; rNum--; }
+                const missingName = `${p}${String(rNum).padStart(aM[2].length, '0')}-${pNum}`;
+                if (!allRackNos.includes(missingName)) {
+                  missing.add(missingName);
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+
+    users.forEach(u => findGaps(u.racks || []));
+    findGaps(centralRacks);
+    
+    return Array.from(missing).sort();
+  }, [users, centralRacks, allRackNos]);
 
   const handleSelectDistributeRange = () => {
     if (!centralRacks.length || !distributeStartRack || !distributeEndRack) return;
@@ -187,7 +366,7 @@ export default function RacksPage() {
         // Only update items that match the current prefix
         if (match && match[1] === prefix) {
           const currentNum = parseInt(match[2], 10);
-          const { prefix: newPfx, MathMaxZeroNum: newNum } = getRackSequence(match[1], currentNum, diff);
+          const { prefix: newPfx, num: newNum } = getRackSequence(match[1], currentNum, diff);
           return { ...r, rackNo: `${newPfx}${String(newNum).padStart(3, '0')}-${match[3]}` };
         }
         return r;
@@ -250,7 +429,7 @@ export default function RacksPage() {
         weights.forEach((weight, idx) => {
           const rackIncrement = Math.floor(idx / 5);
           const pieceNumber = (idx % 5) + 1;
-          const { prefix: seqPfx, MathMaxZeroNum: seqNum } = getRackSequence(prefix, startNum, rackIncrement);
+          const { prefix: seqPfx, num: seqNum } = getRackSequence(prefix, startNum, rackIncrement);
           const formattedNum = String(seqNum).padStart(3, '0');
           newRacks.push({
             rackNo: `${seqPfx}${formattedNum}-${pieceNumber}`,
@@ -294,10 +473,10 @@ export default function RacksPage() {
   const handleAddManualPiece = () => {
     let newName = "";
     if (draftRacks.length > 0) {
-      const { prefix: pfx, MathMaxZeroNum: num } = getRackSequence(prefix, startNum, Math.floor(draftRacks.length / 5));
+      const { prefix: pfx, num } = getRackSequence(prefix, startNum, Math.floor(draftRacks.length / 5));
       newName = `${pfx}${String(num).padStart(3, '0')}-${(draftRacks.length % 5) + 1}`;
     } else {
-      const { prefix: pfx, MathMaxZeroNum: num } = getRackSequence(prefix, startNum, 0);
+      const { prefix: pfx, num } = getRackSequence(prefix, startNum, 0);
       newName = `${pfx}${String(num).padStart(3, '0')}-1`;
     }
       
@@ -376,6 +555,7 @@ export default function RacksPage() {
       const res = await fetch(`/api/users/racks?id=${assignmentId}`, { method: "DELETE" });
       if (res.ok) {
         await fetchUsers();
+        fetchDeletedLogs();
       }
     } catch (err) {
       console.error(err);
@@ -611,7 +791,7 @@ export default function RacksPage() {
                           )}
                           {users.filter(u => u.role !== "CENTRAL_INVENTORY").map(u => (
                             <option key={u.id} value={u.id}>
-                              {u.name} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? r.remainingWeight : 0), 0).toFixed(2) || '0.00'} kg)
+                              {u.name} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} kg)
                             </option>
                           ))}
                         </select>
@@ -814,23 +994,12 @@ export default function RacksPage() {
               {centralRacks.length === 0 ? (
                 <div className={styles.emptyState} style={{ gridColumn: '1 / -1' }}>No pieces in Central Inventory.</div>
               ) : (
-                [...centralRacks]
-                  .sort((a: any, b: any) => {
-                    const matchA = a.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
-                    const matchB = b.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
-                    if (matchA && matchB) {
-                      if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
-                      if (parseInt(matchA[2]) !== parseInt(matchB[2])) return parseInt(matchA[2]) - parseInt(matchB[2]);
-                      if (matchA[3] && matchB[3]) return parseInt(matchA[3]) - parseInt(matchB[3]);
-                    }
-                    return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
-                  })
-                  .filter((r: any) => {
-                    if (!distributeSearch) return true;
-                    const s = distributeSearch.toLowerCase();
-                    return r.rackNo.toLowerCase().includes(s) || String(r.remainingWeight).includes(s);
-                  })
-                  .map((rack: any) => (
+                centralPiecesWithGaps.map((rack: any) => (
+                  rack.isMissingPlaceholder ? (
+                    <div key={rack.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px', background: 'rgba(255,107,107,0.1)', borderRadius: '6px', border: '1px dashed #ff6b6b' }}>
+                      <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '15px' }}>⚠️ Missing: {rack.rackNo}</span>
+                    </div>
+                  ) : (
                   <label key={rack.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px', opacity: rack.isUsedUp ? 0.5 : 1, cursor: 'pointer', border: selectedCentralRacks.has(rack.id) ? '1px solid #ffac33' : '1px solid transparent' }}>
                     <input 
                       type="checkbox" 
@@ -846,6 +1015,7 @@ export default function RacksPage() {
                     />
                     <span style={{ fontSize: '15px' }}>{rack.rackNo} <span style={{ color: 'var(--text-secondary)' }}>({rack.remainingWeight} kg)</span></span>
                   </label>
+                  )
                 ))
               )}
             </div>
@@ -889,6 +1059,12 @@ export default function RacksPage() {
           <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '1000px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>Current Assignments</h2>
+              <datalist id="all-racks-list">
+                {Array.from(new Set([
+                  ...users.flatMap(u => u.racks?.map(r => r.rackNo) || []),
+                  ...(centralRacks.map((r: any) => r.rackNo) || [])
+                ])).sort().map(no => <option key={no} value={no} />)}
+              </datalist>
               <button 
                 onClick={() => setIsAssignmentsModalOpen(false)}
                 style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
@@ -909,7 +1085,7 @@ export default function RacksPage() {
                       Central Inventory
                     </option>
                   )}
-                  {users.map(u => (
+                  {users.filter(u => u.role !== "CENTRAL_INVENTORY").map(u => (
                     <option key={u.id} value={u.id}>
                       {u.name}
                     </option>
@@ -939,6 +1115,7 @@ export default function RacksPage() {
                     placeholder="Start Piece (e.g. A005-3)"
                     value={bulkShiftTarget}
                     onChange={e => setBulkShiftTarget(e.target.value)}
+                    list="all-racks-list"
                   />
                 </div>
                 <button 
@@ -965,6 +1142,20 @@ export default function RacksPage() {
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
                 Quickly create and assign a missing piece to the currently selected admin.
               </p>
+              {globalMissingPieces.length > 0 && (
+                <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', alignSelf: 'center' }}>Suggested missing:</span>
+                  {globalMissingPieces.map(piece => (
+                    <button
+                      key={piece}
+                      onClick={() => setManualAddRackNo(piece)}
+                      style={{ background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px dashed #ff6b6b', borderRadius: '12px', padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
+                    >
+                      + {piece}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', alignItems: 'end' }}>
                 <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                   <input 
@@ -973,6 +1164,7 @@ export default function RacksPage() {
                     placeholder="Piece No. (e.g. A005-3)"
                     value={manualAddRackNo}
                     onChange={e => setManualAddRackNo(e.target.value)}
+                    list="all-racks-list"
                   />
                 </div>
                 <div className={styles.formGroup} style={{ marginBottom: 0 }}>
@@ -1001,26 +1193,13 @@ export default function RacksPage() {
               ) : (users.find(u => u.id === selectedUserId)?.racks || (selectedUserId === currentUser.id ? currentUser.racks : [])).length === 0 ? (
                 <div className={styles.emptyState} style={{ gridColumn: '1 / -1', padding: '40px' }}>No pieces assigned.</div>
               ) : (
-                [...(users.find(u => u.id === selectedUserId)?.racks || (selectedUserId === currentUser.id ? currentUser.racks : []))]
-                  .sort((a: any, b: any) => {
-                    if (a.isUsedUp !== b.isUsedUp) return a.isUsedUp ? 1 : -1;
-                    const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-                    const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-                    if (aM && bM && aM[1] === bM[1]) {
-                      const aNum = parseInt(aM[2], 10) * 10 + parseInt(aM[3], 10);
-                      const bNum = parseInt(bM[2], 10) * 10 + parseInt(bM[3], 10);
-                      return aNum - bNum;
-                    }
-                    return a.rackNo.localeCompare(b.rackNo);
-                  })
-                  .filter((rack: any) => {
-                    if (!assignmentsSearch) return true;
-                    const s = assignmentsSearch.toLowerCase();
-                    return rack.rackNo.toLowerCase().includes(s) || String(rack.remainingWeight).includes(s);
-                  })
-                  .map((rack: any) => (
-                    <div key={rack.id} style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', opacity: rack.isUsedUp ? 0.5 : 1 }}>
-                      {editingRackId === rack.id ? (
+                currentAdminPiecesWithGaps.map((rack: any) => (
+                    <div key={rack.id} style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: rack.isMissingPlaceholder ? 'rgba(255,107,107,0.1)' : 'rgba(255,255,255,0.03)', borderRadius: '8px', border: rack.isMissingPlaceholder ? '1px dashed #ff6b6b' : '1px solid rgba(255,255,255,0.1)', opacity: rack.isUsedUp ? 0.5 : 1 }}>
+                      {rack.isMissingPlaceholder ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                          <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '16px' }}>⚠️ Missing: {rack.rackNo}</span>
+                        </div>
+                      ) : editingRackId === rack.id ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <input 
                             type="text" 
@@ -1096,6 +1275,35 @@ export default function RacksPage() {
           </div>
         </div>
       )}
+    {deletedLogs.length > 0 && (
+      <div className={`${styles.mainContent} glass-panel`} style={{ marginTop: '24px' }}>
+        <h2 className={styles.cardTitle} style={{ color: '#ffac33' }}>Deleted / Missing Pork Log</h2>
+        <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Deleted At</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Piece No.</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Weight Before Delete</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Deleted By / From Admin</th>
+              </tr>
+            </thead>
+            <tbody>
+              {deletedLogs.map((log) => (
+                <tr key={log.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                  <td style={{ padding: '12px 16px', color: '#fff' }}>
+                    {new Date(log.deletedAt).toLocaleString('en-US', { timeZone: 'Asia/Bangkok' })}
+                  </td>
+                  <td style={{ padding: '12px 16px', color: '#ffac33', fontWeight: 'bold' }}>{log.rackNo}</td>
+                  <td style={{ padding: '12px 16px', color: '#fff' }}>{Number(log.weight).toFixed(2)} kg</td>
+                  <td style={{ padding: '12px 16px', color: '#fff' }}>{log.userName}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

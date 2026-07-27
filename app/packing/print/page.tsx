@@ -109,7 +109,7 @@ function PrintSlipContent() {
                 <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>#{order.orderNo || "?"}</td>
                 <td style={{ border: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '18px' }}>{order.customerName}</td>
                 <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>
-                  {rackData.detailsArray.map((line, idx) => (
+                  {rackData.detailsArray?.map((line, idx) => (
                     <div key={idx}>{line}</div>
                   ))}
                 </td>

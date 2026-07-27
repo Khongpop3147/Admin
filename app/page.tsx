@@ -11,6 +11,7 @@ interface Order {
   platform?: string;
   socialMediaName?: string;
   orderStatus?: string;
+  adminNote?: string;
   createdAt: string;
 }
 
@@ -200,7 +201,7 @@ export default function Home() {
         const weightStr = name === "crispyPorkWeight" ? value : newData.crispyPorkWeight;
         
         if (promo === "1 kg 250 บาท") {
-          const parsedWeight = parseFloat(weightStr);
+          const parsedWeight = parseFloat(String(weightStr));
           if (!isNaN(parsedWeight) && parsedWeight > 0) {
             newData.price = (parsedWeight * 250).toFixed(2);
           }
@@ -280,7 +281,7 @@ export default function Home() {
     });
 
     if (name === "crispyPorkWeight") {
-      const parsedWeight = parseFloat(value);
+      const parsedWeight = parseFloat(String(value));
       if (!isNaN(parsedWeight) && parsedWeight > 0) {
         autoAllocateRacks(parsedWeight);
       } else {
@@ -325,7 +326,7 @@ export default function Home() {
   const handleManualRackChange = (index: number, field: keyof RackDetail, value: string | number) => {
     const updated = [...rackDetails];
     if (field === "assignmentId") {
-      const selected = currentUser?.racks?.find((r: any) => r.id === value);
+      const selected = currentUser?.racks?.find((r: any) => r.id === value) as any;
       if (selected) {
         updated[index].assignmentId = selected.id;
         updated[index].rackNo = selected.rackNo;
@@ -706,7 +707,7 @@ export default function Home() {
                 <div style={{ borderLeft: '1px solid rgba(255,255,255,0.1)' }}></div>
                 <div>
                   <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--accent-green)' }}>
-                    {currentUser.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? r.remainingWeight : 0), 0).toFixed(2) || '0.00'}
+                    {currentUser.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2)}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Kg Left</div>
                 </div>
@@ -767,7 +768,7 @@ export default function Home() {
                   <option value="">All Admins</option>
                   {users.filter(u => u.role !== "SUPER_ADMIN").map(u => (
                     <option key={u.id} value={u.name}>
-                      {u.name} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? r.remainingWeight : 0), 0).toFixed(2) || '0.00'} kg)
+                      {u.name} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} kg)
                     </option>
                   ))}
                 </select>

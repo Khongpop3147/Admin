@@ -70,6 +70,21 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Assignment ID is required" }, { status: 400 });
     }
 
+    const rackToDelete = await prisma.rackAssignment.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+
+    if (rackToDelete) {
+      await prisma.deletedPorkLog.create({
+        data: {
+          rackNo: rackToDelete.rackNo,
+          weight: rackToDelete.remainingWeight,
+          userName: rackToDelete.user.name,
+        }
+      });
+    }
+
     await prisma.rackAssignment.delete({
       where: { id },
     });
