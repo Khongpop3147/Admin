@@ -42,8 +42,11 @@ export async function PATCH(
     });
 
     return NextResponse.json({ success: true, order: updatedOrder }, { status: 200 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating order:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    if (error?.code === "P2025") {
+      return NextResponse.json({ error: "ไม่พบออเดอร์นี้ อาจถูกลบไปแล้ว" }, { status: 404 });
+    }
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }

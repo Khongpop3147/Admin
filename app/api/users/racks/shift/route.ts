@@ -18,12 +18,12 @@ export async function POST(req: Request) {
     const { startRackNo, direction } = await req.json(); // direction: 'up' or 'down'
 
     if (!startRackNo || !direction) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "กรุณากรอกข้อมูลให้ครบ" }, { status: 400 });
     }
 
     const match = startRackNo.match(/^(.*?)(\d+)-(\d+)$/);
     if (!match) {
-      return NextResponse.json({ error: "Invalid rack format. Must be Prefix + Number + -Piece (e.g. A005-3)" }, { status: 400 });
+      return NextResponse.json({ error: "รูปแบบรหัสถาดไม่ถูกต้อง ต้องเป็น อักษรนำหน้า+เลข+ชิ้น (เช่น A005-3)" }, { status: 400 });
     }
 
     const prefix = match[1];
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
 
     const startIndex = allAssignments.findIndex(a => a.rackNo === startRackNo);
     if (startIndex === -1) {
-      return NextResponse.json({ error: `Piece ${startRackNo} not found in assigned pieces.` }, { status: 404 });
+      return NextResponse.json({ error: `ไม่พบชิ้น ${startRackNo} ในรายการที่มอบหมายไว้` }, { status: 404 });
     }
 
     const updates = [];
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
           const newName = `${p}${String(rNum).padStart(m[2].length, '0')}-${pNum}`;
           
           if (unshiftedNames.has(newName)) {
-            return NextResponse.json({ error: `Cannot shift down: collision with existing piece ${newName}` }, { status: 400 });
+            return NextResponse.json({ error: `เลื่อนลงไม่ได้: รหัส ${newName} ชนกับชิ้นที่มีอยู่แล้ว` }, { status: 400 });
           }
 
           updates.push(prisma.rackAssignment.update({
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
           const newName = `${p}${String(rNum).padStart(m[2].length, '0')}-${pNum}`;
           
           if (unshiftedNames.has(newName)) {
-            return NextResponse.json({ error: `Cannot shift up: collision with existing piece ${newName}` }, { status: 400 });
+            return NextResponse.json({ error: `เลื่อนขึ้นไม่ได้: รหัส ${newName} ชนกับชิ้นที่มีอยู่แล้ว` }, { status: 400 });
           }
 
           updates.push(prisma.rackAssignment.update({
@@ -111,6 +111,6 @@ export async function POST(req: Request) {
 
   } catch (error) {
     console.error("Bulk shift error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }

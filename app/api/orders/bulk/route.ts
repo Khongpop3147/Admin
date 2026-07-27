@@ -34,11 +34,24 @@ export async function PATCH(req: Request) {
           gte: startDate,
           lte: endDate,
         },
-        // We probably don't want to override Storefront's "Completed" orders
-        // Only update Pending and Packed orders
-        OR: [
-          { orderStatus: { in: ["Pending", "Packed", ""] } },
-          { orderStatus: null }
+        // Only update Pending and Packed orders. Storefront orders are normally
+        // already "Completed" so this excludes them anyway, but check platform
+        // directly too rather than relying on that alone — otherwise any
+        // storefront order that isn't "Completed" (edited, imported, a bug
+        // elsewhere) would get swept up into a shipping-day bulk action.
+        AND: [
+          {
+            OR: [
+              { orderStatus: { in: ["Pending", "Packed", ""] } },
+              { orderStatus: null }
+            ]
+          },
+          {
+            OR: [
+              { platform: { not: "Storefront" } },
+              { platform: null }
+            ]
+          }
         ]
       },
       data: {
@@ -49,6 +62,6 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ success: true, count: result.count }, { status: 200 });
   } catch (error) {
     console.error("Error bulk updating orders:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }

@@ -11,6 +11,23 @@ interface DraftRack {
   selected?: boolean;
 }
 
+function ActionCard({ icon, title, subtitle, accent, onClick }: { icon: string; title: string; subtitle: string; accent: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`glass-panel ${styles.ordersButton}`}
+    >
+      <div className={styles.ordersIcon} style={{ background: accent }}>{icon}</div>
+      <div className={styles.ordersInfo}>
+        <div className={styles.ordersTitle}>{title}</div>
+        <div className={styles.ordersSubtitle}>{subtitle}</div>
+      </div>
+      <span className={styles.ordersChevron}>›</span>
+    </button>
+  );
+}
+
 function incrementPrefix(prefix: string): string {
   if (!prefix) return "A";
   const match = prefix.match(/([a-zA-Z]+)$/);
@@ -119,6 +136,9 @@ export default function RacksPage() {
   const [isDistributeModalOpen, setIsDistributeModalOpen] = useState(false);
   const [distributeSearch, setDistributeSearch] = useState("");
   const [isAssignmentsModalOpen, setIsAssignmentsModalOpen] = useState(false);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [isAdvancedModalOpen, setIsAdvancedModalOpen] = useState(false);
+  const [isDeletedLogModalOpen, setIsDeletedLogModalOpen] = useState(false);
   const [assignmentsSearch, setAssignmentsSearch] = useState("");
   const [manualAddRackNo, setManualAddRackNo] = useState("");
   const [manualAddWeight, setManualAddWeight] = useState<number | "">("");
@@ -327,15 +347,15 @@ export default function RacksPage() {
     return (
       <div className={styles.container}>
         <div className={styles.header}>
-          <h1 className={styles.title}>Access Denied</h1>
-          <p className={styles.subtitle}>Only Super Admins can access this page.</p>
+          <h1 className={styles.title}>ไม่มีสิทธิ์เข้าถึง</h1>
+          <p className={styles.subtitle}>เฉพาะ Super Admin เท่านั้นที่เข้าหน้านี้ได้</p>
         </div>
       </div>
     );
   }
 
   const handlePrefixChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newPrefix = e.target.value;
+    const newPrefix = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
     const oldPrefix = prefix;
     setPrefix(newPrefix);
     
@@ -470,6 +490,23 @@ export default function RacksPage() {
     setDraftRacks(updated);
   };
 
+  const handleRemoveSelectedDrafts = () => {
+    const selectedCount = draftRacks.filter(r => r.selected).length;
+    if (selectedCount === 0) return;
+    if (!confirm(`ต้องการลบชิ้นที่ติ๊กเลือกไว้ทั้งหมด ${selectedCount} ชิ้นออกจากรายการใช่ไหมครับ?`)) return;
+
+    const oldRackNos = draftRacks.map(r => r.rackNo);
+    const remaining = draftRacks.filter(r => !r.selected);
+    const renamed = remaining.map((r, i) => ({ ...r, rackNo: oldRackNos[i] ?? r.rackNo }));
+    setDraftRacks(renamed);
+  };
+
+  const handleClearAllDrafts = () => {
+    if (draftRacks.length === 0) return;
+    if (!confirm(`ต้องการล้างรายการที่สร้างไว้ทั้งหมด ${draftRacks.length} ชิ้นใช่ไหมครับ? (ยังไม่ได้บันทึกเข้าคลัง จะหายไปทันที)`)) return;
+    setDraftRacks([]);
+  };
+
   const handleAddManualPiece = () => {
     let newName = "";
     if (draftRacks.length > 0) {
@@ -520,7 +557,7 @@ export default function RacksPage() {
     const racksToAssign = draftRacks.filter(r => r.selected && r.weight > 0);
 
     if (racksToAssign.length === 0) {
-      alert("No valid pieces selected (all selected weights are 0, or none selected).");
+      alert("ยังไม่ได้เลือกชิ้นที่ถูกต้อง (ชิ้นที่ติ๊กเลือกน้ำหนักเป็น 0 หรือยังไม่ได้เลือกเลย)");
       return;
     }
 
@@ -535,22 +572,22 @@ export default function RacksPage() {
         const remainingRacks = draftRacks.filter(r => !r.selected || r.weight === 0);
         setDraftRacks(remainingRacks);
         await fetchUsers(); // Refresh the users list and racks
-        alert(`Successfully assigned ${racksToAssign.length} pieces!`);
+        alert(`มอบหมายสำเร็จ ${racksToAssign.length} ชิ้น!`);
       } else {
         const err = await res.json();
-        alert(err.error || "Failed to assign pieces");
+        alert(err.error || "มอบหมายไม่สำเร็จ");
       }
     } catch (err) {
       console.error(err);
-      alert("Error assigning pieces");
+      alert("เกิดข้อผิดพลาดขณะมอบหมาย");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleRevoke = async (assignmentId: string) => {
-    if (!confirm("Are you sure you want to revoke this rack?")) return;
-    
+    if (!confirm("ต้องการเพิกถอนถาดนี้ใช่ไหมครับ?")) return;
+
     try {
       const res = await fetch(`/api/users/racks?id=${assignmentId}`, { method: "DELETE" });
       if (res.ok) {
@@ -559,7 +596,7 @@ export default function RacksPage() {
       }
     } catch (err) {
       console.error(err);
-      alert("Error revoking piece");
+      alert("เกิดข้อผิดพลาดขณะเพิกถอนชิ้น");
     }
   };
 
@@ -579,14 +616,14 @@ export default function RacksPage() {
         setSelectedCentralRacks(new Set());
         setDistributeTargetUserId("");
         await fetchUsers();
-        alert(`Successfully distributed ${selectedCentralRacks.size} pieces!`);
+        alert(`แจกจ่ายสำเร็จ ${selectedCentralRacks.size} ชิ้น!`);
       } else {
         const err = await res.json();
-        alert(err.error || "Failed to distribute pieces");
+        alert(err.error || "แจกจ่ายไม่สำเร็จ");
       }
     } catch (err) {
       console.error(err);
-      alert("Error distributing pieces");
+      alert("เกิดข้อผิดพลาดขณะแจกจ่าย");
     } finally {
       setIsDistributing(false);
     }
@@ -604,17 +641,17 @@ export default function RacksPage() {
         setEditingRackId(null);
         await fetchUsers();
       } else {
-        alert("Failed to update name");
+        alert("แก้ไขรหัสไม่สำเร็จ");
       }
     } catch (err) {
-      alert("Error updating name");
+      alert("เกิดข้อผิดพลาดขณะแก้ไขรหัส");
     }
   };
 
   const handleBulkShift = async (direction: 'up' | 'down') => {
     if (!bulkShiftTarget.trim()) return;
-    if (!confirm(`Are you sure you want to shift all pieces starting from ${bulkShiftTarget} ${direction.toUpperCase()}? This affects all admins.`)) return;
-    
+    if (!confirm(`ต้องการเลื่อนชิ้นทั้งหมดตั้งแต่ ${bulkShiftTarget} ${direction === 'up' ? 'ขึ้น' : 'ลง'} ใช่ไหมครับ? การกระทำนี้จะมีผลกับแอดมินทุกคน`)) return;
+
     setIsShifting(true);
     try {
       const res = await fetch("/api/users/racks/shift", {
@@ -624,14 +661,14 @@ export default function RacksPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        alert(`Successfully shifted ${data.count} pieces.`);
+        alert(`เลื่อนสำเร็จ ${data.count} ชิ้น`);
         setBulkShiftTarget("");
         await fetchUsers();
       } else {
-        alert(data.error || "Failed to shift pieces.");
+        alert(data.error || "เลื่อนไม่สำเร็จ");
       }
     } catch (err) {
-      alert("Error shifting pieces.");
+      alert("เกิดข้อผิดพลาดขณะเลื่อนชิ้น");
     } finally {
       setIsShifting(false);
     }
@@ -663,10 +700,10 @@ export default function RacksPage() {
         setManualAddWeight("");
         await fetchUsers();
       } else {
-        alert(data.error || "Failed to add piece");
+        alert(data.error || "เพิ่มชิ้นไม่สำเร็จ");
       }
     } catch (err) {
-      alert("Error adding piece");
+      alert("เกิดข้อผิดพลาดขณะเพิ่มชิ้น");
     } finally {
       setIsAddingManual(false);
     }
@@ -677,176 +714,210 @@ export default function RacksPage() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Pork Piece Management</h1>
-        <p className={styles.subtitle}>Batch Assign Pork Pieces & Inventory</p>
+        <h1 className={styles.title}>จัดการชิ้นหมู</h1>
+        <p className={styles.subtitle}>จัดสรรชิ้นหมูให้แอดมินและดูแลคลังสินค้า</p>
       </div>
 
-      <div className={styles.layout}>
-        <div className={`${styles.mainContent} glass-panel`}>
-          <h2 className={styles.cardTitle}>Batch Assign Pieces</h2>
-          
-          <div style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', marginBottom: '20px' }}>
-            <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>Generate Piece Sequence via Excel</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '12px', alignItems: 'end' }}>
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Prefix</label>
-                    <input type="text" className={styles.input} value={prefix} onChange={handlePrefixChange} placeholder="e.g. A" />
-                  </div>
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Start Rack #</label>
-                    <input type="number" className={styles.input} value={startNum} min={0} max={999} onChange={handleStartNumChange} />
-                  </div>
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Upload Excel (.xlsx)</label>
-                    <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className={styles.input} style={{ padding: '8px' }} />
-                  </div>
-                </div>
-              </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+        <ActionCard
+          icon="📥"
+          title="เพิ่มชิ้นหมูใหม่"
+          subtitle={draftRacks.length > 0 ? `มีร่างค้างไว้ ${draftRacks.length} ชิ้น` : "อัปโหลด Excel แล้วมอบหมายให้แอดมิน"}
+          accent="rgba(88,166,255,0.15)"
+          onClick={() => setIsBatchModalOpen(true)}
+        />
+        <ActionCard
+          icon="📤"
+          title="แจกจ่ายจากคลังกลาง"
+          subtitle="ส่งชิ้นหมูจากคลังกลางให้แอดมิน"
+          accent="rgba(255,172,51,0.15)"
+          onClick={() => setIsDistributeModalOpen(true)}
+        />
+        <ActionCard
+          icon="📋"
+          title="รายการที่มอบหมายแล้ว"
+          subtitle="ดู แก้ไข หรือเพิกถอนชิ้นของแต่ละแอดมิน"
+          accent="rgba(255,255,255,0.12)"
+          onClick={() => setIsAssignmentsModalOpen(true)}
+        />
+        <ActionCard
+          icon="🗑️"
+          title="ประวัติการลบ"
+          subtitle={deletedLogs.length > 0 ? `${deletedLogs.length} รายการ` : "ยังไม่มีรายการ"}
+          accent="rgba(139,148,158,0.15)"
+          onClick={() => setIsDeletedLogModalOpen(true)}
+        />
+      </div>
 
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h3 style={{ fontSize: '14px' }}>Generated Pieces ({draftRacks.length})</h3>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input
-                      type="text"
-                      placeholder="Search rack..."
-                      value={searchDraft}
-                      onChange={(e) => setSearchDraft(e.target.value)}
-                      className={styles.input}
-                      style={{ padding: '6px 12px', width: '150px' }}
-                    />
-                    <button 
-                      onClick={() => {
-                        const allSelected = draftRacks.every(r => r.selected);
-                        setDraftRacks(draftRacks.map(r => ({ ...r, selected: !allSelected })));
-                      }}
-                      style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', cursor: 'pointer', padding: '6px 12px', borderRadius: '4px', fontSize: '12px' }}
-                    >
-                      {draftRacks.every(r => r.selected) ? "Deselect All" : "Select All"}
-                    </button>
-                    <button 
-                      onClick={handleAddManualPiece}
-                      style={{ background: 'var(--accent-blue)', border: 'none', color: '#fff', cursor: 'pointer', padding: '6px 12px', borderRadius: '4px', fontSize: '12px' }}
-                    >
-                      + Add Manual Piece
-                    </button>
-                  </div>
-                </div>
+      <div style={{ textAlign: 'center', marginTop: '28px' }}>
+        <button
+          type="button"
+          onClick={() => setIsAdvancedModalOpen(true)}
+          style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline' }}
+        >
+          ⚙️ เครื่องมือขั้นสูง (สำหรับกรณีพิเศษ)
+        </button>
+      </div>
 
-                <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '8px', marginBottom: '16px' }}>
-                    {draftRacks
-                      .map((rack, idx) => ({ ...rack, originalIdx: idx }))
-                      .filter(r => !searchDraft || r.rackNo.toLowerCase().includes(searchDraft.toLowerCase()))
-                      .map((rack) => (
-                      <div key={rack.originalIdx} style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr auto', gap: '12px', marginBottom: '8px', alignItems: 'center', background: rack.weight === 0 ? 'rgba(255,255,0,0.1)' : 'transparent', padding: rack.weight === 0 ? '4px' : '0' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={!!rack.selected}
-                          onChange={(e) => {
-                            const updated = [...draftRacks];
-                            updated[rack.originalIdx].selected = e.target.checked;
-                            setDraftRacks(updated);
-                          }}
-                          style={{ cursor: 'pointer' }}
-                        />
-                        <input 
-                          type="text" 
-                          className={styles.input} 
-                          value={rack.rackNo} 
-                          onChange={e => handleDraftNameChange(rack.originalIdx, e.target.value)} 
-                          style={{ color: rack.weight === 0 ? '#aaa' : 'inherit' }}
-                        />
-                        <div style={{ position: 'relative' }}>
-                          <input 
-                            type="number" 
-                            className={styles.input} 
-                            value={rack.weight} 
-                            onChange={e => handleDraftWeightChange(rack.originalIdx, Number(e.target.value))} 
-                          />
-                          <span style={{ position: 'absolute', right: '12px', top: '10px', color: '#666', fontSize: '12px' }}>kg</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => handleInsertGap(rack.originalIdx)} title="Insert Gap Here" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>+</button>
-                          <button onClick={() => handleRemoveDraft(rack.originalIdx)} title="Remove Item" style={{ background: 'rgba(255,0,0,0.2)', border: 'none', color: '#ff6b6b', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>✕</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+      {/* Batch Assign Modal */}
+      {isBatchModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ margin: 0, color: 'var(--accent-blue)', fontSize: '24px' }}>เพิ่มชิ้นหมูใหม่</h2>
+              <button
+                onClick={() => setIsBatchModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
+              >✕</button>
+            </div>
 
-                  <div style={{ padding: '16px', background: 'rgba(var(--accent-blue-rgb), 0.1)', borderRadius: '8px', marginTop: '16px', border: '1px solid rgba(var(--accent-blue-rgb), 0.3)' }}>
-                    <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--accent-blue)' }}>Assign Selected to Admin</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginBottom: '16px' }}>
-                      <div className={styles.formGroup}>
-                        <label className={styles.label}>Select Admin</label>
-                        <select 
-                          className={styles.input} 
-                          value={selectedUserId}
-                          onChange={(e) => setSelectedUserId(e.target.value)}
-                        >
-                          <option value="">-- Select --</option>
-                          {centralUser && (
-                            <option value={centralUser.id}>
-                              Central Inventory (เหลือ {centralRacks.reduce((sum: any, r: any) => sum + (!r.isUsedUp ? r.remainingWeight : 0), 0).toFixed(2) || '0.00'} kg)
-                            </option>
-                          )}
-                          {users.filter(u => u.role !== "CENTRAL_INVENTORY").map(u => (
-                            <option key={u.id} value={u.id}>
-                              {u.name} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} kg)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+            <div style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>สร้างลำดับชิ้นหมูจากไฟล์ Excel</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '12px', alignItems: 'end' }}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>อักษรนำหน้า (Prefix)</label>
+                      <input type="text" className={styles.input} value={prefix} onChange={handlePrefixChange} placeholder="เช่น A" style={{ textTransform: 'uppercase' }} />
                     </div>
-                    
-                    <button 
-                      onClick={handleAssignBatch} 
-                      className={styles.button} 
-                      disabled={isLoading || !selectedUserId}
-                      style={{ width: '100%', background: 'var(--accent-blue)', color: 'white' }}
-                    >
-                      {isLoading ? "Assigning..." : `Assign Selected to ${selectedUserId === currentUser.id ? "Central Inventory" : (selectedUser?.name || "Admin")}`}
-                    </button>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>เริ่มถาดที่ #</label>
+                      <input type="number" className={styles.input} value={startNum} min={0} max={999} onChange={handleStartNumChange} />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>อัปโหลดไฟล์ Excel (.xlsx)</label>
+                      <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className={styles.input} style={{ padding: '8px' }} />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-        <div className={`${styles.sideContent} glass-panel`}>
-          
-          <div style={{ padding: '16px', background: 'rgba(255,172,51,0.1)', borderRadius: '8px', marginBottom: '20px', border: '1px solid rgba(255,172,51,0.3)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '14px', marginBottom: '12px', color: '#ffac33' }}>Distribute Central Inventory</h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', marginBottom: '16px' }}>
-              Select pieces from your inventory to distribute to other admins.
-            </p>
-            <button 
-              onClick={() => setIsDistributeModalOpen(true)}
-              style={{ background: '#ffac33', border: 'none', color: '#111', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', width: '100%' }}
-            >
-              Open Distribution Panel
-            </button>
-          </div>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h3 style={{ fontSize: '14px' }}>ชิ้นหมูที่สร้างไว้ ({draftRacks.length})</h3>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        placeholder="ค้นหารหัสถาด..."
+                        value={searchDraft}
+                        onChange={(e) => setSearchDraft(e.target.value)}
+                        className={styles.input}
+                        style={{ padding: '6px 12px', width: '150px' }}
+                      />
+                      <button
+                        onClick={() => {
+                          const allSelected = draftRacks.every(r => r.selected);
+                          setDraftRacks(draftRacks.map(r => ({ ...r, selected: !allSelected })));
+                        }}
+                        style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', cursor: 'pointer', padding: '6px 12px', borderRadius: '4px', fontSize: '12px' }}
+                      >
+                        {draftRacks.every(r => r.selected) ? "ยกเลิกเลือกทั้งหมด" : "เลือกทั้งหมด"}
+                      </button>
+                      <button
+                        onClick={handleAddManualPiece}
+                        style={{ background: 'var(--accent-blue)', border: 'none', color: '#fff', cursor: 'pointer', padding: '6px 12px', borderRadius: '4px', fontSize: '12px' }}
+                      >
+                        + เพิ่มชิ้นเอง
+                      </button>
+                      <button
+                        onClick={handleRemoveSelectedDrafts}
+                        disabled={!draftRacks.some(r => r.selected)}
+                        style={{ background: 'rgba(255,107,107,0.15)', border: '1px solid rgba(255,107,107,0.4)', color: '#ff6b6b', cursor: draftRacks.some(r => r.selected) ? 'pointer' : 'not-allowed', opacity: draftRacks.some(r => r.selected) ? 1 : 0.5, padding: '6px 12px', borderRadius: '4px', fontSize: '12px' }}
+                      >
+                        🗑 ลบที่เลือก
+                      </button>
+                      <button
+                        onClick={handleClearAllDrafts}
+                        disabled={draftRacks.length === 0}
+                        style={{ background: '#ff6b6b', border: 'none', color: '#fff', cursor: draftRacks.length > 0 ? 'pointer' : 'not-allowed', opacity: draftRacks.length > 0 ? 1 : 0.5, padding: '6px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}
+                      >
+                        ล้างทั้งหมด
+                      </button>
+                    </div>
+                  </div>
 
+                  <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '8px', marginBottom: '16px' }}>
+                      {draftRacks
+                        .map((rack, idx) => ({ ...rack, originalIdx: idx }))
+                        .filter(r => !searchDraft || r.rackNo.toLowerCase().includes(searchDraft.toLowerCase()))
+                        .map((rack) => (
+                        <div key={rack.originalIdx} style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr auto', gap: '12px', marginBottom: '8px', alignItems: 'center', background: rack.weight === 0 ? 'rgba(255,255,0,0.1)' : 'transparent', padding: rack.weight === 0 ? '4px' : '0' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!rack.selected}
+                            onChange={(e) => {
+                              const updated = [...draftRacks];
+                              updated[rack.originalIdx].selected = e.target.checked;
+                              setDraftRacks(updated);
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          />
+                          <input
+                            type="text"
+                            className={styles.input}
+                            value={rack.rackNo}
+                            onChange={e => handleDraftNameChange(rack.originalIdx, e.target.value)}
+                            style={{ color: rack.weight === 0 ? '#aaa' : 'inherit' }}
+                          />
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type="number"
+                              className={styles.input}
+                              value={rack.weight}
+                              onChange={e => handleDraftWeightChange(rack.originalIdx, Number(e.target.value))}
+                            />
+                            <span style={{ position: 'absolute', right: '12px', top: '10px', color: '#666', fontSize: '12px' }}>กก.</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => handleInsertGap(rack.originalIdx)} title="แทรกช่องว่างตรงนี้" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>+</button>
+                            <button onClick={() => handleRemoveDraft(rack.originalIdx)} title="ลบรายการนี้" style={{ background: 'rgba(255,0,0,0.2)', border: 'none', color: '#ff6b6b', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>✕</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
 
-          <div style={{ padding: '16px', background: 'rgba(255,255,255, 0.05)', borderRadius: '8px', border: '1px solid rgba(255,255,255, 0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '14px', marginBottom: '12px', color: '#fff' }}>Current Assignments</h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', marginBottom: '16px' }}>
-              View and manage pieces assigned to each admin.
-            </p>
-            <button 
-              onClick={() => setIsAssignmentsModalOpen(true)}
-              style={{ background: '#fff', border: 'none', color: '#000', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', width: '100%' }}
-            >
-              Open Assignments Panel
-            </button>
+                    <div style={{ padding: '16px', background: 'rgba(var(--accent-blue-rgb), 0.1)', borderRadius: '8px', marginTop: '16px', border: '1px solid rgba(var(--accent-blue-rgb), 0.3)' }}>
+                      <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--accent-blue)' }}>มอบชิ้นที่เลือกให้แอดมิน</h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginBottom: '16px' }}>
+                        <div className={styles.formGroup}>
+                          <label className={styles.label}>เลือกแอดมิน</label>
+                          <select
+                            className={styles.input}
+                            value={selectedUserId}
+                            onChange={(e) => setSelectedUserId(e.target.value)}
+                          >
+                            <option value="">-- เลือก --</option>
+                            {centralUser && (
+                              <option value={centralUser.id}>
+                                คลังกลาง (เหลือ {centralRacks.reduce((sum: any, r: any) => sum + (!r.isUsedUp ? r.remainingWeight : 0), 0).toFixed(2) || '0.00'} กก.)
+                              </option>
+                            )}
+                            {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
+                              <option key={u.id} value={u.id}>
+                                {u.name} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} กก.)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleAssignBatch}
+                        className={styles.button}
+                        disabled={isLoading || !selectedUserId}
+                        style={{ width: '100%', background: 'var(--accent-blue)', color: 'white' }}
+                      >
+                        {isLoading ? "กำลังมอบหมาย..." : `มอบให้ ${selectedUserId === currentUser.id ? "คลังกลาง" : (selectedUser?.name || "แอดมิน")}`}
+                      </button>
+                    </div>
+                  </div>
           </div>
         </div>
-      </div>
+      )}
       
       {/* Distribution Modal */}
       {isDistributeModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ margin: 0, color: '#ffac33', fontSize: '24px' }}>Distribute Central Inventory</h2>
+              <h2 style={{ margin: 0, color: '#ffac33', fontSize: '24px' }}>แจกจ่ายจากคลังกลาง</h2>
               <button 
                 onClick={() => setIsDistributeModalOpen(false)}
                 style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
@@ -855,35 +926,35 @@ export default function RacksPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '16px', marginBottom: '24px', alignItems: 'end' }}>
               <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                <label className={styles.label}>From Piece</label>
-                <input 
+                <label className={styles.label}>ตั้งแต่ชิ้น</label>
+                <input
                   type="text"
                   list="rack-datalist"
-                  className={styles.input} 
+                  className={styles.input}
                   style={{ fontSize: '16px', padding: '12px' }}
-                  placeholder="e.g. C001-1"
+                  placeholder="เช่น C001-1"
                   value={distributeStartRack}
                   onChange={(e) => setDistributeStartRack(e.target.value)}
                 />
               </div>
               <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                <label className={styles.label}>To Piece</label>
-                <input 
+                <label className={styles.label}>ถึงชิ้น</label>
+                <input
                   type="text"
                   list="rack-datalist"
-                  className={styles.input} 
+                  className={styles.input}
                   style={{ fontSize: '16px', padding: '12px' }}
-                  placeholder="e.g. C050-5"
+                  placeholder="เช่น C050-5"
                   value={distributeEndRack}
                   onChange={(e) => setDistributeEndRack(e.target.value)}
                 />
               </div>
-              <button 
+              <button
                 onClick={handleSelectDistributeRange}
                 disabled={!distributeStartRack || !distributeEndRack}
                 style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white', cursor: 'pointer', padding: '12px 24px', borderRadius: '8px', fontSize: '14px', height: '100%', fontWeight: 'bold' }}
               >
-                Select Range
+                เลือกช่วง
               </button>
             </div>
 
@@ -903,7 +974,7 @@ export default function RacksPage() {
             </datalist>
 
             <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>Auto-select Racks (Trays) by Order</h3>
+              <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>เลือกถาดอัตโนมัติตามลำดับ</h3>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <input 
                   type="number" 
@@ -954,29 +1025,29 @@ export default function RacksPage() {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <h3 style={{ fontSize: '16px', margin: 0 }}>Select Individual Pieces</h3>
+                <h3 style={{ fontSize: '16px', margin: 0 }}>เลือกทีละชิ้น</h3>
                 <input
                   type="text"
-                  placeholder="Search rack or weight..."
+                  placeholder="ค้นหารหัสถาดหรือน้ำหนัก..."
                   value={distributeSearch}
                   onChange={(e) => setDistributeSearch(e.target.value)}
                   className={styles.input}
                   style={{ padding: '6px 12px', width: '200px', fontSize: '14px' }}
                 />
               </div>
-              <button 
+              <button
                 onClick={() => {
                   const filteredRacks = centralRacks.filter((r: any) => {
                     if (!distributeSearch) return true;
                     const s = distributeSearch.toLowerCase();
                     return r.rackNo.toLowerCase().includes(s) || String(r.remainingWeight).includes(s);
                   });
-                  
+
                   if (filteredRacks.length === 0) return;
-                  
+
                   const allVisibleSelected = filteredRacks.every((r: any) => selectedCentralRacks.has(r.id));
                   const newSet = new Set(selectedCentralRacks);
-                  
+
                   if (allVisibleSelected) {
                     filteredRacks.forEach((r: any) => newSet.delete(r.id));
                   } else {
@@ -986,23 +1057,23 @@ export default function RacksPage() {
                 }}
                 style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', cursor: 'pointer', padding: '6px 12px', borderRadius: '4px', fontSize: '12px' }}
               >
-                Select / Deselect All Visible
+                เลือก / ยกเลิกเลือกทั้งหมดที่เห็น
               </button>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', marginBottom: '24px', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', alignContent: 'start' }}>
               {centralRacks.length === 0 ? (
-                <div className={styles.emptyState} style={{ gridColumn: '1 / -1' }}>No pieces in Central Inventory.</div>
+                <div className={styles.emptyState} style={{ gridColumn: '1 / -1' }}>ไม่มีชิ้นหมูในคลังกลาง</div>
               ) : (
                 centralPiecesWithGaps.map((rack: any) => (
                   rack.isMissingPlaceholder ? (
                     <div key={rack.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px', background: 'rgba(255,107,107,0.1)', borderRadius: '6px', border: '1px dashed #ff6b6b' }}>
-                      <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '15px' }}>⚠️ Missing: {rack.rackNo}</span>
+                      <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '15px' }}>⚠️ ขาดหาย: {rack.rackNo}</span>
                     </div>
                   ) : (
                   <label key={rack.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px', opacity: rack.isUsedUp ? 0.5 : 1, cursor: 'pointer', border: selectedCentralRacks.has(rack.id) ? '1px solid #ffac33' : '1px solid transparent' }}>
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={selectedCentralRacks.has(rack.id)}
                       disabled={rack.isUsedUp}
                       onChange={(e) => {
@@ -1013,7 +1084,7 @@ export default function RacksPage() {
                       }}
                       style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                     />
-                    <span style={{ fontSize: '15px' }}>{rack.rackNo} <span style={{ color: 'var(--text-secondary)' }}>({rack.remainingWeight} kg)</span></span>
+                    <span style={{ fontSize: '15px' }}>{rack.rackNo} <span style={{ color: 'var(--text-secondary)' }}>({rack.remainingWeight} กก.)</span></span>
                   </label>
                   )
                 ))
@@ -1022,22 +1093,22 @@ export default function RacksPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'end', background: 'rgba(255,172,51,0.05)', padding: '24px', borderRadius: '8px', border: '1px solid rgba(255,172,51,0.2)' }}>
               <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                <label className={styles.label}>Select Target Admin to Receive {selectedCentralRacks.size} Pieces</label>
-                <select 
-                  className={styles.input} 
+                <label className={styles.label}>เลือกแอดมินที่จะรับ {selectedCentralRacks.size} ชิ้น</label>
+                <select
+                  className={styles.input}
                   style={{ fontSize: '16px', padding: '12px' }}
                   value={distributeTargetUserId}
                   onChange={(e) => setDistributeTargetUserId(e.target.value)}
                 >
-                  <option value="">-- Target Admin --</option>
-                  {users.filter(u => u.role !== "CENTRAL_INVENTORY").map(u => (
+                  <option value="">-- เลือกแอดมินปลายทาง --</option>
+                  {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
                     <option key={u.id} value={u.id}>
                       {u.name}
                     </option>
                   ))}
                 </select>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   handleDistribute().then(() => {
                     setIsDistributeModalOpen(false);
@@ -1046,7 +1117,7 @@ export default function RacksPage() {
                 disabled={isDistributing || !distributeTargetUserId || selectedCentralRacks.size === 0}
                 style={{ background: '#ffac33', border: 'none', color: '#111', padding: '12px 32px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', height: '100%' }}
               >
-                {isDistributing ? "Distributing..." : "Distribute Selected Pieces"}
+                {isDistributing ? "กำลังแจกจ่าย..." : "แจกจ่ายชิ้นที่เลือก"}
               </button>
             </div>
           </div>
@@ -1058,43 +1129,37 @@ export default function RacksPage() {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '1000px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>Current Assignments</h2>
-              <datalist id="all-racks-list">
-                {Array.from(new Set([
-                  ...users.flatMap(u => u.racks?.map(r => r.rackNo) || []),
-                  ...(centralRacks.map((r: any) => r.rackNo) || [])
-                ])).sort().map(no => <option key={no} value={no} />)}
-              </datalist>
-              <button 
+              <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>รายการที่มอบหมายไปแล้ว</h2>
+              <button
                 onClick={() => setIsAssignmentsModalOpen(false)}
                 style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
               >✕</button>
             </div>
             
             <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
-                <label className={styles.label} style={{ margin: 0 }}>Select Admin:</label>
-                <select 
-                  className={styles.input} 
+                <label className={styles.label} style={{ margin: 0 }}>เลือกแอดมิน:</label>
+                <select
+                  className={styles.input}
                   value={selectedUserId}
                   onChange={(e) => setSelectedUserId(e.target.value)}
                   style={{ width: '300px' }}
                 >
-                  <option value="">-- Select --</option>
+                  <option value="">-- เลือก --</option>
                   {centralUser && (
                     <option value={centralUser.id}>
-                      Central Inventory
+                      คลังกลาง
                     </option>
                   )}
-                  {users.filter(u => u.role !== "CENTRAL_INVENTORY").map(u => (
+                  {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
                     <option key={u.id} value={u.id}>
                       {u.name}
                     </option>
                   ))}
                 </select>
-                
+
                 <input
                   type="text"
-                  placeholder="Search rack or weight..."
+                  placeholder="ค้นหารหัสถาดหรือน้ำหนัก..."
                   value={assignmentsSearch}
                   onChange={(e) => setAssignmentsSearch(e.target.value)}
                   className={styles.input}
@@ -1102,49 +1167,180 @@ export default function RacksPage() {
                 />
             </div>
 
+            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignContent: 'start', background: 'rgba(0,0,0,0.2)' }}>
+              {!users.find(u => u.id === selectedUserId) && selectedUserId !== currentUser.id ? (
+                <div className={styles.emptyState} style={{ gridColumn: '1 / -1', padding: '40px' }}>เลือกแอดมินเพื่อดูชิ้นหมูของเขา</div>
+              ) : (users.find(u => u.id === selectedUserId)?.racks || (selectedUserId === currentUser.id ? currentUser.racks : [])).length === 0 ? (
+                <div className={styles.emptyState} style={{ gridColumn: '1 / -1', padding: '40px' }}>ยังไม่มีชิ้นหมูที่มอบหมาย</div>
+              ) : (
+                currentAdminPiecesWithGaps.map((rack: any) => (
+                    <div key={rack.id} style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: rack.isMissingPlaceholder ? 'rgba(255,107,107,0.1)' : 'rgba(255,255,255,0.03)', borderRadius: '8px', border: rack.isMissingPlaceholder ? '1px dashed #ff6b6b' : '1px solid rgba(255,255,255,0.1)', opacity: rack.isUsedUp ? 0.5 : 1 }}>
+                      {rack.isMissingPlaceholder ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                          <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '16px' }}>⚠️ ขาดหาย: {rack.rackNo}</span>
+                        </div>
+                      ) : editingRackId === rack.id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <input
+                            type="text"
+                            className={styles.input}
+                            value={editingRackNo}
+                            onChange={(e) => setEditingRackNo(e.target.value)}
+                            style={{ padding: '8px', fontSize: '14px' }}
+                            placeholder="รหัสถาด"
+                          />
+                          <input
+                            type="number"
+                            step="0.01"
+                            className={styles.input}
+                            value={editingWeight}
+                            onChange={(e) => setEditingWeight(Number(e.target.value))}
+                            style={{ padding: '8px', fontSize: '14px' }}
+                            title="น้ำหนัก (กก.)"
+                            placeholder="น้ำหนัก (กก.)"
+                          />
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                            <button
+                              onClick={() => handleSaveRackName(rack.id)}
+                              style={{ background: 'var(--accent-green)', border: 'none', color: '#000', padding: '8px', borderRadius: '4px', cursor: 'pointer', flex: 1, fontWeight: 'bold' }}
+                            >
+                              บันทึก
+                            </button>
+                            <button
+                              onClick={() => setEditingRackId(null)}
+                              style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '8px', borderRadius: '4px', cursor: 'pointer', flex: 1 }}
+                            >
+                              ยกเลิก
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <div className={styles.itemName} style={{ textDecoration: rack.isUsedUp ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
+                                {rack.rackNo}
+                                <button
+                                  onClick={() => {
+                                    setEditingRackId(rack.id);
+                                    setEditingRackNo(rack.rackNo);
+                                    setEditingWeight(rack.remainingWeight);
+                                  }}
+                                  style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '14px', padding: '0 4px' }}
+                                  title="แก้ไขรหัสและน้ำหนัก"
+                                >
+                                  ✏️
+                                </button>
+                              </div>
+                              <div style={{ fontSize: '14px', color: rack.remainingWeight === 0 ? '#ff6b6b' : 'var(--accent-green)', marginTop: '4px' }}>
+                                {rack.remainingWeight === 0
+                                  ? `ขายหมดแล้ว (เดิมมี ${Number(rack.initialWeight).toFixed(2)} กก.)`
+                                  : `เหลือ ${Number(rack.remainingWeight).toFixed(2)} กก.`}
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => handleRevoke(rack.id)}
+                              style={{ background: 'rgba(255,0,0,0.2)', border: 'none', color: '#ff6b6b', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                            >
+                              เพิกถอน
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Advanced Tools Modal */}
+      {isAdvancedModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '700px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>⚙️ เครื่องมือขั้นสูง</h2>
+              <datalist id="all-racks-list">
+                {Array.from(new Set([
+                  ...users.flatMap(u => u.racks?.map(r => r.rackNo) || []),
+                  ...(centralRacks.map((r: any) => r.rackNo) || [])
+                ])).sort().map(no => <option key={no} value={no} />)}
+              </datalist>
+              <button
+                onClick={() => setIsAdvancedModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
+              >✕</button>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              เครื่องมือในหน้านี้ใช้เฉพาะกรณีพิเศษ/ฉุกเฉินเท่านั้น ใช้อย่างระมัดระวัง
+            </p>
+
+            <div className={styles.formGroup} style={{ marginBottom: '20px' }}>
+              <label className={styles.label}>เพิ่มให้แอดมิน</label>
+              <select
+                className={styles.input}
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+              >
+                <option value="">-- เลือก --</option>
+                {centralUser && (
+                  <option value={centralUser.id}>
+                    คลังกลาง
+                  </option>
+                )}
+                {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div style={{ padding: '16px', background: 'rgba(255,107,107, 0.1)', borderRadius: '8px', marginBottom: '20px', border: '1px solid rgba(255,107,107, 0.3)' }}>
-              <h3 style={{ fontSize: '14px', marginBottom: '8px', color: '#ff6b6b' }}>Emergency Bulk Shift</h3>
+              <h3 style={{ fontSize: '14px', marginBottom: '8px', color: '#ff6b6b' }}>เลื่อนลำดับฉุกเฉิน (ทั้งระบบ)</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                Fix sequence shifts globally across all assigned pieces.
+                ใช้แก้ไขเลขถาดที่เพี้ยนไป ให้ทั้งระบบพร้อมกัน
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'end' }}>
                 <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                  <input 
-                    type="text" 
-                    className={styles.input} 
-                    placeholder="Start Piece (e.g. A005-3)"
+                  <input
+                    type="text"
+                    className={styles.input}
+                    placeholder="เริ่มจากชิ้น (เช่น A005-3)"
                     value={bulkShiftTarget}
                     onChange={e => setBulkShiftTarget(e.target.value)}
                     list="all-racks-list"
                   />
                 </div>
-                <button 
+                <button
                   onClick={() => handleBulkShift('down')}
                   disabled={isShifting || !bulkShiftTarget}
                   style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '10px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-                  title="Shift DOWN (Use if piece was physically missing)"
+                  title="เลื่อนลง (ใช้เมื่อของหายจริงจากถาด)"
                 >
-                  + Shift Down
+                  + เลื่อนลง
                 </button>
-                <button 
+                <button
                   onClick={() => handleBulkShift('up')}
                   disabled={isShifting || !bulkShiftTarget}
                   style={{ background: 'rgba(255,107,107,0.2)', border: '1px solid rgba(255,107,107,0.4)', color: '#ff6b6b', padding: '10px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-                  title="Shift UP (Use if piece was double-scanned)"
+                  title="เลื่อนขึ้น (ใช้เมื่อสแกนซ้ำ/นับซ้ำ)"
                 >
-                  ✕ Shift Up
+                  ✕ เลื่อนขึ้น
                 </button>
               </div>
             </div>
 
-            <div style={{ padding: '16px', background: 'rgba(255,172,51,0.1)', borderRadius: '8px', marginBottom: '20px', border: '1px solid rgba(255,172,51,0.3)' }}>
-              <h3 style={{ fontSize: '14px', marginBottom: '8px', color: '#ffac33' }}>Add Missing Piece</h3>
+            <div style={{ padding: '16px', background: 'rgba(255,172,51,0.1)', borderRadius: '8px', border: '1px solid rgba(255,172,51,0.3)' }}>
+              <h3 style={{ fontSize: '14px', marginBottom: '8px', color: '#ffac33' }}>เพิ่มชิ้นที่ขาดหาย</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                Quickly create and assign a missing piece to the currently selected admin.
+                สร้างและมอบชิ้นที่ขาดหายให้แอดมินที่เลือกไว้ด้านบนอย่างรวดเร็ว
               </p>
               {globalMissingPieces.length > 0 && (
                 <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', alignSelf: 'center' }}>Suggested missing:</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', alignSelf: 'center' }}>ชิ้นที่อาจขาดหาย:</span>
                   {globalMissingPieces.map(piece => (
                     <button
                       key={piece}
@@ -1158,152 +1354,80 @@ export default function RacksPage() {
               )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', alignItems: 'end' }}>
                 <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                  <input 
-                    type="text" 
-                    className={styles.input} 
-                    placeholder="Piece No. (e.g. A005-3)"
+                  <input
+                    type="text"
+                    className={styles.input}
+                    placeholder="รหัสชิ้น (เช่น A005-3)"
                     value={manualAddRackNo}
                     onChange={e => setManualAddRackNo(e.target.value)}
                     list="all-racks-list"
                   />
                 </div>
                 <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     step="0.01"
-                    className={styles.input} 
-                    placeholder="Weight (optional)"
+                    className={styles.input}
+                    placeholder="น้ำหนัก (ไม่บังคับ)"
                     value={manualAddWeight}
                     onChange={e => setManualAddWeight(e.target.value === "" ? "" : Number(e.target.value))}
                   />
                 </div>
-                <button 
+                <button
                   onClick={handleAddMissingPiece}
                   disabled={isAddingManual || !manualAddRackNo.trim()}
                   style={{ background: '#ffac33', border: 'none', color: '#111', padding: '10px 16px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
                 >
-                  {isAddingManual ? "Adding..." : "Add Piece"}
+                  {isAddingManual ? "กำลังเพิ่ม..." : "เพิ่มชิ้น"}
                 </button>
               </div>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignContent: 'start', background: 'rgba(0,0,0,0.2)' }}>
-              {!users.find(u => u.id === selectedUserId) && selectedUserId !== currentUser.id ? (
-                <div className={styles.emptyState} style={{ gridColumn: '1 / -1', padding: '40px' }}>Select an admin to view their pieces.</div>
-              ) : (users.find(u => u.id === selectedUserId)?.racks || (selectedUserId === currentUser.id ? currentUser.racks : [])).length === 0 ? (
-                <div className={styles.emptyState} style={{ gridColumn: '1 / -1', padding: '40px' }}>No pieces assigned.</div>
-              ) : (
-                currentAdminPiecesWithGaps.map((rack: any) => (
-                    <div key={rack.id} style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: rack.isMissingPlaceholder ? 'rgba(255,107,107,0.1)' : 'rgba(255,255,255,0.03)', borderRadius: '8px', border: rack.isMissingPlaceholder ? '1px dashed #ff6b6b' : '1px solid rgba(255,255,255,0.1)', opacity: rack.isUsedUp ? 0.5 : 1 }}>
-                      {rack.isMissingPlaceholder ? (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                          <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '16px' }}>⚠️ Missing: {rack.rackNo}</span>
-                        </div>
-                      ) : editingRackId === rack.id ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          <input 
-                            type="text" 
-                            className={styles.input} 
-                            value={editingRackNo} 
-                            onChange={(e) => setEditingRackNo(e.target.value)} 
-                            style={{ padding: '8px', fontSize: '14px' }}
-                            placeholder="Rack No."
-                          />
-                          <input 
-                            type="number" 
-                            step="0.01"
-                            className={styles.input} 
-                            value={editingWeight} 
-                            onChange={(e) => setEditingWeight(Number(e.target.value))} 
-                            style={{ padding: '8px', fontSize: '14px' }}
-                            title="Weight (kg)"
-                            placeholder="Weight (kg)"
-                          />
-                          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                            <button 
-                              onClick={() => handleSaveRackName(rack.id)}
-                              style={{ background: 'var(--accent-green)', border: 'none', color: '#000', padding: '8px', borderRadius: '4px', cursor: 'pointer', flex: 1, fontWeight: 'bold' }}
-                            >
-                              Save
-                            </button>
-                            <button 
-                              onClick={() => setEditingRackId(null)}
-                              style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '8px', borderRadius: '4px', cursor: 'pointer', flex: 1 }}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                              <div className={styles.itemName} style={{ textDecoration: rack.isUsedUp ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
-                                {rack.rackNo}
-                                <button 
-                                  onClick={() => {
-                                    setEditingRackId(rack.id);
-                                    setEditingRackNo(rack.rackNo);
-                                    setEditingWeight(rack.remainingWeight);
-                                  }}
-                                  style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '14px', padding: '0 4px' }}
-                                  title="Edit Name & Weight"
-                                >
-                                  ✏️
-                                </button>
-                              </div>
-                              <div style={{ fontSize: '14px', color: rack.remainingWeight === 0 ? '#ff6b6b' : 'var(--accent-green)', marginTop: '4px' }}>
-                                {rack.remainingWeight === 0 
-                                  ? `Sold Out (was ${Number(rack.initialWeight).toFixed(2)} kg)`
-                                  : `${Number(rack.remainingWeight).toFixed(2)} kg remaining`}
-                              </div>
-                            </div>
-                            
-                            <button 
-                              onClick={() => handleRevoke(rack.id)}
-                              style={{ background: 'rgba(255,0,0,0.2)', border: 'none', color: '#ff6b6b', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
-                            >
-                              Revoke
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))
-              )}
             </div>
           </div>
         </div>
       )}
-    {deletedLogs.length > 0 && (
-      <div className={`${styles.mainContent} glass-panel`} style={{ marginTop: '24px' }}>
-        <h2 className={styles.cardTitle} style={{ color: '#ffac33' }}>Deleted / Missing Pork Log</h2>
-        <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Deleted At</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Piece No.</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Weight Before Delete</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Deleted By / From Admin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {deletedLogs.map((log) => (
-                <tr key={log.id} style={{ borderTop: '1px solid var(--border-color)' }}>
-                  <td style={{ padding: '12px 16px', color: '#fff' }}>
-                    {new Date(log.deletedAt).toLocaleString('en-US', { timeZone: 'Asia/Bangkok' })}
-                  </td>
-                  <td style={{ padding: '12px 16px', color: '#ffac33', fontWeight: 'bold' }}>{log.rackNo}</td>
-                  <td style={{ padding: '12px 16px', color: '#fff' }}>{Number(log.weight).toFixed(2)} kg</td>
-                  <td style={{ padding: '12px 16px', color: '#fff' }}>{log.userName}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+      {/* Deleted Log Modal */}
+      {isDeletedLogModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ margin: 0, color: '#ffac33', fontSize: '24px' }}>ประวัติชิ้นหมูที่ถูกลบ / ขาดหาย</h2>
+              <button
+                onClick={() => setIsDeletedLogModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
+              >✕</button>
+            </div>
+            {deletedLogs.length === 0 ? (
+              <div className={styles.emptyState} style={{ padding: '40px' }}>ยังไม่มีประวัติการลบ</div>
+            ) : (
+              <div style={{ overflow: 'auto', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>วันที่ลบ</th>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>รหัสชิ้น</th>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>น้ำหนักก่อนลบ</th>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>ลบโดย / จากแอดมิน</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deletedLogs.map((log) => (
+                      <tr key={log.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '12px 16px', color: '#fff' }}>
+                          {new Date(log.deletedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
+                        </td>
+                        <td style={{ padding: '12px 16px', color: '#ffac33', fontWeight: 'bold' }}>{log.rackNo}</td>
+                        <td style={{ padding: '12px 16px', color: '#fff' }}>{Number(log.weight).toFixed(2)} กก.</td>
+                        <td style={{ padding: '12px 16px', color: '#fff' }}>{log.userName}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    )}
+      )}
     </div>
   );
 }

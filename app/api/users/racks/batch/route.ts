@@ -58,6 +58,6 @@ export async function POST(req: Request) {
     if (error.code === 'P2002') {
       return NextResponse.json({ error: "One or more racks are already assigned to this user." }, { status: 400 });
     }
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }

@@ -22,18 +22,24 @@ export default function Sidebar() {
       </div>
 
       <nav className={styles.nav}>
-        <Link href="/" className={styles.navItem}>
-          <span className={styles.icon}>📊</span>
-          Dashboard
-        </Link>
-        <Link href="/" className={`${styles.navItem} ${pathname === '/' ? styles.active : ''}`}>
-          <span className={styles.icon}>📝</span>
-          Order Details
-        </Link>
-        <Link href="/packing" className={`${styles.navItem} ${pathname === '/packing' ? styles.active : ''}`}>
-          <span className={styles.icon}>📦</span>
-          Packing & Export
-        </Link>
+        {currentUser?.role !== "PACKING" && (
+          <>
+            <Link href="/dashboard" className={`${styles.navItem} ${pathname === '/dashboard' ? styles.active : ''}`}>
+              <span className={styles.icon}>📊</span>
+              Dashboard
+            </Link>
+            <Link href="/orders" className={`${styles.navItem} ${pathname === '/orders' ? styles.active : ''}`}>
+              <span className={styles.icon}>📝</span>
+              Order Details
+            </Link>
+          </>
+        )}
+        {(currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "PACKING") && (
+          <Link href="/packing" className={`${styles.navItem} ${pathname === '/packing' ? styles.active : ''}`}>
+            <span className={styles.icon}>📦</span>
+            Packing & Export
+          </Link>
+        )}
         {currentUser?.role === "SUPER_ADMIN" && (
           <>
             <Link href="/storefront" className={`${styles.navItem} ${pathname === '/storefront' ? styles.active : ''}`}>

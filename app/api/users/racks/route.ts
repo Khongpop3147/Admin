@@ -55,9 +55,9 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Error assigning rack:", error);
     if (error.code === 'P2002') {
-      return NextResponse.json({ error: "Rack is already assigned to this user." }, { status: 400 });
+      return NextResponse.json({ error: "ชิ้นนี้ถูกมอบหมายให้ผู้ใช้คนนี้อยู่แล้ว" }, { status: 400 });
     }
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }
 
@@ -75,15 +75,17 @@ export async function DELETE(req: Request) {
       include: { user: true }
     });
 
-    if (rackToDelete) {
-      await prisma.deletedPorkLog.create({
-        data: {
-          rackNo: rackToDelete.rackNo,
-          weight: rackToDelete.remainingWeight,
-          userName: rackToDelete.user.name,
-        }
-      });
+    if (!rackToDelete) {
+      return NextResponse.json({ error: "ไม่พบชิ้นหมูนี้ อาจถูกลบไปแล้ว" }, { status: 404 });
     }
+
+    await prisma.deletedPorkLog.create({
+      data: {
+        rackNo: rackToDelete.rackNo,
+        weight: rackToDelete.remainingWeight,
+        userName: rackToDelete.user.name,
+      }
+    });
 
     await prisma.rackAssignment.delete({
       where: { id },
@@ -92,7 +94,7 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
     console.error("Error revoking rack:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }
 
@@ -116,8 +118,11 @@ export async function PATCH(req: Request) {
     });
 
     return NextResponse.json({ success: true, updated }, { status: 200 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating rack name:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    if (error?.code === "P2025") {
+      return NextResponse.json({ error: "ไม่พบชิ้นหมูนี้ อาจถูกลบไปแล้ว" }, { status: 404 });
+    }
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }

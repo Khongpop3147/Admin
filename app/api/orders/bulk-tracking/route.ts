@@ -25,16 +25,25 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Invalid updates format' }, { status: 400 });
     }
 
-    // We fetch all orders that are either Pending or Packed
+    // We fetch all orders that are either Pending or Packed (orderStatus is
+    // normally '' rather than null for a fresh order, but treat null the same
+    // way so this doesn't silently skip a record either way)
     const activeOrders = await prisma.order.findMany({
       where: {
-        orderStatus: {
-          in: ['Pending', 'Packed', '']
-        },
-        OR: [
-          { platform: { not: 'Storefront' } },
-          { platform: null }
-        ]
+        AND: [
+          {
+            OR: [
+              { orderStatus: { in: ['Pending', 'Packed', ''] } },
+              { orderStatus: null },
+            ],
+          },
+          {
+            OR: [
+              { platform: { not: 'Storefront' } },
+              { platform: null },
+            ],
+          },
+        ],
       }
     });
 

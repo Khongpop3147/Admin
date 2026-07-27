@@ -23,6 +23,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, url: fileUrl }, { status: 201 });
   } catch (error) {
     console.error("Error uploading file:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }

@@ -11,6 +11,7 @@ interface Order {
   platform: string;
   shippingMethod: string;
   orderStatus: string;
+  codAmount?: number | null;
 }
 
 function PrintSlipContent() {
@@ -27,17 +28,38 @@ function PrintSlipContent() {
     }
   }, [dateStr]);
 
+  // Report grouping order: NIM Express, then EMS, then EMS (COD) last.
+  const getShippingRank = (order: Order) => {
+    const method = order.shippingMethod || "";
+    const hasCod = !!order.codAmount;
+    if (method === "NIM Express") return 0;
+    if (method === "EMS" && !hasCod) return 1;
+    if (method === "EMS" && hasCod) return 2;
+    return 3;
+  };
+
   const fetchOrders = async (date: string) => {
     try {
       const res = await fetch(`/api/orders?date=${date}`);
       const data = await res.json();
       if (data.orders) {
-        // Filter out Storefront orders just like packing page
-        const filtered = data.orders.filter((o: Order) => o.platform !== 'Storefront');
-        
-        // Sort orders from lowest orderNo to highest
-        filtered.sort((a: Order, b: Order) => (a.orderNo || 0) - (b.orderNo || 0));
-        
+        // Filter out storefront (walk-in) orders — by platform AND by shipping
+        // method, so a storefront-style order never sneaks into the report even
+        // if its platform field wasn't tagged "Storefront".
+        const filtered = data.orders.filter((o: Order) =>
+          o.platform !== 'Storefront' &&
+          o.shippingMethod !== 'รับหน้าร้าน' &&
+          o.shippingMethod !== 'ส่งเอง'
+        );
+
+        // Group by shipping method (NIM Express, EMS, EMS (COD)); within each
+        // group keep orders sorted lowest orderNo to highest.
+        filtered.sort((a: Order, b: Order) => {
+          const rankDiff = getShippingRank(a) - getShippingRank(b);
+          if (rankDiff !== 0) return rankDiff;
+          return (a.orderNo || 0) - (b.orderNo || 0);
+        });
+
         setOrders(filtered);
       }
     } catch (error) {
@@ -95,9 +117,10 @@ function PrintSlipContent() {
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
         <thead>
           <tr>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '10%' }}>Order #</th>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '30%' }}>ชื่อลูกค้า</th>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '45%' }}>รหัสถาด (Rack)</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '8%' }}>Order #</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '22%' }}>ชื่อลูกค้า</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '35%' }}>รหัสถาด (Rack)</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '20%' }}>วิธีจัดส่ง</th>
             <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '15%' }}>น้ำหนักรวม</th>
           </tr>
         </thead>
@@ -112,6 +135,9 @@ function PrintSlipContent() {
                   {rackData.detailsArray?.map((line, idx) => (
                     <div key={idx}>{line}</div>
                   ))}
+                </td>
+                <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>
+                  {order.shippingMethod || "-"}{order.codAmount ? " (COD)" : ""}
                 </td>
                 <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' }}>
                   {rackData.totalWeight > 0 ? `${rackData.totalWeight.toFixed(2)} kg` : "-"}

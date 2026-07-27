@@ -48,7 +48,7 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             duplicate: true,
-            message: `Warning: Customer "${customerName}" already exists in the system.`,
+            message: `พบว่ามีลูกค้าชื่อ "${customerName}" อยู่ในระบบแล้ว ต้องการบันทึกออเดอร์นี้ต่อไปหรือไม่?`,
           },
           { status: 200 }
         );
@@ -139,8 +139,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, order: newOrder }, { status: 201 });
   } catch (error) {
     console.error("Error creating order:", error);
+    // Only surface the raw error message when it's one of our own deliberate,
+    // already-Thai, user-facing throws (like the rack-conflict case above) —
+    // never a raw technical/English error from Prisma or elsewhere, which would
+    // be meaningless to a non-technical admin.
+    const message = error instanceof Error && /[฀-๿]/.test(error.message)
+      ? error.message
+      : "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง";
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: message },
       { status: 500 }
     );
   }
@@ -153,8 +160,12 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const sellerName = searchParams.get("sellerName");
     const dateStr = searchParams.get("date"); // format: YYYY-MM-DD
-    
+    const platform = searchParams.get("platform");
+
     let whereClause: any = sellerName ? { sellerName } : {};
+    if (platform) {
+      whereClause.platform = platform;
+    }
 
     if (dateStr) {
       // Parse the date in Thai timezone (approximate by using UTC+7 offset or just treating input as local date)
@@ -167,18 +178,23 @@ export async function GET(req: Request) {
       };
     }
 
+    // Any explicit, scoped filter (date or platform) means the caller wants
+    // everything matching, not a "give me something recent" sample — only cap
+    // the truly unscoped call.
+    const isScoped = Boolean(dateStr || platform);
+
     const orders = await prisma.order.findMany({
       where: whereClause,
       orderBy: {
         createdAt: "desc",
       },
-      ...(dateStr ? {} : { take: 20 }), // only limit if no date filter
+      ...(isScoped ? {} : { take: 20 }),
     });
     return NextResponse.json({ orders }, { status: 200 });
   } catch (error) {
     console.error("Error fetching orders:", error);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" },
       { status: 500 }
     );
   }

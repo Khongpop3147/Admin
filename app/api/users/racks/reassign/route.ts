@@ -48,7 +48,7 @@ export async function POST(req: Request) {
 
     if (conflicts.length > 0) {
       const conflictNames = conflicts.map(c => c.rackNo).join(', ');
-      return NextResponse.json({ error: `Cannot reassign because the target user already has pieces: ${conflictNames}` }, { status: 400 });
+      return NextResponse.json({ error: `ย้ายไม่ได้ เนื่องจากผู้รับมีชิ้นรหัสนี้อยู่แล้ว: ${conflictNames}` }, { status: 400 });
     }
 
     // Reassign racks in a transaction
@@ -64,6 +64,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, count: rackIds.length }, { status: 200 });
   } catch (error: any) {
     console.error("Error reassigning racks:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }
