@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -41,3 +42,8 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# user-uploaded content (slips, imports) — not source, and won't persist on
+# most hosts anyway; keep the folder but not its contents
+/public/uploads/*
+!/public/uploads/.gitkeep
