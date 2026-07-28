@@ -102,6 +102,13 @@ function getRackSequence(basePrefix: string, baseStartNum: number, rackOffset: n
       pfx = incrementPrefix(pfx);
   }
   while (num <= 0 && baseStartNum > 0) {
+      // There's no prefix before "A" — clamp here instead of letting
+      // decrementPrefix wrap it around to "Z" (that produced racks like
+      // Z999 out of nowhere when someone dialed the start number too low).
+      if (pfx === "A" || pfx === "a") {
+        num = 1;
+        break;
+      }
       num += 999;
       pfx = decrementPrefix(pfx);
   }

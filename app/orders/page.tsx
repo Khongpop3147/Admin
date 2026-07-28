@@ -60,7 +60,7 @@ function calculateShippingCost(method: string, weight: number): number {
 }
 
 function calculateCodAmount(weight: number): number {
-  if (weight <= 2) return 50;
+  if (weight <= 2.29) return 50;
   return (weight / 1.5) * 20;
 }
 
@@ -496,6 +496,16 @@ export default function Home() {
           newData.codAmount = calculateCodAmount(parsedWeight).toFixed(2);
         } else if (name === "isCod" && !applyCod) {
           newData.codAmount = "";
+        }
+      }
+
+      // Ticking "เก็บเงินปลายทาง" reflects straight into payment status too —
+      // it's neither unpaid nor paid yet, it's specifically COD.
+      if (name === "isCod") {
+        if (value) {
+          newData.paymentStatus = "COD";
+        } else if (newData.paymentStatus === "COD") {
+          newData.paymentStatus = "";
         }
       }
 
@@ -1182,17 +1192,23 @@ export default function Home() {
                   <option value="">-- เลือกสถานะ --</option>
                   <option value="Unpaid">ยังไม่จ่ายเงิน</option>
                   <option value="Paid">จ่ายเงินแล้ว</option>
+                  <option value="COD">เก็บปลายทาง</option>
                 </select>
               </div>
               <div className={styles.formGroup} style={{ display: showPriceAndSlip ? 'block' : 'none' }}>
                 <label className={styles.label}>สลิปโอนเงิน</label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input type="file" accept="image/*" onChange={handleFileUpload} ref={fileInputRef} className={styles.input} style={{ padding: '8px', opacity: formData.paymentStatus === "Unpaid" ? 0.5 : 1 }} disabled={isUploading || formData.paymentStatus === "Unpaid"} />
+                  <input type="file" accept="image/*" onChange={handleFileUpload} ref={fileInputRef} className={styles.input} style={{ padding: '8px', opacity: (formData.paymentStatus === "Unpaid" || formData.paymentStatus === "COD") ? 0.5 : 1 }} disabled={isUploading || formData.paymentStatus === "Unpaid" || formData.paymentStatus === "COD"} />
                   {isUploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
                 </div>
                 {formData.paymentStatus === "Unpaid" && (
                   <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '6px' }}>
                     เลือก "ยังไม่จ่ายเงิน" อยู่ ไม่สามารถแนบสลิปได้ — ถ้าลูกค้าโอนแล้วให้เปลี่ยนสถานะเป็น "จ่ายเงินแล้ว" ก่อน
+                  </div>
+                )}
+                {formData.paymentStatus === "COD" && (
+                  <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '6px' }}>
+                    เป็นออเดอร์เก็บปลายทาง ไม่ต้องแนบสลิป — ระบบจะยืนยันยอดผ่านการเช็คเลขพัสดุที่หน้าแพ็คของแทน
                   </div>
                 )}
                 {formData.transferSlip && (
@@ -1580,15 +1596,21 @@ export default function Home() {
                         <option value="">-- เลือกสถานะ --</option>
                         <option value="Unpaid">ยังไม่จ่ายเงิน</option>
                         <option value="Paid">จ่ายเงินแล้ว</option>
+                        <option value="COD">เก็บปลายทาง</option>
                       </select>
                     </div>
                     <div className={styles.formGroup}>
                       <label className={styles.label}>สลิปโอนเงิน</label>
-                      <input type="file" accept="image/*" onChange={handleEditFileUpload} className={styles.input} style={{ padding: '8px', opacity: editOrderData.paymentStatus === "Unpaid" ? 0.5 : 1 }} disabled={isEditUploading || editOrderData.paymentStatus === "Unpaid"} />
+                      <input type="file" accept="image/*" onChange={handleEditFileUpload} className={styles.input} style={{ padding: '8px', opacity: (editOrderData.paymentStatus === "Unpaid" || editOrderData.paymentStatus === "COD") ? 0.5 : 1 }} disabled={isEditUploading || editOrderData.paymentStatus === "Unpaid" || editOrderData.paymentStatus === "COD"} />
                       {isEditUploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
                       {editOrderData.paymentStatus === "Unpaid" && (
                         <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '6px' }}>
                           เลือก "ยังไม่จ่ายเงิน" อยู่ ไม่สามารถแนบสลิปได้ — ถ้าลูกค้าโอนแล้วให้เปลี่ยนสถานะเป็น "จ่ายเงินแล้ว" ก่อน
+                        </div>
+                      )}
+                      {editOrderData.paymentStatus === "COD" && (
+                        <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '6px' }}>
+                          เป็นออเดอร์เก็บปลายทาง ไม่ต้องแนบสลิป — ระบบจะยืนยันยอดผ่านการเช็คเลขพัสดุที่หน้าแพ็คของแทน
                         </div>
                       )}
                       {editOrderData.transferSlip && (
@@ -1636,6 +1658,16 @@ export default function Home() {
                           <div style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--accent-green)' }}>฿{formatMoney(selectedOrder.actualReceivedAmount)}</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>ยอดรับจริง</div>
                         </div>
+                      </div>
+                    )}
+
+                    {Number(selectedOrder.codAmount) > 0 && (
+                      <div style={{ marginBottom: '24px', marginTop: '-12px', fontSize: '13px' }}>
+                        {selectedOrder.codConfirmed ? (
+                          <span style={{ color: 'var(--accent-green)' }}>✅ ยืนยันรับ COD แล้ว — นับเข้ายอดขายแล้ว</span>
+                        ) : (
+                          <span style={{ color: '#ffac33' }}>🔒 รอยืนยันรับ COD — ยังไม่นับเข้ายอดขาย (Hold ไว้)</span>
+                        )}
                       </div>
                     )}
 

@@ -23,6 +23,7 @@ interface Order {
   shippingMethod: string;
   isCod: boolean;
   codAmount: number;
+  codConfirmed: boolean;
   crispyPorkPiece: string;
   crispyPorkWeight: string;
   adminNote: string;
@@ -54,6 +55,7 @@ export default function PackingPage() {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [viewingRacks, setViewingRacks] = useState<Order | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const codFileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedDate, setSelectedDate] = useState(() => {
     // Default to today in Thai time
@@ -395,6 +397,61 @@ export default function PackingPage() {
     }
   };
 
+  // Reads every non-empty cell in the courier's file (not tied to a specific
+  // column name, since every courier formats their report differently) and
+  // lets the backend match whichever values happen to be real tracking
+  // numbers on unconfirmed COD orders.
+  const handleConfirmCod = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsLoading(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows: any[][] = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+      const candidates = new Set<string>();
+      rows.forEach((row) => {
+        row.forEach((cell) => {
+          if (cell === undefined || cell === null || cell === "") return;
+          const str = String(cell).trim();
+          if (str.length >= 4) candidates.add(str);
+        });
+      });
+
+      if (candidates.size === 0) {
+        alert("ไม่พบข้อมูลในไฟล์ที่อัปโหลด");
+        return;
+      }
+
+      const res = await fetch("/api/orders/confirm-cod", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackingNumbers: Array.from(candidates) }),
+      });
+
+      const result = await res.json();
+      if (res.ok && result.success) {
+        const names = result.confirmed.map((o: any) => `${o.customerName} (${o.trackingNumber})`).join("\n");
+        alert(
+          `ยืนยันรับ COD สำเร็จ ${result.confirmed.length} ออเดอร์:\n${names || "-"}\n\n` +
+          `(ยอด COD รวมที่ปลดล็อกเข้ายอดขาย: ฿${formatMoney(result.confirmed.reduce((s: number, o: any) => s + (Number(o.actualReceivedAmount) || 0), 0))})`
+        );
+        fetchOrders();
+      } else {
+        alert(result.error || "เกิดข้อผิดพลาดขณะยืนยันรับ COD");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะอ่านไฟล์");
+    } finally {
+      setIsLoading(false);
+      if (codFileInputRef.current) codFileInputRef.current.value = "";
+    }
+  };
+
   if (currentUser && currentUser.role !== "SUPER_ADMIN" && currentUser.role !== "PACKING") return null;
 
   return (
@@ -472,6 +529,22 @@ export default function PackingPage() {
             📤 นำเข้าเลขพัสดุ
           </button>
 
+          <input
+            type="file"
+            accept=".xlsx, .xls, .csv"
+            ref={codFileInputRef}
+            onChange={handleConfirmCod}
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={() => codFileInputRef.current?.click()}
+            className={styles.toolbarBtn}
+            style={{ background: 'rgba(63,185,80,0.2)', border: '1px solid rgba(63,185,80,0.4)', color: 'var(--accent-green)' }}
+            title="อัปโหลดไฟล์ Excel ที่มีเลขพัสดุ COD ที่ลูกค้าจ่ายเงินแล้ว เพื่อปลดล็อกยอดเข้า Dashboard"
+          >
+            🔓 ยืนยันรับ COD
+          </button>
+
           {currentUser?.role === "SUPER_ADMIN" && (
             <button
               onClick={async () => {
@@ -544,6 +617,15 @@ export default function PackingPage() {
                         })()
                       }</strong>
                     </div>
+                    {order.codAmount > 0 && (
+                      <div style={{ fontSize: '11px', marginTop: '4px' }}>
+                        {order.codConfirmed ? (
+                          <span style={{ color: 'var(--accent-green)' }}>✅ ยืนยันรับ COD แล้ว</span>
+                        ) : (
+                          <span style={{ color: '#ffac33' }}>🔒 รอยืนยันรับ COD</span>
+                        )}
+                      </div>
+                    )}
                     {order.adminNote && <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '4px' }}>หมายเหตุ: {order.adminNote}</div>}
                     {order.sellerName && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>โดย: {order.sellerName}</div>}
                   </td>

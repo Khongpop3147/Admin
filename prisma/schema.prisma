@@ -25,6 +25,7 @@ model Order {
   shippingMethod        String?
   additionalShippingCost Float?
   codAmount             Float?
+  codConfirmed          Boolean  @default(false)
   actualReceivedAmount  Float?
   transferSlip          String?
   paymentStatus         String?

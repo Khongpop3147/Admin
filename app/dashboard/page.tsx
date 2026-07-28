@@ -9,6 +9,7 @@ interface Order {
   id: string;
   price?: number;
   codAmount?: number;
+  codConfirmed?: boolean;
   actualReceivedAmount?: number;
   crispyPorkWeight?: string;
   orderStatus?: string;
@@ -23,6 +24,14 @@ interface Order {
 // stock that hasn't actually sold.
 function isShelfSale(o: Order): boolean {
   return o.platform === "Storefront" && o.customerName === "วางขายหน้าร้าน";
+}
+
+// With COD the courier collects cash from the customer and remits it back
+// later — the shop hasn't actually received anything until that's confirmed
+// (via the Packing page's tracking-number reconciliation). Hold the whole
+// order's received amount out of revenue totals until then.
+function isCodPending(o: Order): boolean {
+  return Number(o.codAmount) > 0 && !o.codConfirmed;
 }
 
 interface TrendPoint {
@@ -282,7 +291,12 @@ export default function DashboardPage() {
     const orderCount = orders.length;
     const totalWeight = orders.reduce((sum, o) => sum + (parseFloat(o.crispyPorkWeight || "0") || 0), 0);
     const totalSales = orders.reduce((sum, o) => sum + (isShelfSale(o) ? 0 : Number(o.price) || 0), 0);
-    const totalReceived = orders.reduce((sum, o) => sum + (isShelfSale(o) ? 0 : Number(o.actualReceivedAmount) || 0), 0);
+    const totalReceived = orders.reduce((sum, o) => {
+      if (isShelfSale(o) || isCodPending(o)) return sum;
+      return sum + (Number(o.actualReceivedAmount) || 0);
+    }, 0);
+    const totalCodHeld = orders.reduce((sum, o) => sum + (isCodPending(o) ? Number(o.actualReceivedAmount) || 0 : 0), 0);
+    const codHeldCount = orders.filter(isCodPending).length;
 
     const statusCounts: Record<string, number> = { Pending: 0, Packed: 0, Shipped: 0, Completed: 0 };
     orders.forEach((o) => {
@@ -290,7 +304,7 @@ export default function DashboardPage() {
       statusCounts[key]++;
     });
 
-    return { orderCount, totalWeight, totalSales, totalReceived, statusCounts };
+    return { orderCount, totalWeight, totalSales, totalReceived, totalCodHeld, codHeldCount, statusCounts };
   }, [orders]);
 
   const perAdminBreakdown = useMemo(() => {
@@ -402,6 +416,15 @@ export default function DashboardPage() {
             <StatCard label="ยอดขายสินค้า" value={`฿${formatMoney(stats.totalSales)}`} color="#ffac33" />
             <StatCard label="ยอดรับจริงรวม" value={`฿${formatMoney(stats.totalReceived)}`} color="#3fb950" />
           </div>
+
+          {stats.codHeldCount > 0 && (
+            <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px", border: "1px dashed rgba(255,172,51,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+              <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+                🔒 <strong style={{ color: "#ffac33" }}>ยอด COD ที่ยัง Hold ไว้</strong> — รอยืนยันว่าลูกค้ารับของและจ่ายเงินแล้ว ({stats.codHeldCount} ออเดอร์) ยังไม่นับรวมในยอดรับจริงด้านบน
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#ffac33" }}>฿{formatMoney(stats.totalCodHeld)}</div>
+            </div>
+          )}
 
           <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "24px" }}>
             <h3 style={{ fontSize: "15px", marginBottom: "16px", color: "var(--text-secondary)" }}>สถานะออเดอร์</h3>
