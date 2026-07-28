@@ -7,33 +7,30 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+// Fixed ids matching the local dev database exactly, so a fresh deploy ends
+// up with the same accounts the team already knows.
+const users = [
+  { id: "user-super-admin", name: "Kongphop (Super Admin)", role: "SUPER_ADMIN" },
+  { id: "user-admin-1", name: "Employee A", role: "ADMIN" },
+  { id: "5d68f064-0be9-4035-ad4f-288261d886f6", name: "Employee C", role: "ADMIN" },
+  { id: "665cfe8a-afcf-45f9-b75f-0691a35abad9", name: "Employee D", role: "ADMIN" },
+  { id: "central-inventory-id", name: "Central Inventory", role: "CENTRAL_INVENTORY" },
+  { id: "user-packing-1", name: "Packing Staff", role: "PACKING" },
+];
+
 async function main() {
   console.log("Seeding database with default users...");
 
-  // Create Super Admin
-  const superAdmin = await prisma.user.upsert({
-    where: { id: "user-super-admin" },
-    update: {},
-    create: {
-      id: "user-super-admin",
-      name: "Kongphop (Super Admin)",
-      role: "SUPER_ADMIN",
-    },
-  });
+  for (const u of users) {
+    const result = await prisma.user.upsert({
+      where: { id: u.id },
+      update: {},
+      create: { id: u.id, name: u.name, role: u.role },
+    });
+    console.log(" -", result.name, `(${result.role})`);
+  }
 
-  // Create standard Admin
-  const admin = await prisma.user.upsert({
-    where: { id: "user-admin-1" },
-    update: {},
-    create: {
-      id: "user-admin-1",
-      name: "Employee A (Admin)",
-      role: "ADMIN",
-    },
-  });
-
-  console.log("Seed complete:");
-  console.log({ superAdmin, admin });
+  console.log("Seed complete.");
 }
 
 main()
