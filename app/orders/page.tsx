@@ -12,6 +12,7 @@ interface Order {
   platform?: string;
   socialMediaName?: string;
   orderStatus?: string;
+  paymentStatus?: string;
   adminNote?: string;
   trackingNumber?: string;
   createdAt: string;
@@ -114,6 +115,41 @@ function formatMoney(value: unknown): string {
   return Math.round(num).toLocaleString("th-TH");
 }
 
+// Renders the Thunder slip-check result — always advisory, never blocks saving.
+function SlipVerificationBadge({ result }: { result: any }) {
+  if (!result) return null;
+
+  if (!result.success) {
+    return (
+      <div style={{ marginTop: '8px', fontSize: '12px', color: '#ffac33', background: 'rgba(255,172,51,0.1)', border: '1px solid rgba(255,172,51,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
+        ⚠️ เช็คสลิปไม่สำเร็จ: {result.message || "ไม่ทราบสาเหตุ"} (ยังบันทึกออเดอร์ได้ตามปกติ)
+      </div>
+    );
+  }
+
+  if (result.isDuplicate) {
+    return (
+      <div style={{ marginTop: '8px', fontSize: '12px', color: '#ffac33', background: 'rgba(255,172,51,0.1)', border: '1px solid rgba(255,172,51,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
+        ⚠️ สลิปนี้เคยถูกใช้ยืนยันในออเดอร์อื่นมาแล้ว อาจเป็นสลิปซ้ำ กรุณาตรวจสอบ
+      </div>
+    );
+  }
+
+  if (result.amountMatched === false) {
+    return (
+      <div style={{ marginTop: '8px', fontSize: '12px', color: '#ffac33', background: 'rgba(255,172,51,0.1)', border: '1px solid rgba(255,172,51,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
+        ⚠️ ยอดเงินในสลิป (฿{formatMoney(result.slipAmount)}) ไม่ตรงกับยอดที่ต้องได้รับ (฿{formatMoney(result.expectedAmount)}) กรุณาตรวจสอบ
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
+      ✅ เช็คสลิปผ่าน โอนจาก {result.senderName || 'ไม่ทราบชื่อ'} {result.senderBank ? `(${result.senderBank})` : ''} ยอด ฿{formatMoney(result.slipAmount)}
+    </div>
+  );
+}
+
 function getOrderStatusInfo(status?: string) {
   switch (status) {
     case "Completed":
@@ -157,10 +193,17 @@ export default function Home() {
   const [formData, setFormData] = useState(initialForm);
   const [rackDetails, setRackDetails] = useState<RackDetail[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isStorefrontMode, setIsStorefrontMode] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [slipVerification, setSlipVerification] = useState<any | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [isEditingOrder, setIsEditingOrder] = useState(false);
+  const [editOrderData, setEditOrderData] = useState<any | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isEditUploading, setIsEditUploading] = useState(false);
+  const [editSlipVerification, setEditSlipVerification] = useState<any | null>(null);
   const [alertData, setAlertData] = useState({
     show: false,
     message: "",
@@ -168,6 +211,13 @@ export default function Home() {
   });
 
   const [filterAdminName, setFilterAdminName] = useState("");
+  const [filterDate, setFilterDate] = useState(() => {
+    const today = new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" });
+    const d = new Date(today);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [customerSearchInput, setCustomerSearchInput] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
   const [showInventory, setShowInventory] = useState(false);
   const [insufficientWeight, setInsufficientWeight] = useState(0);
   const [allocationError, setAllocationError] = useState("");
@@ -180,6 +230,7 @@ export default function Home() {
 
   const { currentUser, users, fetchUsers } = useUser();
   const router = useRouter();
+  const hasDefaultedFilterAdmin = useRef(false);
 
   useEffect(() => {
     if (currentUser?.role === "PACKING") {
@@ -187,15 +238,34 @@ export default function Home() {
     }
   }, [currentUser, router]);
 
+  // First time the order list loads for a Super Admin, default the filter to
+  // their own name so they see their own orders first — they can still switch
+  // to "แอดมินทั้งหมด" or another admin afterward, and that choice sticks.
+  useEffect(() => {
+    if (currentUser?.role === "SUPER_ADMIN" && !hasDefaultedFilterAdmin.current) {
+      hasDefaultedFilterAdmin.current = true;
+      setFilterAdminName(currentUser.name);
+    }
+  }, [currentUser]);
+
+  // Debounce the search box so typing a name doesn't fire a request per keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setCustomerSearch(customerSearchInput.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [customerSearchInput]);
+
   useEffect(() => {
     if (currentUser) {
+      // A name search looks across all dates — otherwise it'd miss a
+      // customer's older orders just because today's date filter is active.
+      const dateForFetch = customerSearch ? undefined : filterDate;
       if (currentUser.role === "SUPER_ADMIN") {
-        fetchOrders(filterAdminName);
+        fetchOrders(filterAdminName, dateForFetch, customerSearch);
       } else {
-        fetchOrders(currentUser.name);
+        fetchOrders(currentUser.name, dateForFetch, customerSearch);
       }
     }
-  }, [filterAdminName, currentUser]);
+  }, [filterAdminName, filterDate, customerSearch, currentUser]);
 
   useEffect(() => {
     if (currentUser) {
@@ -211,10 +281,12 @@ export default function Home() {
     if (formData.price !== "" || formData.additionalShippingCost !== "" || formData.codAmount !== "") {
       const vat = (p + s) * 0.07;
       const total = p + s + vat + c;
+      // .50 ขึ้นไปปัดขึ้น ต่ำกว่าปัดลง (Math.round already rounds half-up for positive amounts)
+      const roundedTotal = Math.round(total);
       setFormData(prev => ({
         ...prev,
         vatAmount: vat.toFixed(2),
-        actualReceivedAmount: total.toFixed(2)
+        actualReceivedAmount: roundedTotal.toString()
       }));
     } else if (formData.vatAmount !== "") {
       setFormData(prev => ({ ...prev, vatAmount: "" }));
@@ -236,9 +308,14 @@ export default function Home() {
     });
   }, [rackDetails, allocationMode]);
 
-  const fetchOrders = async (adminName?: string) => {
+  const fetchOrders = async (adminName?: string, date?: string, customerNameSearch?: string) => {
     try {
-      const url = adminName ? `/api/orders?sellerName=${encodeURIComponent(adminName)}` : "/api/orders";
+      const params = new URLSearchParams();
+      if (adminName) params.set("sellerName", adminName);
+      if (date) params.set("date", date);
+      if (customerNameSearch) params.set("customerName", customerNameSearch);
+      const qs = params.toString();
+      const url = qs ? `/api/orders?${qs}` : "/api/orders";
       const res = await fetch(url);
       const data = await res.json();
       if (data.orders) {
@@ -456,11 +533,30 @@ export default function Home() {
     }
   };
 
+  // Best-effort check via Thunder Solution — never blocks saving the order,
+  // just surfaces a warning if the slip looks off so the admin can double-check.
+  // NOTE: requires `url` to be publicly reachable (Thunder fetches it
+  // themselves) — won't resolve on localhost without a tunnel like ngrok.
+  const verifySlip = async (url: string, matchAmount?: number) => {
+    try {
+      const res = await fetch("/api/verify-slip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, matchAmount }),
+      });
+      return await res.json();
+    } catch (err) {
+      console.error("Slip verification failed", err);
+      return { success: false, message: "เช็คสลิปไม่สำเร็จ" };
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
+    setSlipVerification(null);
     const form = new FormData();
     form.append("file", file);
 
@@ -471,7 +567,13 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.url) {
-        setFormData(prev => ({ ...prev, transferSlip: data.url }));
+        setFormData(prev => ({ ...prev, transferSlip: data.url, paymentStatus: "Paid" }));
+        // /api/upload returns a path like "/uploads/xxx.jpg" — Thunder needs a
+        // full absolute URL, not a bare path.
+        const absoluteSlipUrl = data.url.startsWith("http") ? data.url : `${window.location.origin}${data.url}`;
+        const expectedAmount = parseFloat(formData.actualReceivedAmount);
+        const result = await verifySlip(absoluteSlipUrl, !isNaN(expectedAmount) && expectedAmount > 0 ? expectedAmount : undefined);
+        setSlipVerification(result);
       } else {
         alert("อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       }
@@ -483,8 +585,128 @@ export default function Home() {
     }
   };
 
+  const handleStartEditOrder = () => {
+    setEditOrderData({ ...selectedOrder });
+    setIsEditingOrder(true);
+    setEditSlipVerification(null);
+  };
+
+  const handleCancelEditOrder = () => {
+    setIsEditingOrder(false);
+    setEditOrderData(null);
+    setEditSlipVerification(null);
+  };
+
+  const handleCloseOrderDetail = () => {
+    setSelectedOrder(null);
+    setIsEditingOrder(false);
+    setEditOrderData(null);
+    setEditSlipVerification(null);
+  };
+
+  // Same "uploading a slip means it's paid" rule as the main new-order form —
+  // covers the case where a customer sends the slip after the order was
+  // already saved as unpaid.
+  const handleEditFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsEditUploading(true);
+    setEditSlipVerification(null);
+    const form = new FormData();
+    form.append("file", file);
+
+    try {
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (data.url) {
+        setEditOrderData((prev: any) => ({ ...prev, transferSlip: data.url, paymentStatus: "Paid" }));
+        const absoluteSlipUrl = data.url.startsWith("http") ? data.url : `${window.location.origin}${data.url}`;
+        const expectedAmount = parseFloat(editOrderData?.actualReceivedAmount);
+        const result = await verifySlip(absoluteSlipUrl, !isNaN(expectedAmount) && expectedAmount > 0 ? expectedAmount : undefined);
+        setEditSlipVerification(result);
+      } else {
+        alert("อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะอัปโหลดไฟล์");
+    } finally {
+      setIsEditUploading(false);
+    }
+  };
+
+  const handleSaveOrderEdit = async () => {
+    if (!editOrderData) return;
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch(`/api/orders/${editOrderData.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: editOrderData.customerName,
+          customerAddress: editOrderData.customerAddress,
+          price: editOrderData.price,
+          crispyPorkWeight: editOrderData.crispyPorkWeight,
+          crispyPorkPiece: editOrderData.crispyPorkPiece,
+          codAmount: editOrderData.codAmount,
+          trackingNumber: editOrderData.trackingNumber,
+          adminNote: editOrderData.adminNote,
+          paymentStatus: editOrderData.paymentStatus,
+          transferSlip: editOrderData.transferSlip,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSelectedOrder(data.order);
+        setIsEditingOrder(false);
+        setEditOrderData(null);
+        const dateForFetch = customerSearch ? undefined : filterDate;
+        if (currentUser?.role === "SUPER_ADMIN") {
+          fetchOrders(filterAdminName, dateForFetch, customerSearch);
+        } else {
+          fetchOrders(currentUser?.name, dateForFetch, customerSearch);
+        }
+      } else {
+        alert(data.error || "บันทึกไม่สำเร็จ");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะบันทึก");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // Manual add/remove/edit of a piece is a discrete click, never mid-keystroke
+  // into the weight field, so it's always safe here to re-derive weight/price/
+  // COD/shipping from the pieces actually selected — unlike the typing-driven
+  // auto-allocate flow in handleChange, which must NOT be touched this way
+  // (it would fight the user's typing on every keystroke).
+  const syncFormDataToRackTotal = (newRackDetails: RackDetail[]) => {
+    const totalWeight = Number(newRackDetails.reduce((sum, r) => sum + (r.weight || 0), 0).toFixed(2));
+    const weightStr = totalWeight > 0 ? String(totalWeight) : "";
+    setFormData(prev => ({
+      ...prev,
+      crispyPorkPiece: newRackDetails.length.toString(),
+      ...computeWeightDerivedFields(prev.promotion, prev.isCod, prev.shippingMethod, weightStr),
+    }));
+    // Nothing selected anymore — release the weight/count lock so either
+    // method can be picked fresh, instead of staying stuck on whichever mode
+    // was used before everything got manually removed.
+    if (newRackDetails.length === 0) {
+      setAllocationMode(null);
+      setDesiredPieceCount("");
+    }
+  };
+
   const handleAddManualRack = () => {
-    setRackDetails(prev => [...prev, { assignmentId: "", rackNo: "", weight: 0 }]);
+    const updated = [...rackDetails, { assignmentId: "", rackNo: "", weight: 0 }];
+    setRackDetails(updated);
+    syncFormDataToRackTotal(updated);
   };
 
   const handleManualRackChange = (index: number, field: keyof RackDetail, value: string | number) => {
@@ -504,10 +726,24 @@ export default function Home() {
       updated[index].weight = Number(value);
     }
     setRackDetails(updated);
+    syncFormDataToRackTotal(updated);
   };
 
   const handleRemoveRack = (index: number) => {
-    setRackDetails(prev => prev.filter((_, i) => i !== index));
+    const updated = rackDetails.filter((_, i) => i !== index);
+    setRackDetails(updated);
+    syncFormDataToRackTotal(updated);
+  };
+
+  // Lets a search result row itself act as the "add to order" control — click
+  // once to add the piece, click again to take it back out.
+  const handleTogglePieceInOrder = (piece: any) => {
+    const exists = rackDetails.some(r => r.assignmentId === piece.id);
+    const updated = exists
+      ? rackDetails.filter(r => r.assignmentId !== piece.id)
+      : [...rackDetails, { assignmentId: piece.id, rackNo: piece.rackNo, weight: piece.remainingWeight }];
+    setRackDetails(updated);
+    syncFormDataToRackTotal(updated);
   };
 
   const handleSubmit = async (e: React.FormEvent, bypassDuplicateCheck = false) => {
@@ -545,15 +781,16 @@ export default function Home() {
         setDesiredPieceCount("");
         setAllocationMode(null);
         setAlertData({ show: false, message: "", customerName: "" });
+        setSlipVerification(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         // The order just saved under the logged-in user's own name — make sure the
         // list refresh can actually show it, even if a SUPER_ADMIN had the filter
         // set to browse a different admin's orders.
         if (currentUser?.role === "SUPER_ADMIN") {
           setFilterAdminName("");
-          fetchOrders("");
+          fetchOrders("", customerSearch ? undefined : filterDate, customerSearch);
         } else {
-          fetchOrders(currentUser?.name);
+          fetchOrders(currentUser?.name, customerSearch ? undefined : filterDate, customerSearch);
         }
         await fetchUsers(); // Refresh inventory
       } else {
@@ -593,6 +830,12 @@ export default function Home() {
 
   if (currentUser?.role === "PACKING") return null;
 
+  // Full storefront mode skips price/slip entirely — unless the admin has
+  // named a real customer, in which case those fields come back (e.g. a
+  // named walk-in who paid by bank transfer still needs a price + slip).
+  const showPriceAndSlip = !isStorefrontMode || formData.customerName !== "วางขายหน้าร้าน";
+  const displayedOrders = showUnpaidOnly ? recentOrders.filter(o => o.paymentStatus === "Unpaid") : recentOrders;
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -626,6 +869,7 @@ export default function Home() {
                       ...prev,
                       platform: prev.platform === "Storefront" ? "" : prev.platform,
                       shippingMethod: (prev.shippingMethod === "รับหน้าร้าน" || prev.shippingMethod === "ส่งเอง") ? "" : prev.shippingMethod,
+                      paymentStatus: prev.paymentStatus === "Paid" ? "" : prev.paymentStatus,
                     }));
                   }
                 }}
@@ -666,7 +910,7 @@ export default function Home() {
                       <input
                         type="radio"
                         checked={formData.customerName === "วางขายหน้าร้าน"}
-                        onChange={() => setFormData({ ...formData, customerName: "วางขายหน้าร้าน" })}
+                        onChange={() => setFormData({ ...formData, customerName: "วางขายหน้าร้าน", shippingMethod: "รับหน้าร้าน" })}
                       />
                       วางขายหน้าร้าน
                     </label>
@@ -836,10 +1080,24 @@ export default function Home() {
                         placeholder="kg"
                         title="ห้ามย่อยขาย (Force whole piece)"
                       />
-                      <button type="button" onClick={() => handleRemoveRack(index)} style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer' }}>✕</button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRack(index)}
+                        title="ลบชิ้นนี้ออกจากออเดอร์"
+                        style={{
+                          background: 'rgba(255,107,107,0.15)',
+                          border: '1px solid rgba(255,107,107,0.4)',
+                          color: '#ff6b6b',
+                          cursor: 'pointer',
+                          borderRadius: '8px',
+                          width: '44px',
+                          fontSize: '20px',
+                          fontWeight: 'bold',
+                        }}
+                      >✕</button>
                     </div>
                   ))}
-                  <button type="button" onClick={handleAddManualRack} className={styles.button} style={{ marginTop: '8px', padding: '6px 12px', fontSize: '12px', background: 'rgba(255,255,255,0.1)' }}>
+                  <button type="button" onClick={handleAddManualRack} className={styles.button} style={{ width: '100%', marginTop: '10px', padding: '14px 20px', fontSize: '16px', fontWeight: 'bold', background: 'rgba(255,255,255,0.1)' }}>
                     + เพิ่มชิ้นหมูเอง
                   </button>
                 </>
@@ -856,48 +1114,61 @@ export default function Home() {
             </div>
 
             {/* Financials */}
-            <div className={styles.formSection}>
-              <h3 className={styles.sectionTitle}>ยอดเงินและค่าส่ง</h3>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>ราคาสินค้า (บาท) <span style={{ color: '#ff6b6b' }}>*</span></label>
-                <input required type="number" step="0.01" name="price" value={formData.price} onChange={handleChange} className={styles.input} placeholder="ราคาหมูกรอบ" />
+            <div className={styles.formSection} style={{ display: showPriceAndSlip ? 'grid' : 'none', gridTemplateColumns: '1fr', gap: '20px' }}>
+              <h3 className={styles.sectionTitle} style={{ marginBottom: 0 }}>ยอดเงินและค่าส่ง</h3>
+
+              {/* Primary, required inputs */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>ราคาสินค้า (บาท) <span style={{ color: '#ff6b6b' }}>*</span></label>
+                  <input required={showPriceAndSlip} type="number" step="0.01" name="price" value={formData.price} onChange={handleChange} className={styles.input} placeholder="ราคาหมูกรอบ" />
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>วิธีจัดส่ง <span style={{ color: '#ff6b6b' }}>*</span></label>
+                  <select required={showPriceAndSlip} name="shippingMethod" value={formData.shippingMethod} onChange={handleChange} className={styles.input}>
+                    <option value="">-- เลือกวิธีจัดส่ง --</option>
+                    {!isStorefrontMode && (
+                      <>
+                        <option value="EMS">EMS</option>
+                        <option value="NIM Express">NIM Express</option>
+                      </>
+                    )}
+                    {isStorefrontMode && (
+                      <>
+                        <option value="รับหน้าร้าน">รับหน้าร้าน</option>
+                        <option value="ส่งเอง">ส่งเอง</option>
+                      </>
+                    )}
+                  </select>
+                </div>
               </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>วิธีจัดส่ง <span style={{ color: '#ff6b6b' }}>*</span></label>
-                <select required name="shippingMethod" value={formData.shippingMethod} onChange={handleChange} className={styles.input}>
-                  <option value="">-- เลือกวิธีจัดส่ง --</option>
-                  {!isStorefrontMode && (
-                    <>
-                      <option value="EMS">EMS</option>
-                      <option value="NIM Express">NIM Express</option>
-                    </>
-                  )}
-                  {isStorefrontMode && (
-                    <>
-                      <option value="รับหน้าร้าน">รับหน้าร้าน</option>
-                      <option value="ส่งเอง">ส่งเอง</option>
-                    </>
-                  )}
-                </select>
+
+              {/* Optional extras */}
+              <div style={{ display: isStorefrontMode ? 'none' : 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>ค่าส่งเพิ่มเติม (บาท)</label>
+                  <input type="number" step="0.01" name="additionalShippingCost" value={formData.additionalShippingCost} onChange={handleChange} className={styles.input} placeholder="ระบบคำนวณให้อัตโนมัติเมื่อเลือกวิธีจัดส่ง" />
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input type="checkbox" name="isCod" checked={formData.isCod} onChange={handleChange} style={{ width: '16px', height: '16px' }} />
+                    เก็บเงินปลายทาง (COD)
+                  </label>
+                  <input type="number" step="0.01" name="codAmount" value={formData.codAmount} readOnly className={styles.input} placeholder="ยอดเก็บปลายทาง" style={{ opacity: formData.isCod ? 1 : 0.5, background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
+                </div>
               </div>
-              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
-                <label className={styles.label}>ค่าส่งเพิ่มเติม (บาท)</label>
-                <input type="number" step="0.01" name="additionalShippingCost" value={formData.additionalShippingCost} onChange={handleChange} className={styles.input} placeholder="ระบบคำนวณให้อัตโนมัติเมื่อเลือกวิธีจัดส่ง" />
-              </div>
-              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
-                <label className={styles.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input type="checkbox" name="isCod" checked={formData.isCod} onChange={handleChange} style={{ width: '16px', height: '16px' }} />
-                  เก็บเงินปลายทาง (COD)
-                </label>
-                <input type="number" step="0.01" name="codAmount" value={formData.codAmount} readOnly className={styles.input} placeholder="ยอดเก็บปลายทาง" style={{ opacity: formData.isCod ? 1 : 0.5, background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
-              </div>
-              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
-                <label className={styles.label}>ภาษีมูลค่าเพิ่ม (VAT 7%)</label>
-                <input type="number" step="0.01" name="vatAmount" value={formData.vatAmount} readOnly className={styles.input} placeholder="ระบบคำนวณให้อัตโนมัติ" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
-              </div>
-              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
-                <label className={styles.label}>ยอดรับจริงทั้งหมด</label>
-                <input type="number" step="0.01" name="actualReceivedAmount" value={formData.actualReceivedAmount} readOnly className={styles.input} placeholder="ระบบคำนวณให้อัตโนมัติ" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
+
+              {/* Auto-calculated summary — visually separated so it reads as
+                  "the system worked this out", not more fields to fill in. */}
+              <div style={{ display: isStorefrontMode ? 'none' : 'flex', gap: '12px', flexWrap: 'wrap', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '16px' }}>
+                <div style={{ flex: '1 1 200px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', padding: '14px 16px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>🧮 ภาษีมูลค่าเพิ่ม (VAT 7%)</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formData.vatAmount ? `฿${formData.vatAmount}` : '-'}</div>
+                </div>
+                <div style={{ flex: '1 1 200px', background: 'rgba(63,185,80,0.08)', border: '1px solid rgba(63,185,80,0.25)', borderRadius: '10px', padding: '14px 16px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>🧮 ยอดรับจริงทั้งหมด</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent-green)' }}>{formData.actualReceivedAmount ? `฿${formData.actualReceivedAmount}` : '-'}</div>
+                </div>
               </div>
             </div>
 
@@ -905,26 +1176,32 @@ export default function Home() {
             <div className={styles.formSection}>
               <h3 className={styles.sectionTitle}>สถานะและข้อมูลอื่นๆ</h3>
 
-              <div className={styles.formGroup}>
+              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
                 <label className={styles.label}>สถานะการชำระเงิน <span style={{ color: '#ff6b6b' }}>*</span></label>
-                <select required name="paymentStatus" value={formData.paymentStatus} onChange={handleChange} className={styles.input}>
+                <select required={!isStorefrontMode} name="paymentStatus" value={formData.paymentStatus} onChange={handleChange} className={styles.input}>
                   <option value="">-- เลือกสถานะ --</option>
                   <option value="Unpaid">ยังไม่จ่ายเงิน</option>
                   <option value="Paid">จ่ายเงินแล้ว</option>
                 </select>
               </div>
-              <div className={styles.formGroup}>
+              <div className={styles.formGroup} style={{ display: showPriceAndSlip ? 'block' : 'none' }}>
                 <label className={styles.label}>สลิปโอนเงิน</label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input type="file" accept="image/*" onChange={handleFileUpload} ref={fileInputRef} className={styles.input} style={{ padding: '8px' }} disabled={isUploading} />
+                  <input type="file" accept="image/*" onChange={handleFileUpload} ref={fileInputRef} className={styles.input} style={{ padding: '8px', opacity: formData.paymentStatus === "Unpaid" ? 0.5 : 1 }} disabled={isUploading || formData.paymentStatus === "Unpaid"} />
                   {isUploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
                 </div>
+                {formData.paymentStatus === "Unpaid" && (
+                  <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '6px' }}>
+                    เลือก "ยังไม่จ่ายเงิน" อยู่ ไม่สามารถแนบสลิปได้ — ถ้าลูกค้าโอนแล้วให้เปลี่ยนสถานะเป็น "จ่ายเงินแล้ว" ก่อน
+                  </div>
+                )}
                 {formData.transferSlip && (
                   <div style={{ marginTop: '8px', fontSize: '12px' }}>
                     <a href={formData.transferSlip} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิปที่อัปโหลด</a>
-                    <button type="button" onClick={() => { setFormData(prev => ({ ...prev, transferSlip: "" })); if (fileInputRef.current) fileInputRef.current.value = ""; }} style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer' }}>ลบสลิป</button>
+                    <button type="button" onClick={() => { setFormData(prev => ({ ...prev, transferSlip: "" })); setSlipVerification(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer' }}>ลบสลิป</button>
                   </div>
                 )}
+                <SlipVerificationBadge result={slipVerification} />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label}>ชื่อผู้ขาย (แอดมิน)</label>
@@ -992,11 +1269,23 @@ export default function Home() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
                         {matches.map((p: any, idx: number) => {
                           const isClose = p.diff <= 0.1;
+                          const isAdded = rackDetails.some(r => r.assignmentId === p.id);
                           return (
-                            <div key={p.id || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: isClose ? 'rgba(63,185,80,0.12)' : 'rgba(255,255,255,0.03)', border: `1px solid ${isClose ? 'rgba(63,185,80,0.5)' : 'rgba(255,255,255,0.08)'}`, borderRadius: '8px', flexShrink: 0 }}>
+                            <div
+                              key={p.id || idx}
+                              onClick={() => handleTogglePieceInOrder(p)}
+                              style={{
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                padding: '10px 14px', borderRadius: '8px', flexShrink: 0, cursor: 'pointer',
+                                background: isAdded ? 'rgba(88,166,255,0.16)' : (isClose ? 'rgba(63,185,80,0.12)' : 'rgba(255,255,255,0.03)'),
+                                border: `1px solid ${isAdded ? 'var(--accent-blue)' : (isClose ? 'rgba(63,185,80,0.5)' : 'rgba(255,255,255,0.08)')}`,
+                              }}
+                              title={isAdded ? "กดอีกครั้งเพื่อเอาออกจากออเดอร์" : "กดเพื่อเพิ่มชิ้นนี้เข้าออเดอร์"}
+                            >
                               <span style={{ fontSize: '14px', color: '#ddd' }}>
                                 ถาด {p.rackNo?.split('-')[0] || '-'}{p.rackNo?.includes('-') ? ` • ชิ้นที่ ${p.rackNo.split('-')[1]}` : ''}
-                                {isClose && <span style={{ marginLeft: '8px', color: 'var(--accent-green)' }}>✓ ใกล้เคียงมาก</span>}
+                                {isAdded && <span style={{ marginLeft: '8px', color: 'var(--accent-blue)' }}>✓ เพิ่มในออเดอร์แล้ว</span>}
+                                {!isAdded && isClose && <span style={{ marginLeft: '8px', color: 'var(--accent-green)' }}>✓ ใกล้เคียงมาก</span>}
                               </span>
                               <span style={{ fontSize: '14px', color: 'var(--accent-green)', fontWeight: 'bold' }}>{p.remainingWeight} กก.</span>
                             </div>
@@ -1075,30 +1364,87 @@ export default function Home() {
               <button type="button" onClick={() => setShowOrdersModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
             </div>
 
-            {currentUser?.role === "SUPER_ADMIN" && (
-              <select
-                className={styles.input}
-                style={{ marginBottom: '16px', fontSize: '13px' }}
-                value={filterAdminName}
-                onChange={(e) => setFilterAdminName(e.target.value)}
-              >
-                <option value="">แอดมินทั้งหมด</option>
-                {users.filter(u => u.role !== "SUPER_ADMIN").map(u => (
-                  <option key={u.id} value={u.name}>
-                    {u.name} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} กก.)
-                  </option>
-                ))}
-              </select>
+            <input
+              type="text"
+              placeholder="🔍 ค้นหาชื่อลูกค้า..."
+              className={styles.input}
+              style={{ fontSize: '13px', marginBottom: '8px' }}
+              value={customerSearchInput}
+              onChange={(e) => setCustomerSearchInput(e.target.value)}
+            />
+            {customerSearch && (
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                กำลังค้นหาทุกวันที่ (ไม่จำกัดตามวันที่เลือกไว้)
+              </div>
             )}
 
-            {recentOrders.length === 0 ? (
-              <div className={styles.emptyState}>ยังไม่มีออเดอร์</div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              {currentUser?.role === "SUPER_ADMIN" && (
+                <select
+                  className={styles.input}
+                  style={{ fontSize: '13px', flex: '1 1 200px' }}
+                  value={filterAdminName}
+                  onChange={(e) => setFilterAdminName(e.target.value)}
+                >
+                  <option value="">แอดมินทั้งหมด</option>
+                  <option value={currentUser.name}>👤 ตัวเอง ({currentUser.name})</option>
+                  {users.filter(u => u.role !== "SUPER_ADMIN" && u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING" && u.id !== currentUser.id).map(u => (
+                    <option key={u.id} value={u.name}>
+                      {u.name} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} กก.)
+                    </option>
+                  ))}
+                </select>
+              )}
+              <input
+                type="date"
+                className={styles.input}
+                style={{ fontSize: '13px', flex: '1 1 160px', opacity: customerSearch ? 0.5 : 1 }}
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                disabled={!!customerSearch}
+              />
+              {filterDate && (
+                <button
+                  type="button"
+                  onClick={() => setFilterDate("")}
+                  style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', borderRadius: '8px', padding: '0 14px', cursor: 'pointer', fontSize: '13px' }}
+                >
+                  ล้างวันที่
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowUnpaidOnly(v => !v)}
+                style={{
+                  background: showUnpaidOnly ? 'rgba(255,107,107,0.2)' : 'rgba(255,255,255,0.08)',
+                  border: showUnpaidOnly ? '1px solid #ff6b6b' : '1px solid var(--border-color)',
+                  color: showUnpaidOnly ? '#ff6b6b' : 'var(--text-secondary)',
+                  borderRadius: '8px',
+                  padding: '0 14px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: showUnpaidOnly ? 'bold' : 'normal',
+                }}
+              >
+                💸 {showUnpaidOnly ? '✓ ' : ''}ยังไม่จ่ายเงิน
+              </button>
+            </div>
+
+            {displayedOrders.length === 0 ? (
+              <div className={styles.emptyState}>{showUnpaidOnly ? "ไม่มีออเดอร์ที่ยังไม่จ่ายเงิน" : "ยังไม่มีออเดอร์"}</div>
             ) : (
               <ul className={styles.list} style={{ overflowY: 'auto', paddingRight: '4px' }}>
-                {recentOrders.map((order) => (
-                  <li key={order.id} className={styles.listItem} onClick={() => setSelectedOrder(order)} style={{ cursor: 'pointer' }}>
+                {displayedOrders.map((order) => (
+                  <li key={order.id} className={styles.listItem} onClick={() => { setSelectedOrder(order); setIsEditingOrder(false); setEditOrderData(null); }} style={{ cursor: 'pointer' }}>
                     <div className={styles.itemInfo}>
-                      <span className={styles.itemName}>#{order.orderNo || "?"} - {order.customerName}</span>
+                      <span className={styles.itemName}>
+                        {order.orderNo || "?"} - {order.customerName}
+                        {order.paymentStatus === "Unpaid" && (
+                          <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 'bold', color: '#ff6b6b', background: 'rgba(255,107,107,0.15)', padding: '2px 8px', borderRadius: '999px' }}>
+                            ยังไม่จ่าย
+                          </span>
+                        )}
+                      </span>
                       <span className={styles.itemProduct}>
                         {order.platform || "ไม่ระบุช่องทาง"}
                         {order.adminNote && <span style={{ color: '#ffac33', marginLeft: '8px' }} title={order.adminNote}>⚠️ มีหมายเหตุ</span>}
@@ -1153,74 +1499,180 @@ export default function Home() {
             return [];
           }
         })();
+        // A shelf placement has no real sale yet — it's just a stock deduction
+        // until a future POS integration backfills the actual sales figures.
+        const isShelfSale = selectedOrder.platform === "Storefront" && selectedOrder.customerName === "วางขายหน้าร้าน";
 
         return (
-          <div className={styles.modalOverlay} onClick={() => setSelectedOrder(null)}>
+          <div className={styles.modalOverlay} onClick={handleCloseOrderDetail}>
             <div className={styles.alertBox} style={{ maxWidth: '520px', width: '92%', maxHeight: '85vh', textAlign: 'left', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
 
               {/* Header */}
               <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
                 <div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>ออเดอร์ #{selectedOrder.orderNo || '-'}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>ออเดอร์ {selectedOrder.orderNo || '-'}</div>
                   <h3 style={{ fontSize: '1.3rem', marginBottom: '10px' }}>{selectedOrder.customerName}</h3>
-                  <span style={{ display: 'inline-block', fontSize: '12px', fontWeight: 'bold', color: statusInfo.color, background: statusInfo.bg, padding: '4px 12px', borderRadius: '999px' }}>
-                    {statusInfo.label}
-                  </span>
-                </div>
-                <button type="button" onClick={() => setSelectedOrder(null)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '20px', cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>✕</button>
-              </div>
-
-              {/* Body */}
-              <div style={{ padding: '20px 24px', overflowY: 'auto' }}>
-
-                {/* Money summary */}
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
-                  <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '19px', fontWeight: 'bold', color: '#fff' }}>฿{formatMoney(selectedOrder.price)}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>ราคาสินค้า</div>
-                  </div>
-                  <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '19px', fontWeight: 'bold', color: '#fff' }}>฿{formatMoney(selectedOrder.codAmount)}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>เก็บปลายทาง</div>
-                  </div>
-                  <div style={{ flex: 1, background: 'rgba(63,185,80,0.12)', border: '1px solid rgba(63,185,80,0.35)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--accent-green)' }}>฿{formatMoney(selectedOrder.actualReceivedAmount)}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>ยอดรับจริง</div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ display: 'inline-block', fontSize: '12px', fontWeight: 'bold', color: statusInfo.color, background: statusInfo.bg, padding: '4px 12px', borderRadius: '999px' }}>
+                      {statusInfo.label}
+                    </span>
+                    {selectedOrder.paymentStatus === "Unpaid" && (
+                      <span style={{ display: 'inline-block', fontSize: '12px', fontWeight: 'bold', color: '#ff6b6b', background: 'rgba(255,107,107,0.15)', padding: '4px 12px', borderRadius: '999px' }}>
+                        ยังไม่จ่าย
+                      </span>
+                    )}
                   </div>
                 </div>
-
-                <DetailSection title="ข้อมูลลูกค้า">
-                  <DetailRow label="ช่องทาง" value={selectedOrder.platform || '-'} />
-                  <DetailRow label="ชื่อบัญชี" value={selectedOrder.socialMediaName || '-'} />
-                  <DetailRow label="ที่อยู่" value={selectedOrder.customerAddress || '-'} />
-                </DetailSection>
-
-                <DetailSection title="สินค้า">
-                  <DetailRow label="น้ำหนัก" value={`${selectedOrder.crispyPorkWeight || '-'} กก.`} />
-                  <DetailRow label="จำนวนชิ้น" value={selectedOrder.crispyPorkPiece || '-'} />
-                  <DetailRow
-                    label="ชิ้นหมูที่ใช้"
-                    value={rackPieces.length > 0 ? rackPieces.map(r => `${r.rackNo} (${r.weight}กก.)`).join(', ') : '-'}
-                  />
-                </DetailSection>
-
-                <DetailSection title="การจัดส่ง">
-                  <DetailRow
-                    label="เลขพัสดุ"
-                    value={selectedOrder.trackingNumber ? <span style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>{selectedOrder.trackingNumber}</span> : '-'}
-                  />
-                  <DetailRow
-                    label="สลิปโอนเงิน"
-                    value={selectedOrder.transferSlip ? <a href={selectedOrder.transferSlip} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิป</a> : '-'}
-                  />
-                </DetailSection>
-
-                {selectedOrder.adminNote && (
-                  <div style={{ background: 'rgba(255,172,51,0.1)', border: '1px solid #ffac33', padding: '10px 12px', borderRadius: '8px', color: '#ffac33', fontSize: '14px' }}>
-                    <span style={{ fontWeight: 'bold' }}>⚠️ หมายเหตุแอดมิน:</span> {selectedOrder.adminNote}
-                  </div>
-                )}
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                  {!isEditingOrder && (
+                    <button
+                      type="button"
+                      onClick={handleStartEditOrder}
+                      style={{ background: 'rgba(255,172,51,0.15)', border: 'none', color: '#ffac33', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', padding: '6px 14px', borderRadius: '8px' }}
+                    >
+                      ✏️ แก้ไข
+                    </button>
+                  )}
+                  <button type="button" onClick={handleCloseOrderDetail} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+                </div>
               </div>
+
+              {isEditingOrder && editOrderData ? (
+                <>
+                  {/* Edit form */}
+                  <div style={{ padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>ชื่อลูกค้า</label>
+                      <input type="text" className={styles.input} value={editOrderData.customerName || ''} onChange={e => setEditOrderData({ ...editOrderData, customerName: e.target.value })} />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>ที่อยู่</label>
+                      <textarea className={styles.textarea} value={editOrderData.customerAddress || ''} onChange={e => setEditOrderData({ ...editOrderData, customerAddress: e.target.value })}></textarea>
+                    </div>
+                    <div style={{ display: editOrderData.platform === "Storefront" && editOrderData.customerName === "วางขายหน้าร้าน" ? 'none' : 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                        <label className={styles.label}>ราคาสินค้า (บาท)</label>
+                        <input type="number" step="0.01" className={styles.input} value={editOrderData.price ?? ''} onChange={e => setEditOrderData({ ...editOrderData, price: e.target.value })} />
+                      </div>
+                      <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                        <label className={styles.label}>เก็บปลายทาง (บาท)</label>
+                        <input type="number" step="0.01" className={styles.input} value={editOrderData.codAmount ?? ''} onChange={e => setEditOrderData({ ...editOrderData, codAmount: e.target.value })} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                        <label className={styles.label}>น้ำหนัก (กก.)</label>
+                        <input type="text" className={styles.input} value={editOrderData.crispyPorkWeight || ''} onChange={e => setEditOrderData({ ...editOrderData, crispyPorkWeight: e.target.value })} />
+                      </div>
+                      <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                        <label className={styles.label}>จำนวนชิ้น</label>
+                        <input type="text" className={styles.input} value={editOrderData.crispyPorkPiece || ''} onChange={e => setEditOrderData({ ...editOrderData, crispyPorkPiece: e.target.value })} />
+                      </div>
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>เลขพัสดุ</label>
+                      <input type="text" className={styles.input} value={editOrderData.trackingNumber || ''} onChange={e => setEditOrderData({ ...editOrderData, trackingNumber: e.target.value })} />
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>สถานะการชำระเงิน</label>
+                      <select className={styles.input} value={editOrderData.paymentStatus || ''} onChange={e => setEditOrderData({ ...editOrderData, paymentStatus: e.target.value })}>
+                        <option value="">-- เลือกสถานะ --</option>
+                        <option value="Unpaid">ยังไม่จ่ายเงิน</option>
+                        <option value="Paid">จ่ายเงินแล้ว</option>
+                      </select>
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>สลิปโอนเงิน</label>
+                      <input type="file" accept="image/*" onChange={handleEditFileUpload} className={styles.input} style={{ padding: '8px', opacity: editOrderData.paymentStatus === "Unpaid" ? 0.5 : 1 }} disabled={isEditUploading || editOrderData.paymentStatus === "Unpaid"} />
+                      {isEditUploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
+                      {editOrderData.paymentStatus === "Unpaid" && (
+                        <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '6px' }}>
+                          เลือก "ยังไม่จ่ายเงิน" อยู่ ไม่สามารถแนบสลิปได้ — ถ้าลูกค้าโอนแล้วให้เปลี่ยนสถานะเป็น "จ่ายเงินแล้ว" ก่อน
+                        </div>
+                      )}
+                      {editOrderData.transferSlip && (
+                        <div style={{ marginTop: '8px', fontSize: '12px' }}>
+                          <a href={editOrderData.transferSlip} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิปที่อัปโหลด</a>
+                        </div>
+                      )}
+                      <SlipVerificationBadge result={editSlipVerification} />
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>หมายเหตุแอดมิน</label>
+                      <input type="text" className={styles.input} value={editOrderData.adminNote || ''} onChange={e => setEditOrderData({ ...editOrderData, adminNote: e.target.value })} />
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '16px 24px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'flex-end', gap: '12px', flexShrink: 0 }}>
+                    <button type="button" onClick={handleCancelEditOrder} className={styles.button} style={{ background: 'rgba(255,255,255,0.08)' }}>ยกเลิก</button>
+                    <button type="button" onClick={handleSaveOrderEdit} disabled={isSavingEdit} className={styles.button}>
+                      {isSavingEdit ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Body */}
+                  <div style={{ padding: '20px 24px', overflowY: 'auto' }}>
+
+                    {/* Money summary — a shelf placement has no sale to show yet */}
+                    {isShelfSale ? (
+                      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '10px', padding: '14px 16px', marginBottom: '24px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        📦 นี่คือการวางขายหน้าร้าน (ตัดสต๊อคหมูเฉยๆ ยังไม่มียอดขาย) — ยอดขายจริงจะดึงมาจากระบบ POS ในอนาคต
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
+                        <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 'bold', color: '#fff' }}>฿{formatMoney(selectedOrder.price)}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>ราคาสินค้า</div>
+                        </div>
+                        <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 'bold', color: '#fff' }}>฿{formatMoney(selectedOrder.codAmount)}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>เก็บปลายทาง</div>
+                        </div>
+                        <div style={{ flex: 1, background: 'rgba(63,185,80,0.12)', border: '1px solid rgba(63,185,80,0.35)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--accent-green)' }}>฿{formatMoney(selectedOrder.actualReceivedAmount)}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>ยอดรับจริง</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <DetailSection title="ข้อมูลลูกค้า">
+                      <DetailRow label="ช่องทาง" value={selectedOrder.platform || '-'} />
+                      <DetailRow label="ชื่อบัญชี" value={selectedOrder.socialMediaName || '-'} />
+                      <DetailRow label="ที่อยู่" value={selectedOrder.customerAddress || '-'} />
+                    </DetailSection>
+
+                    <DetailSection title="สินค้า">
+                      <DetailRow label="น้ำหนัก" value={`${selectedOrder.crispyPorkWeight || '-'} กก.`} />
+                      <DetailRow label="จำนวนชิ้น" value={selectedOrder.crispyPorkPiece || '-'} />
+                      <DetailRow
+                        label="ชิ้นหมูที่ใช้"
+                        value={rackPieces.length > 0 ? rackPieces.map(r => `${r.rackNo} (${r.weight}กก.)`).join(', ') : '-'}
+                      />
+                    </DetailSection>
+
+                    <DetailSection title="การจัดส่ง">
+                      <DetailRow
+                        label="เลขพัสดุ"
+                        value={selectedOrder.trackingNumber ? <span style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>{selectedOrder.trackingNumber}</span> : '-'}
+                      />
+                      <DetailRow
+                        label="สลิปโอนเงิน"
+                        value={selectedOrder.transferSlip ? <a href={selectedOrder.transferSlip} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิป</a> : '-'}
+                      />
+                    </DetailSection>
+
+                    {selectedOrder.adminNote && (
+                      <div style={{ background: 'rgba(255,172,51,0.1)', border: '1px solid #ffac33', padding: '10px 12px', borderRadius: '8px', color: '#ffac33', fontSize: '14px' }}>
+                        <span style={{ fontWeight: 'bold' }}>⚠️ หมายเหตุแอดมิน:</span> {selectedOrder.adminNote}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         );

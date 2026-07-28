@@ -35,6 +35,9 @@ export async function PATCH(
     if (body.crispyPorkPiece !== undefined) updateData.crispyPorkPiece = body.crispyPorkPiece;
     if (body.crispyPorkWeight !== undefined) updateData.crispyPorkWeight = body.crispyPorkWeight;
     if (body.codAmount !== undefined) updateData.codAmount = Number(body.codAmount) || 0;
+    if (body.price !== undefined) updateData.price = Number(body.price) || 0;
+    if (body.paymentStatus !== undefined) updateData.paymentStatus = body.paymentStatus;
+    if (body.transferSlip !== undefined) updateData.transferSlip = body.transferSlip;
 
     const updatedOrder = await prisma.order.update({
       where: { id },

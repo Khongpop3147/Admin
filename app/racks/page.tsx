@@ -137,7 +137,7 @@ export default function RacksPage() {
   const [distributeSearch, setDistributeSearch] = useState("");
   const [isAssignmentsModalOpen, setIsAssignmentsModalOpen] = useState(false);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
-  const [isAdvancedModalOpen, setIsAdvancedModalOpen] = useState(false);
+  const [showAdvancedTools, setShowAdvancedTools] = useState(false);
   const [isDeletedLogModalOpen, setIsDeletedLogModalOpen] = useState(false);
   const [assignmentsSearch, setAssignmentsSearch] = useState("");
   const [manualAddRackNo, setManualAddRackNo] = useState("");
@@ -170,6 +170,75 @@ export default function RacksPage() {
       ...(centralRacks.map((r: any) => r.rackNo) || [])
     ])).sort();
   }, [users, centralRacks]);
+
+  // Where the batch generator should pick up — one past whatever rack number
+  // is highest across the whole system, so the admin never has to remember
+  // and retype where the last batch left off.
+  const nextRackStart = useMemo(() => {
+    let maxPrefix = "A";
+    let maxNum = 0;
+    let found = false;
+
+    allRackNos.forEach((rackNo) => {
+      const match = rackNo.match(/^([A-Z]+)(\d+)(?:-\d+)?$/);
+      if (!match) return;
+      const [, pfx, numStr] = match;
+      const num = parseInt(numStr, 10);
+      // Same base-26 ordering as the letter-prefix rollover (A, B, ... Z, AA, AB, ...):
+      // shorter prefix always sorts before a longer one.
+      const isHigher = !found
+        || pfx.length > maxPrefix.length
+        || (pfx.length === maxPrefix.length && pfx > maxPrefix)
+        || (pfx === maxPrefix && num > maxNum);
+      if (isHigher) {
+        maxPrefix = pfx;
+        maxNum = num;
+        found = true;
+      }
+    });
+
+    if (!found) return { prefix: "A", startNum: 1 };
+    const next = getRackSequence(maxPrefix, maxNum, 1);
+    return { prefix: next.prefix, startNum: next.num };
+  }, [allRackNos]);
+
+  // The single highest individual piece (rack + piece number) across the
+  // whole system — shown alongside the batch generator so it's clear where
+  // the auto-filled prefix/start number is continuing from.
+  const lastPiece = useMemo(() => {
+    type Piece = { prefix: string; num: number; piece: number; rackNo: string; owner: string };
+    const pieces: Piece[] = [];
+
+    const collect = (rackNo: string, owner: string) => {
+      const match = rackNo.match(/^([A-Z]+)(\d+)-(\d+)$/);
+      if (!match) return;
+      pieces.push({ prefix: match[1], num: parseInt(match[2], 10), piece: parseInt(match[3], 10), rackNo, owner });
+    };
+
+    users.forEach((u) => (u.racks || []).forEach((r: any) => collect(r.rackNo, u.name)));
+    centralRacks.forEach((r: any) => collect(r.rackNo, "คลังกลาง"));
+
+    if (pieces.length === 0) return null;
+
+    // Same base-26 prefix ordering used elsewhere for the rollover sequence.
+    return pieces.reduce((best, curr) => {
+      const isHigher = curr.prefix.length > best.prefix.length
+        || (curr.prefix.length === best.prefix.length && curr.prefix > best.prefix)
+        || (curr.prefix === best.prefix && curr.num > best.num)
+        || (curr.prefix === best.prefix && curr.num === best.num && curr.piece > best.piece);
+      return isHigher ? curr : best;
+    });
+  }, [users, centralRacks]);
+
+  // Pre-fill the batch generator with wherever the last batch left off, every
+  // time the modal is opened fresh (not while there's already a draft in progress).
+  useEffect(() => {
+    if (isBatchModalOpen && draftRacks.length === 0) {
+      setPrefix(nextRackStart.prefix);
+      setStartNum(nextRackStart.startNum);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBatchModalOpen]);
 
   const currentAdminPiecesWithGaps = useMemo(() => {
     if (!currentUser) return [];
@@ -322,6 +391,26 @@ export default function RacksPage() {
     
     return Array.from(missing).sort();
   }, [users, centralRacks, allRackNos]);
+
+  const inventorySummary = useMemo(() => {
+    const perAdmin = users
+      .filter((u) => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING")
+      .map((u) => {
+        const racks = u.racks || [];
+        const pieces = racks.filter((r) => !r.isUsedUp).length;
+        const weight = racks.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0);
+        return { name: u.name, pieces, weight };
+      })
+      .sort((a, b) => b.weight - a.weight);
+
+    const centralPieces = centralRacks.filter((r: any) => !r.isUsedUp).length;
+    const centralWeight = centralRacks.reduce((sum: number, r: any) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0);
+
+    const totalPieces = perAdmin.reduce((s, a) => s + a.pieces, 0) + centralPieces;
+    const totalWeight = perAdmin.reduce((s, a) => s + a.weight, 0) + centralWeight;
+
+    return { perAdmin, centralPieces, centralWeight, totalPieces, totalWeight };
+  }, [users, centralRacks]);
 
   const handleSelectDistributeRange = () => {
     if (!centralRacks.length || !distributeStartRack || !distributeEndRack) return;
@@ -718,6 +807,32 @@ export default function RacksPage() {
         <p className={styles.subtitle}>จัดสรรชิ้นหมูให้แอดมินและดูแลคลังสินค้า</p>
       </div>
 
+      <div className="glass-panel" style={{ padding: '20px 24px', borderRadius: '16px', marginBottom: '24px' }}>
+        <h3 style={{ fontSize: '15px', marginBottom: '16px', color: 'var(--text-secondary)' }}>📦 คลังหมูคงเหลือตอนนี้</h3>
+        <div style={{ display: 'flex', gap: '16px', justifyContent: 'space-around', textAlign: 'center', marginBottom: '20px' }}>
+          <div>
+            <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--accent-blue)' }}>{inventorySummary.totalPieces}</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>ชิ้นคงเหลือ</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--accent-green)' }}>{inventorySummary.totalWeight.toFixed(2)}</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>กก. คงเหลือ</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+          <div style={{ flex: '1 1 160px', background: 'rgba(255,172,51,0.08)', border: '1px solid rgba(255,172,51,0.2)', borderRadius: '10px', padding: '12px 16px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>🏭 คลังกลาง</div>
+            <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{inventorySummary.centralPieces} ชิ้น · {inventorySummary.centralWeight.toFixed(2)} กก.</div>
+          </div>
+          {inventorySummary.perAdmin.map((a) => (
+            <div key={a.name} style={{ flex: '1 1 160px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px 16px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>👤 {a.name}</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{a.pieces} ชิ้น · {a.weight.toFixed(2)} กก.</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
         <ActionCard
           icon="📥"
@@ -749,16 +864,6 @@ export default function RacksPage() {
         />
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: '28px' }}>
-        <button
-          type="button"
-          onClick={() => setIsAdvancedModalOpen(true)}
-          style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline' }}
-        >
-          ⚙️ เครื่องมือขั้นสูง (สำหรับกรณีพิเศษ)
-        </button>
-      </div>
-
       {/* Batch Assign Modal */}
       {isBatchModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -766,13 +871,18 @@ export default function RacksPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: 'var(--accent-blue)', fontSize: '24px' }}>เพิ่มชิ้นหมูใหม่</h2>
               <button
-                onClick={() => setIsBatchModalOpen(false)}
+                onClick={() => { setIsBatchModalOpen(false); setShowAdvancedTools(false); }}
                 style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
               >✕</button>
             </div>
 
             <div style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>สร้างลำดับชิ้นหมูจากไฟล์ Excel</h3>
+              {lastPiece && (
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', padding: '8px 12px' }}>
+                  📍 ถาดสุดท้ายในระบบตอนนี้: <strong style={{ color: 'var(--text-primary)' }}>{lastPiece.prefix}{String(lastPiece.num).padStart(3, '0')} ชิ้นที่ {lastPiece.piece}</strong> ({lastPiece.owner}) — ระบบเริ่มให้ที่ {prefix}{String(startNum).padStart(3, '0')} ต่ออัตโนมัติ
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '12px', alignItems: 'end' }}>
                     <div className={styles.formGroup}>
                       <label className={styles.label}>อักษรนำหน้า (Prefix)</label>
@@ -908,10 +1018,140 @@ export default function RacksPage() {
                       </button>
                     </div>
                   </div>
+
+                  <div style={{ textAlign: 'center', marginTop: '20px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedTools(v => !v)}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      ⚙️ {showAdvancedTools ? 'ซ่อน' : ''}เครื่องมือขั้นสูง (สำหรับกรณีพิเศษ)
+                    </button>
+                  </div>
+
+                  {showAdvancedTools && (
+                    <div style={{ marginTop: '16px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
+                      <datalist id="all-racks-list">
+                        {Array.from(new Set([
+                          ...users.flatMap(u => u.racks?.map(r => r.rackNo) || []),
+                          ...(centralRacks.map((r: any) => r.rackNo) || [])
+                        ])).sort().map(no => <option key={no} value={no} />)}
+                      </datalist>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+                        เครื่องมือด้านล่างนี้ใช้เฉพาะกรณีพิเศษ/ฉุกเฉินเท่านั้น ใช้อย่างระมัดระวัง
+                      </p>
+
+                      <div className={styles.formGroup} style={{ marginBottom: '20px' }}>
+                        <label className={styles.label}>เพิ่มให้แอดมิน</label>
+                        <select
+                          className={styles.input}
+                          value={selectedUserId}
+                          onChange={(e) => setSelectedUserId(e.target.value)}
+                        >
+                          <option value="">-- เลือก --</option>
+                          {centralUser && (
+                            <option value={centralUser.id}>
+                              คลังกลาง
+                            </option>
+                          )}
+                          {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div style={{ padding: '16px', background: 'rgba(255,107,107, 0.1)', borderRadius: '8px', marginBottom: '20px', border: '1px solid rgba(255,107,107, 0.3)' }}>
+                        <h3 style={{ fontSize: '14px', marginBottom: '8px', color: '#ff6b6b' }}>เลื่อนลำดับฉุกเฉิน (ทั้งระบบ)</h3>
+                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                          ใช้แก้ไขเลขถาดที่เพี้ยนไป ให้ทั้งระบบพร้อมกัน
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'end' }}>
+                          <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                            <input
+                              type="text"
+                              className={styles.input}
+                              placeholder="เริ่มจากชิ้น (เช่น A005-3)"
+                              value={bulkShiftTarget}
+                              onChange={e => setBulkShiftTarget(e.target.value)}
+                              list="all-racks-list"
+                            />
+                          </div>
+                          <button
+                            onClick={() => handleBulkShift('down')}
+                            disabled={isShifting || !bulkShiftTarget}
+                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '10px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                            title="เลื่อนลง (ใช้เมื่อของหายจริงจากถาด)"
+                          >
+                            + เลื่อนลง
+                          </button>
+                          <button
+                            onClick={() => handleBulkShift('up')}
+                            disabled={isShifting || !bulkShiftTarget}
+                            style={{ background: 'rgba(255,107,107,0.2)', border: '1px solid rgba(255,107,107,0.4)', color: '#ff6b6b', padding: '10px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                            title="เลื่อนขึ้น (ใช้เมื่อสแกนซ้ำ/นับซ้ำ)"
+                          >
+                            ✕ เลื่อนขึ้น
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '16px', background: 'rgba(255,172,51,0.1)', borderRadius: '8px', border: '1px solid rgba(255,172,51,0.3)' }}>
+                        <h3 style={{ fontSize: '14px', marginBottom: '8px', color: '#ffac33' }}>เพิ่มชิ้นที่ขาดหาย</h3>
+                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                          สร้างและมอบชิ้นที่ขาดหายให้แอดมินที่เลือกไว้ด้านบนอย่างรวดเร็ว
+                        </p>
+                        {globalMissingPieces.length > 0 && (
+                          <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', alignSelf: 'center' }}>ชิ้นที่อาจขาดหาย:</span>
+                            {globalMissingPieces.map(piece => (
+                              <button
+                                key={piece}
+                                onClick={() => setManualAddRackNo(piece)}
+                                style={{ background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px dashed #ff6b6b', borderRadius: '12px', padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
+                              >
+                                + {piece}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', alignItems: 'end' }}>
+                          <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                            <input
+                              type="text"
+                              className={styles.input}
+                              placeholder="รหัสชิ้น (เช่น A005-3)"
+                              value={manualAddRackNo}
+                              onChange={e => setManualAddRackNo(e.target.value)}
+                              list="all-racks-list"
+                            />
+                          </div>
+                          <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className={styles.input}
+                              placeholder="น้ำหนัก (ไม่บังคับ)"
+                              value={manualAddWeight}
+                              onChange={e => setManualAddWeight(e.target.value === "" ? "" : Number(e.target.value))}
+                            />
+                          </div>
+                          <button
+                            onClick={handleAddMissingPiece}
+                            disabled={isAddingManual || !manualAddRackNo.trim()}
+                            style={{ background: '#ffac33', border: 'none', color: '#111', padding: '10px 16px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                          >
+                            {isAddingManual ? "กำลังเพิ่ม..." : "เพิ่มชิ้น"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
           </div>
         </div>
       )}
-      
+
       {/* Distribution Modal */}
       {isDistributeModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1257,134 +1497,6 @@ export default function RacksPage() {
       )}
 
       {/* Advanced Tools Modal */}
-      {isAdvancedModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '700px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>⚙️ เครื่องมือขั้นสูง</h2>
-              <datalist id="all-racks-list">
-                {Array.from(new Set([
-                  ...users.flatMap(u => u.racks?.map(r => r.rackNo) || []),
-                  ...(centralRacks.map((r: any) => r.rackNo) || [])
-                ])).sort().map(no => <option key={no} value={no} />)}
-              </datalist>
-              <button
-                onClick={() => setIsAdvancedModalOpen(false)}
-                style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
-              >✕</button>
-            </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-              เครื่องมือในหน้านี้ใช้เฉพาะกรณีพิเศษ/ฉุกเฉินเท่านั้น ใช้อย่างระมัดระวัง
-            </p>
-
-            <div className={styles.formGroup} style={{ marginBottom: '20px' }}>
-              <label className={styles.label}>เพิ่มให้แอดมิน</label>
-              <select
-                className={styles.input}
-                value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
-              >
-                <option value="">-- เลือก --</option>
-                {centralUser && (
-                  <option value={centralUser.id}>
-                    คลังกลาง
-                  </option>
-                )}
-                {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ padding: '16px', background: 'rgba(255,107,107, 0.1)', borderRadius: '8px', marginBottom: '20px', border: '1px solid rgba(255,107,107, 0.3)' }}>
-              <h3 style={{ fontSize: '14px', marginBottom: '8px', color: '#ff6b6b' }}>เลื่อนลำดับฉุกเฉิน (ทั้งระบบ)</h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                ใช้แก้ไขเลขถาดที่เพี้ยนไป ให้ทั้งระบบพร้อมกัน
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'end' }}>
-                <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                  <input
-                    type="text"
-                    className={styles.input}
-                    placeholder="เริ่มจากชิ้น (เช่น A005-3)"
-                    value={bulkShiftTarget}
-                    onChange={e => setBulkShiftTarget(e.target.value)}
-                    list="all-racks-list"
-                  />
-                </div>
-                <button
-                  onClick={() => handleBulkShift('down')}
-                  disabled={isShifting || !bulkShiftTarget}
-                  style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '10px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-                  title="เลื่อนลง (ใช้เมื่อของหายจริงจากถาด)"
-                >
-                  + เลื่อนลง
-                </button>
-                <button
-                  onClick={() => handleBulkShift('up')}
-                  disabled={isShifting || !bulkShiftTarget}
-                  style={{ background: 'rgba(255,107,107,0.2)', border: '1px solid rgba(255,107,107,0.4)', color: '#ff6b6b', padding: '10px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-                  title="เลื่อนขึ้น (ใช้เมื่อสแกนซ้ำ/นับซ้ำ)"
-                >
-                  ✕ เลื่อนขึ้น
-                </button>
-              </div>
-            </div>
-
-            <div style={{ padding: '16px', background: 'rgba(255,172,51,0.1)', borderRadius: '8px', border: '1px solid rgba(255,172,51,0.3)' }}>
-              <h3 style={{ fontSize: '14px', marginBottom: '8px', color: '#ffac33' }}>เพิ่มชิ้นที่ขาดหาย</h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                สร้างและมอบชิ้นที่ขาดหายให้แอดมินที่เลือกไว้ด้านบนอย่างรวดเร็ว
-              </p>
-              {globalMissingPieces.length > 0 && (
-                <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', alignSelf: 'center' }}>ชิ้นที่อาจขาดหาย:</span>
-                  {globalMissingPieces.map(piece => (
-                    <button
-                      key={piece}
-                      onClick={() => setManualAddRackNo(piece)}
-                      style={{ background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: '1px dashed #ff6b6b', borderRadius: '12px', padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
-                    >
-                      + {piece}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', alignItems: 'end' }}>
-                <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                  <input
-                    type="text"
-                    className={styles.input}
-                    placeholder="รหัสชิ้น (เช่น A005-3)"
-                    value={manualAddRackNo}
-                    onChange={e => setManualAddRackNo(e.target.value)}
-                    list="all-racks-list"
-                  />
-                </div>
-                <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className={styles.input}
-                    placeholder="น้ำหนัก (ไม่บังคับ)"
-                    value={manualAddWeight}
-                    onChange={e => setManualAddWeight(e.target.value === "" ? "" : Number(e.target.value))}
-                  />
-                </div>
-                <button
-                  onClick={handleAddMissingPiece}
-                  disabled={isAddingManual || !manualAddRackNo.trim()}
-                  style={{ background: '#ffac33', border: 'none', color: '#111', padding: '10px 16px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
-                >
-                  {isAddingManual ? "กำลังเพิ่ม..." : "เพิ่มชิ้น"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Deleted Log Modal */}
       {isDeletedLogModalOpen && (

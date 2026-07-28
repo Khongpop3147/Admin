@@ -35,20 +35,35 @@ export async function POST(req: Request) {
     }
 
     if (!bypassDuplicateCheck) {
-      // Check for duplicate customer name (Alert if admin types same name)
-      const existingOrder = await prisma.order.findFirst({
+      // Only flag as a risky duplicate when BOTH the name AND the pork weight
+      // match an existing order placed within the last 3 days — same name +
+      // weight showing up again on day 4+ is treated as a legitimate repeat
+      // order, not an accidental double-submit.
+      const duplicateWindowCutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      const sameNameOrders = await prisma.order.findMany({
         where: {
           customerName: {
             equals: customerName,
-          }
+          },
+          createdAt: {
+            gte: duplicateWindowCutoff,
+          },
         },
       });
 
-      if (existingOrder) {
+      const currentWeight = parseFloat(crispyPorkWeight);
+      const matchingOrder = !isNaN(currentWeight)
+        ? sameNameOrders.find((o) => {
+            const w = parseFloat(o.crispyPorkWeight || "");
+            return !isNaN(w) && Math.abs(w - currentWeight) < 0.001;
+          })
+        : undefined;
+
+      if (matchingOrder) {
         return NextResponse.json(
           {
             duplicate: true,
-            message: `พบว่ามีลูกค้าชื่อ "${customerName}" อยู่ในระบบแล้ว ต้องการบันทึกออเดอร์นี้ต่อไปหรือไม่?`,
+            message: `ชื่อ "${customerName}" และหมูมีน้ำหนัก ${crispyPorkWeight} กก. ตรงกับออเดอร์เก่าที่มีอยู่แล้ว อาจมีความเสี่ยงในการส่งออเดอร์ซ้ำ ต้องการบันทึกออเดอร์นี้ต่อไปหรือไม่?`,
           },
           { status: 200 }
         );
@@ -68,9 +83,13 @@ export async function POST(req: Request) {
       const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
       const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-      // 2. Increment DailyCounter atomically ONLY for non-storefront orders
+      // 2. Increment DailyCounter atomically for every order EXCEPT an anonymous
+      // shelf placement ("วางขายหน้าร้าน") — that's just a stock deduction, not
+      // a trackable sale. A storefront order with a real customer name still
+      // gets a real sequential number, same as any other channel.
       let currentOrderNo = 0;
-      if (platform !== 'Storefront') {
+      const isShelfSale = platform === 'Storefront' && customerName === 'วางขายหน้าร้าน';
+      if (!isShelfSale) {
         const counter = await tx.dailyCounter.upsert({
           where: { date: dateKey },
           update: { lastOrder: { increment: 1 } },
@@ -161,10 +180,14 @@ export async function GET(req: Request) {
     const sellerName = searchParams.get("sellerName");
     const dateStr = searchParams.get("date"); // format: YYYY-MM-DD
     const platform = searchParams.get("platform");
+    const customerName = searchParams.get("customerName");
 
     let whereClause: any = sellerName ? { sellerName } : {};
     if (platform) {
       whereClause.platform = platform;
+    }
+    if (customerName) {
+      whereClause.customerName = { contains: customerName, mode: "insensitive" };
     }
 
     if (dateStr) {
@@ -178,10 +201,10 @@ export async function GET(req: Request) {
       };
     }
 
-    // Any explicit, scoped filter (date or platform) means the caller wants
-    // everything matching, not a "give me something recent" sample — only cap
-    // the truly unscoped call.
-    const isScoped = Boolean(dateStr || platform);
+    // Any explicit, scoped filter (date, platform, or a name search) means the
+    // caller wants everything matching, not a "give me something recent"
+    // sample — only cap the truly unscoped call.
+    const isScoped = Boolean(dateStr || platform || customerName);
 
     const orders = await prisma.order.findMany({
       where: whereClause,

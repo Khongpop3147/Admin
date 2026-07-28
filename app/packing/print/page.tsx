@@ -7,6 +7,7 @@ interface Order {
   id: string;
   orderNo: number;
   customerName: string;
+  customerAddress?: string;
   rackDetails: string;
   platform: string;
   shippingMethod: string;
@@ -117,9 +118,9 @@ function PrintSlipContent() {
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
         <thead>
           <tr>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '8%' }}>Order #</th>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '22%' }}>ชื่อลูกค้า</th>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '35%' }}>รหัสถาด (Rack)</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '7%' }}>Order #</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '28%' }}>ชื่อลูกค้า / ที่อยู่</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '30%' }}>รหัสถาด (Rack)</th>
             <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '20%' }}>วิธีจัดส่ง</th>
             <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '15%' }}>น้ำหนักรวม</th>
           </tr>
@@ -129,8 +130,13 @@ function PrintSlipContent() {
             const rackData = getRackDisplay(order.rackDetails);
             return (
               <tr key={order.id}>
-                <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>#{order.orderNo || "?"}</td>
-                <td style={{ border: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '18px' }}>{order.customerName}</td>
+                <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>{order.orderNo || "?"}</td>
+                <td style={{ border: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '18px' }}>
+                  {order.customerName}
+                  {order.customerAddress && (
+                    <div style={{ fontWeight: 'normal', fontSize: '13px', marginTop: '4px', color: '#333' }}>{order.customerAddress}</div>
+                  )}
+                </td>
                 <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>
                   {rackData.detailsArray?.map((line, idx) => (
                     <div key={idx}>{line}</div>
@@ -149,10 +155,15 @@ function PrintSlipContent() {
       </table>
       
       <style dangerouslySetInnerHTML={{__html: `
+        @page {
+          size: A4 landscape;
+          margin: 1cm;
+        }
         @media print {
           body { background: white !important; }
-          @page { margin: 1cm; }
           button { display: none !important; }
+          tr { break-inside: avoid; page-break-inside: avoid; }
+          thead { display: table-header-group; }
         }
       `}} />
     </div>

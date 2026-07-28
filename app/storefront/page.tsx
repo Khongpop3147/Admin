@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import ExcelJS from "exceljs";
-import { saveAs } from "file-saver";
 import { useUser } from "../../components/UserProvider";
 import styles from "../page.module.css";
 
@@ -37,8 +35,6 @@ export default function StorefrontPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState("Completed");
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewData, setPreviewData] = useState<any[]>([]);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [viewingRacks, setViewingRacks] = useState<Order | null>(null);
   const { currentUser } = useUser();
@@ -111,190 +107,6 @@ export default function StorefrontPage() {
     }
   };
 
-  const generateExportData = () => {
-    const exportOrders = orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending"));
-    if (exportOrders.length === 0) return null;
-
-    return exportOrders.map(order => {
-      let phone = "";
-      let zip = "";
-      let address = order.customerAddress || "";
-
-      // Smart extraction for Phone (Thai mobile = 10 digits, landline = 9 digits,
-      // optionally dash-grouped e.g. 081-234-5678). Deliberately does NOT treat a
-      // plain space as a separator between digits — otherwise this can "reach
-      // across" a space into an adjacent zip code and swallow part of it. \b
-      // keeps it from matching inside a longer digit run too.
-      const phoneRaw = address.match(/\b0[\d-]{7,11}\d\b/);
-      if (phoneRaw) {
-        const digitsOnly = phoneRaw[0].replace(/-/g, "");
-        if (digitsOnly.length === 9 || digitsOnly.length === 10) {
-          phone = digitsOnly;
-          address = address.replace(phoneRaw[0], "").trim();
-        }
-      }
-
-      // Smart extraction for Zip code (5-digit standalone token, checked after
-      // the phone is already removed so it can't be confused with it)
-      const zipMatch = address.match(/\b\d{5}\b/);
-      if (zipMatch) {
-        zip = zipMatch[0];
-        address = address.replace(zipMatch[0], "").trim();
-      }
-
-      // Remove "ที่อยู่ :" or similar prefixes at the start
-      address = address.replace(/^ที่อยู่\s*:\s*/, "").replace(/^ที่อยู่\s*/, "");
-
-      // Remove "เบอร์โทร :" or similar text anywhere
-      address = address.replace(/เบอร์โทร\s*:\s*/g, "")
-                       .replace(/เบอร์โทร\s*/g, "")
-                       .replace(/เบอร์\s*:\s*/g, "")
-                       .replace(/เบอร์\s*/g, "")
-                       .replace(/โทร\s*:\s*/g, "")
-                       .replace(/โทร\s*/g, "");
-
-      // Clean up stray characters at the end (like trailing colons or dashes)
-      address = address.replace(/[\s:,.-]+$/, "").trim();
-
-      let cleanNote = order.adminNote || "";
-      cleanNote = cleanNote.replace(/หมูในคลังไม่พอดี ขาดอีก \d+(\.\d+)? kg/g, "").trim();
-      cleanNote = cleanNote.replace(/หมูในคลังไม่พอดี เกินมา \d+(\.\d+)? kg/g, "").trim();
-      cleanNote = cleanNote.replace(/^- /, "").trim();
-
-      const note = `ชิ้น: ${order.crispyPorkPiece || '-'} น้ำหนัก: ${order.crispyPorkWeight || '-'}kg ${cleanNote ? `(${cleanNote})` : ''}`;
-
-      return [
-        "", "", "", "", "E", "", "",
-        order.codAmount || "", note,
-        order.customerName, phone, address, zip
-      ];
-    });
-  };
-
-  const handlePreview = () => {
-    const data = generateExportData();
-    if (!data) {
-      alert("ไม่มีออเดอร์ให้แสดงตัวอย่าง");
-      return;
-    }
-    setPreviewData(data);
-    setShowPreview(true);
-  };
-
-  const handleExportPostone = async () => {
-    const dataRows = generateExportData();
-    if (!dataRows) {
-      alert("ไม่มีออเดอร์ให้ส่งออก");
-      return;
-    }
-
-    try {
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Sheet1');
-
-      // Add Headers Row 1
-      worksheet.getRow(1).values = [
-        "รายละเอียดผู้ฝากส่ง", "", "", "",
-        "รายละเอียดการจัดส่ง", "", "", "", "",
-        "รายละเอียดผู้รับปลายทาง", "", "", ""
-      ];
-
-      // Add Headers Row 2
-      worksheet.getRow(2).values = [
-        "ชื่อ-สกุล", "เบอร์โทร", "ที่อยู่", "รหัสไปรษณีย์",
-        "บริการ", "Barcode", "COD Account", "COD", "รายการสินค้า/หมายเหตุ",
-        "ชื่อ-สกุล", "เบอร์โทร", "ที่อยู่", "รหัสไปรษณีย์"
-      ];
-
-      // Merge cells for Row 1
-      worksheet.mergeCells('A1:D1');
-      worksheet.mergeCells('E1:I1');
-      worksheet.mergeCells('J1:M1');
-
-      // Style Row 1
-      const titleFont = { bold: true };
-      const centerAlign: Partial<ExcelJS.Alignment> = { vertical: 'middle', horizontal: 'center' };
-      const borderStyle: Partial<ExcelJS.Borders> = {
-        top: { style: 'thin' }, left: { style: 'thin' },
-        bottom: { style: 'thin' }, right: { style: 'thin' }
-      };
-
-      const styleHeaderCell = (cellName: string, argbColor: string) => {
-        const cell = worksheet.getCell(cellName);
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argbColor } };
-        cell.font = titleFont;
-        cell.alignment = centerAlign;
-        cell.border = borderStyle;
-      };
-
-      styleHeaderCell('A1', 'FF92CDDC'); // Light Blue
-      styleHeaderCell('E1', 'FF92D050'); // Light Green
-      styleHeaderCell('J1', 'FFFABF8F'); // Light Orange
-
-      // Style Row 2
-      const row2 = worksheet.getRow(2);
-      row2.eachCell((cell, colNumber) => {
-        if (colNumber <= 13) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEEF3' } };
-          cell.border = borderStyle;
-        }
-      });
-
-      // Add Data Rows
-      dataRows.forEach(row => {
-        const newRow = worksheet.addRow(row);
-        // Optional: add borders to data cells
-        newRow.eachCell((cell, colNumber) => {
-          if (colNumber <= 13) cell.border = borderStyle;
-        });
-      });
-
-      // Set column widths roughly based on content
-      worksheet.columns = [
-        { width: 20 }, { width: 15 }, { width: 40 }, { width: 12 }, // Sender
-        { width: 10 }, { width: 15 }, { width: 15 }, { width: 10 }, { width: 30 }, // Delivery
-        { width: 20 }, { width: 15 }, { width: 40 }, { width: 12 } // Recipient
-      ];
-
-      // Add Instructions Box to the right (O2 to Q10)
-      worksheet.mergeCells('O2:Q2');
-      const insTitle = worksheet.getCell('O2');
-      insTitle.value = 'คำแนะนำการใช้งาน';
-      insTitle.alignment = centerAlign;
-      insTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEEF3' } };
-      insTitle.border = borderStyle;
-
-      const insData = [
-        ['กรณีผู้ฝากส่งเป็นคนเดียวกันให้กรอกเพียง 1 roll เท่านั้น'],
-        ['ทั้งนี้หากไม่กรอกระบบจะใช้ที่อยู่เริ่มต้นของร้าน'],
-        [],
-        ['ช่อง "บริการ" ให้กรอกตัวอักษรย่อ 1 ตัวดังนี้'],
-        ['E = EMS'],
-        ['O = eCo-Post'],
-        ['R = ลงทะเบียน'],
-        ['P = พัสดุไปรษณีย์ธรรมดา'],
-        ['T = ขนส่งโดยร้านค้า']
-      ];
-
-      insData.forEach((row, i) => {
-        const rIndex = i + 3;
-        worksheet.mergeCells(`O${rIndex}:Q${rIndex}`);
-        const c = worksheet.getCell(`O${rIndex}`);
-        c.value = row[0] || "";
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F4F8' } }; // Lighter cyan
-      });
-
-      // Export
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(blob, `Postone_Storefront_${new Date().toISOString().split('T')[0]}.xlsx`);
-
-    } catch (error) {
-      console.error("Error exporting excel:", error);
-      alert("ส่งออกไฟล์ Excel ไม่สำเร็จ");
-    }
-  };
-
   if (!isMounted) return null;
 
   if (!currentUser || currentUser.role !== "SUPER_ADMIN") {
@@ -310,10 +122,10 @@ export default function StorefrontPage() {
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', color: '#fff' }}>
       <div className={styles.header} style={{ textAlign: 'left', marginBottom: '24px' }}>
         <h1 className={styles.title} style={{ fontSize: '2rem' }}>ออเดอร์หน้าร้าน</h1>
-        <p className={styles.subtitle}>ดูและส่งออกออเดอร์ที่ขายหน้าร้าน (walk-in)</p>
+        <p className={styles.subtitle}>ดูออเดอร์ที่ขายหน้าร้าน (walk-in)</p>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-end', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>สถานะ</label>
           <select
@@ -327,24 +139,6 @@ export default function StorefrontPage() {
             <option value="Shipped" style={{ color: '#000' }}>จัดส่งแล้ว</option>
             <option value="Completed" style={{ color: '#000' }}>เสร็จสิ้น</option>
           </select>
-        </div>
-
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button
-            onClick={handlePreview}
-            className={styles.toolbarBtn}
-            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff' }}
-          >
-            👀 ดูตัวอย่างไฟล์
-          </button>
-
-          <button
-            onClick={handleExportPostone}
-            className={styles.toolbarBtn}
-            style={{ background: 'var(--accent-green)', color: '#000' }}
-          >
-            📊 แปลงเป็น Excel (Postone)
-          </button>
         </div>
       </div>
 
@@ -443,44 +237,6 @@ export default function StorefrontPage() {
               )}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* Preview Modal */}
-      {showPreview && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div style={{ background: '#1a1a1a', width: '100%', maxWidth: '1400px', maxHeight: '90vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid #333' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>ตัวอย่างข้อมูล Excel</h2>
-              <button onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '20px' }}>✕</button>
-            </div>
-
-            <div style={{ padding: '24px', overflow: 'auto', flex: 1 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', background: '#fff', color: '#000' }}>
-                <thead>
-                  <tr>
-                    <th colSpan={4} style={{ background: '#92cddc', border: '1px solid #000', padding: '8px', textAlign: 'center' }}>รายละเอียดผู้ฝากส่ง</th>
-                    <th colSpan={5} style={{ background: '#92d050', border: '1px solid #000', padding: '8px', textAlign: 'center' }}>รายละเอียดการจัดส่ง</th>
-                    <th colSpan={4} style={{ background: '#fabf8f', border: '1px solid #000', padding: '8px', textAlign: 'center' }}>รายละเอียดผู้รับปลายทาง</th>
-                  </tr>
-                  <tr style={{ background: '#dbeef3' }}>
-                    {['ชื่อ-สกุล', 'เบอร์โทร', 'ที่อยู่', 'รหัสไปรษณีย์', 'บริการ', 'Barcode', 'COD Account', 'COD', 'รายการสินค้า/หมายเหตุ', 'ชื่อ-สกุล', 'เบอร์โทร', 'ที่อยู่', 'รหัสไปรษณีย์'].map((col, i) => (
-                      <th key={i} style={{ border: '1px solid #000', padding: '4px 8px', fontWeight: 'normal' }}>{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {previewData.map((row, i) => (
-                    <tr key={i}>
-                      {row.map((cell: any, j: number) => (
-                        <td key={j} style={{ border: '1px solid #ccc', padding: '4px 8px', whiteSpace: 'nowrap' }}>{cell}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       )}
 

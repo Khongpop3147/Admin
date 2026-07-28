@@ -144,6 +144,19 @@
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
+/* Hide the native up/down spinner on number inputs — it renders with the
+   browser's default light-mode styling and clashes with the dark custom UI. */
+.input[type="number"]::-webkit-outer-spin-button,
+.input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .button {
   background: var(--accent-color);
   color: #fff;

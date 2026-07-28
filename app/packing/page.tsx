@@ -523,7 +523,7 @@ export default function PackingPage() {
               {orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")).map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                   <td style={{ padding: '16px', verticalAlign: 'top' }}>
-                    <div style={{ fontWeight: 'bold' }}>#{order.orderNo || "?"} - {order.customerName}</div>
+                    <div style={{ fontWeight: 'bold' }}>{order.orderNo || "?"} - {order.customerName}</div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '250px' }}>{order.customerAddress}</div>
                   </td>
                   <td style={{ padding: '16px', verticalAlign: 'top' }}>

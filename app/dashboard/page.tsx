@@ -13,6 +13,16 @@ interface Order {
   crispyPorkWeight?: string;
   orderStatus?: string;
   sellerName?: string;
+  platform?: string;
+  customerName?: string;
+}
+
+// A shelf placement ("วางขายหน้าร้าน") is just a stock deduction, not a
+// recorded sale yet — future POS integration will backfill real figures.
+// Keep it out of every money total so revenue numbers aren't inflated by
+// stock that hasn't actually sold.
+function isShelfSale(o: Order): boolean {
+  return o.platform === "Storefront" && o.customerName === "วางขายหน้าร้าน";
 }
 
 interface TrendPoint {
@@ -253,7 +263,7 @@ export default function DashboardPage() {
             const res = await fetch(url);
             const data = await res.json();
             const dayOrders: Order[] = data.orders || [];
-            const sales = dayOrders.reduce((sum, o) => sum + (Number(o.price) || 0), 0);
+            const sales = dayOrders.reduce((sum, o) => sum + (isShelfSale(o) ? 0 : Number(o.price) || 0), 0);
             return { date: d, sales, orderCount: dayOrders.length };
           })
         );
@@ -271,8 +281,8 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     const orderCount = orders.length;
     const totalWeight = orders.reduce((sum, o) => sum + (parseFloat(o.crispyPorkWeight || "0") || 0), 0);
-    const totalSales = orders.reduce((sum, o) => sum + (Number(o.price) || 0), 0);
-    const totalReceived = orders.reduce((sum, o) => sum + (Number(o.actualReceivedAmount) || 0), 0);
+    const totalSales = orders.reduce((sum, o) => sum + (isShelfSale(o) ? 0 : Number(o.price) || 0), 0);
+    const totalReceived = orders.reduce((sum, o) => sum + (isShelfSale(o) ? 0 : Number(o.actualReceivedAmount) || 0), 0);
 
     const statusCounts: Record<string, number> = { Pending: 0, Packed: 0, Shipped: 0, Completed: 0 };
     orders.forEach((o) => {
@@ -292,7 +302,7 @@ export default function DashboardPage() {
       const entry = map.get(name)!;
       entry.orderCount++;
       entry.weight += parseFloat(o.crispyPorkWeight || "0") || 0;
-      entry.sales += Number(o.price) || 0;
+      entry.sales += isShelfSale(o) ? 0 : Number(o.price) || 0;
     });
     return Array.from(map.values()).sort((a, b) => b.sales - a.sales);
   }, [orders, isSuperAdmin, viewTarget]);
@@ -305,18 +315,36 @@ export default function DashboardPage() {
 
   const companyInventoryTotals = useMemo(() => {
     if (!isSuperAdmin || viewTarget !== "") return null;
-    let pieces = 0;
-    let weight = 0;
+    let adminPieces = 0;
+    let adminWeight = 0;
     users.forEach((u) => {
       if (u.role === "CENTRAL_INVENTORY") return;
       (u.racks || []).forEach((r) => {
         if (!r.isUsedUp) {
-          pieces++;
-          weight += r.remainingWeight || 0;
+          adminPieces++;
+          adminWeight += r.remainingWeight || 0;
         }
       });
     });
-    return { pieces, weight };
+
+    let centralPieces = 0;
+    let centralWeight = 0;
+    const centralUser = users.find((u) => u.role === "CENTRAL_INVENTORY");
+    (centralUser?.racks || []).forEach((r) => {
+      if (!r.isUsedUp) {
+        centralPieces++;
+        centralWeight += r.remainingWeight || 0;
+      }
+    });
+
+    return {
+      adminPieces,
+      adminWeight,
+      centralPieces,
+      centralWeight,
+      totalPieces: adminPieces + centralPieces,
+      totalWeight: adminWeight + centralWeight,
+    };
   }, [isSuperAdmin, viewTarget, users]);
 
   if (!currentUser || currentUser.role === "PACKING") return null;
@@ -471,15 +499,25 @@ export default function DashboardPage() {
 
           {companyInventoryTotals && (
             <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px" }}>
-              <h3 style={{ fontSize: "15px", marginBottom: "16px", color: "var(--text-secondary)" }}>📦 คลังหมูคงเหลือรวมทั้งบริษัท (ไม่รวมคลังกลาง)</h3>
-              <div style={{ display: "flex", gap: "16px", justifyContent: "space-around", textAlign: "center" }}>
+              <h3 style={{ fontSize: "15px", marginBottom: "16px", color: "var(--text-secondary)" }}>📦 คลังหมูคงเหลือรวมทั้งบริษัท (รวมคลังกลาง)</h3>
+              <div style={{ display: "flex", gap: "16px", justifyContent: "space-around", textAlign: "center", marginBottom: "20px" }}>
                 <div>
-                  <div style={{ fontSize: "28px", fontWeight: "bold", color: "var(--accent-blue)" }}>{companyInventoryTotals.pieces}</div>
+                  <div style={{ fontSize: "28px", fontWeight: "bold", color: "var(--accent-blue)" }}>{companyInventoryTotals.totalPieces}</div>
                   <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ชิ้นคงเหลือ</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: "28px", fontWeight: "bold", color: "var(--accent-green)" }}>{companyInventoryTotals.weight.toFixed(2)}</div>
+                  <div style={{ fontSize: "28px", fontWeight: "bold", color: "var(--accent-green)" }}>{companyInventoryTotals.totalWeight.toFixed(2)}</div>
                   <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>กก. คงเหลือ</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", borderTop: "1px solid var(--border-color)", paddingTop: "16px" }}>
+                <div style={{ flex: "1 1 160px", background: "rgba(255,255,255,0.04)", borderRadius: "10px", padding: "12px 16px" }}>
+                  <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "4px" }}>👤 ในมือแอดมิน</div>
+                  <div style={{ fontSize: "16px", fontWeight: "bold" }}>{companyInventoryTotals.adminPieces} ชิ้น · {companyInventoryTotals.adminWeight.toFixed(2)} กก.</div>
+                </div>
+                <div style={{ flex: "1 1 160px", background: "rgba(255,255,255,0.04)", borderRadius: "10px", padding: "12px 16px" }}>
+                  <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "4px" }}>🏭 คลังกลาง</div>
+                  <div style={{ fontSize: "16px", fontWeight: "bold" }}>{companyInventoryTotals.centralPieces} ชิ้น · {companyInventoryTotals.centralWeight.toFixed(2)} กก.</div>
                 </div>
               </div>
             </div>
