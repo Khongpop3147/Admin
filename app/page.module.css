@@ -276,21 +276,6 @@
 
 .btnCancel {
   flex: 1;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btnCancel:hover {
-  background: rgba(255,255,255,0.1);
-}
-
-.btnConfirm {
-  flex: 1;
   background: var(--danger-color);
   border: none;
   color: #fff;
@@ -301,9 +286,24 @@
   transition: all 0.2s;
 }
 
-.btnConfirm:hover {
+.btnCancel:hover {
   background: #ff6b6b;
   box-shadow: 0 4px 12px rgba(248, 81, 73, 0.4);
+}
+
+.btnConfirm {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btnConfirm:hover {
+  background: rgba(255,255,255,0.1);
 }
 
 /* Recent List */

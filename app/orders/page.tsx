@@ -1570,7 +1570,7 @@ export default function Home() {
         <div className={styles.modalOverlay}>
           <div className={styles.alertBox}>
             <div className={styles.alertIcon}>!</div>
-            <h3 className={styles.alertTitle}>พบชื่อลูกค้าซ้ำ</h3>
+            <h3 className={styles.alertTitle}>Order นี้มีความเสี่ยงจัดส่งซ้ำ</h3>
             <p className={styles.alertText}>{alertData.message}</p>
             <div className={styles.alertActions}>
               <button
