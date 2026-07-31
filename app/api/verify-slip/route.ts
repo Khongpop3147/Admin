@@ -42,6 +42,7 @@ export async function POST(req: Request) {
     });
 
     const thunderData = await thunderRes.json();
+    console.log("[verify-slip] Thunder raw response:", JSON.stringify(thunderData));
 
     if (!thunderRes.ok || !thunderData.success) {
       return NextResponse.json({
