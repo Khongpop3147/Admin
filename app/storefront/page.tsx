@@ -26,6 +26,13 @@ interface Order {
   rackDetails: string;
 }
 
+interface Piece {
+  id: string;
+  rackNo: string;
+  remainingWeight: number;
+  isUsedUp?: boolean;
+}
+
 function formatMoney(value: unknown): string {
   const num = typeof value === "string" ? parseFloat(value) : (value as number);
   if (num === undefined || num === null || isNaN(num)) return "0";
@@ -33,29 +40,113 @@ function formatMoney(value: unknown): string {
 }
 
 export default function StorefrontPage() {
+  const { currentUser } = useUser();
+
+  const canAccess = !!currentUser && (isSuperAdminRole(currentUser.role) || currentUser.role === "STOREFRONT");
+  const isStorefrontRole = currentUser?.role === "STOREFRONT";
+
+  // ===== Sale entry =====
+  const [pieces, setPieces] = useState<Piece[]>([]);
+  const [customerName, setCustomerName] = useState("");
+  const [selected, setSelected] = useState<Piece[]>([]);
+  const [price, setPrice] = useState("");
+  const [weightSearch, setWeightSearch] = useState("");
+  const [isSubmittingSale, setIsSubmittingSale] = useState(false);
+  const [saleMsg, setSaleMsg] = useState("");
+
+  useEffect(() => {
+    if (currentUser?.racks) {
+      setPieces((currentUser.racks as any[]).filter((r) => !r.isUsedUp));
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    setCustomerName(isStorefrontRole ? "ลูกค้าหน้าร้าน" : "");
+  }, [isStorefrontRole]);
+
+  const totalWeight = Number(selected.reduce((sum, p) => sum + p.remainingWeight, 0).toFixed(2));
+
+  const togglePiece = (p: Piece) => {
+    setSelected((prev) => (prev.some((x) => x.id === p.id) ? prev.filter((x) => x.id !== p.id) : [...prev, p]));
+  };
+
+  const handleSubmitSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = isStorefrontRole ? "ลูกค้าหน้าร้าน" : customerName.trim();
+    if (!isStorefrontRole && !name) {
+      setSaleMsg("กรุณาระบุชื่อลูกค้า");
+      return;
+    }
+    if (selected.length === 0) {
+      setSaleMsg("กรุณาเลือกชิ้นหมูที่ขายจากคลังหมูของฉัน");
+      return;
+    }
+    const p = Number(price);
+    if (!p || p <= 0) {
+      setSaleMsg("กรุณาใส่ราคาที่ขายได้");
+      return;
+    }
+
+    setIsSubmittingSale(true);
+    setSaleMsg("");
+    try {
+      const actualReceivedAmount = Math.round(p * 1.07);
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: name,
+          platform: "Storefront",
+          crispyPorkPiece: String(selected.length),
+          crispyPorkWeight: String(totalWeight),
+          price: p,
+          shippingMethod: "รับหน้าร้าน",
+          actualReceivedAmount,
+          paymentStatus: "Paid",
+          orderStatus: "Completed",
+          rackDetails: JSON.stringify(selected.map((s) => ({ assignmentId: s.id, rackNo: s.rackNo, weight: s.remainingWeight }))),
+          sellerName: currentUser?.name,
+          // Storefront customers are anonymous/repeat by nature (same generic
+          // name every time) — the usual same-name-same-weight duplicate
+          // check would false-flag almost every sale.
+          bypassDuplicateCheck: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setSaleMsg(data.error || "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+        return;
+      }
+
+      const soldIds = new Set(selected.map((s) => s.id));
+      setPieces((prev) => prev.filter((p) => !soldIds.has(p.id)));
+      setSelected([]);
+      setPrice("");
+      setCustomerName(isStorefrontRole ? "ลูกค้าหน้าร้าน" : "");
+      setSaleMsg("✅ บันทึกการขายเรียบร้อย");
+      setTimeout(() => setSaleMsg(""), 3000);
+      fetchOrders();
+    } catch (err) {
+      console.error(err);
+      setSaleMsg("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setIsSubmittingSale(false);
+    }
+  };
+
+  // ===== Order history =====
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState("Completed");
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [viewingRacks, setViewingRacks] = useState<Order | null>(null);
-  const { currentUser } = useUser();
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-    fetchOrders();
-  }, []);
 
   const fetchOrders = async () => {
     setIsLoading(true);
     try {
-      // Scoped by platform so this always returns every storefront order ever
-      // made, not just the 20 most recent orders system-wide.
       const res = await fetch("/api/orders?platform=Storefront");
       const data = await res.json();
-      if (res.ok) {
-        setOrders(data.orders);
-      }
+      if (res.ok) setOrders(data.orders);
     } catch (e) {
       console.error(e);
     } finally {
@@ -63,15 +154,20 @@ export default function StorefrontPage() {
     }
   };
 
+  useEffect(() => {
+    if (canAccess) fetchOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAccess]);
+
   const updateOrderStatus = async (id: string, newStatus: string) => {
     try {
       const res = await fetch(`/api/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderStatus: newStatus })
+        body: JSON.stringify({ orderStatus: newStatus, editedBy: currentUser?.name }),
       });
       if (res.ok) {
-        setOrders(orders.map(o => o.id === id ? { ...o, orderStatus: newStatus } : o));
+        setOrders(orders.map((o) => (o.id === id ? { ...o, orderStatus: newStatus } : o)));
       }
     } catch (e) {
       console.error(e);
@@ -92,12 +188,13 @@ export default function StorefrontPage() {
           codAmount: editingOrder.codAmount,
           crispyPorkPiece: editingOrder.crispyPorkPiece,
           crispyPorkWeight: editingOrder.crispyPorkWeight,
-          adminNote: editingOrder.adminNote
-        })
+          adminNote: editingOrder.adminNote,
+          editedBy: currentUser?.name,
+        }),
       });
 
       if (res.ok) {
-        setOrders(orders.map(o => o.id === editingOrder.id ? editingOrder : o));
+        setOrders(orders.map((o) => (o.id === editingOrder.id ? editingOrder : o)));
         setEditingOrder(null);
       } else {
         alert("บันทึกไม่สำเร็จ");
@@ -108,23 +205,140 @@ export default function StorefrontPage() {
     }
   };
 
-  if (!isMounted) return null;
+  if (!currentUser) return null;
 
-  if (!currentUser || !isSuperAdminRole(currentUser.role)) {
+  if (!canAccess) {
     return (
-      <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', color: '#fff' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>ไม่มีสิทธิ์เข้าถึง</h1>
-        <p style={{ color: 'var(--text-secondary)' }}>เฉพาะ Super Admin เท่านั้นที่เข้าหน้านี้ได้</p>
+      <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
+        <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>ไม่มีสิทธิ์เข้าถึง</h1>
+        <p style={{ color: "var(--text-secondary)" }}>เฉพาะ Super Admin และหน้าร้านเท่านั้นที่เข้าหน้านี้ได้</p>
       </div>
     );
   }
 
+  const target = parseFloat(weightSearch);
+  const isSearching = weightSearch !== "" && !isNaN(target) && target > 0;
+  const displayedPieces = isSearching
+    ? [...pieces].map((p) => ({ ...p, diff: Math.abs(p.remainingWeight - target) })).sort((a, b) => a.diff - b.diff)
+    : [...pieces].sort((a, b) => b.remainingWeight - a.remainingWeight).map((p) => ({ ...p, diff: null as number | null }));
+
   return (
-    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', color: '#fff' }}>
-      <div className={styles.header} style={{ textAlign: 'left', marginBottom: '24px' }}>
-        <h1 className={styles.title} style={{ fontSize: '2rem' }}>ออเดอร์หน้าร้าน</h1>
-        <p className={styles.subtitle}>ดูออเดอร์ที่ขายหน้าร้าน (walk-in)</p>
+    <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
+      <div className={styles.header} style={{ textAlign: "left", marginBottom: "24px" }}>
+        <h1 className={styles.title} style={{ fontSize: "2rem" }}>ขายหน้าร้าน</h1>
+        <p className={styles.subtitle}>บันทึกการขายหน้าร้าน และดูประวัติออเดอร์หน้าร้านทั้งหมด</p>
       </div>
+
+      {/* ===== Sale entry ===== */}
+      <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", marginBottom: "32px" }}>
+        <form onSubmit={handleSubmitSale} className="glass-panel" style={{ flex: "2 1 380px", padding: "20px 24px", borderRadius: "16px" }}>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: "16px" }}>🧾 บันทึกการขาย</h2>
+
+          {isStorefrontRole ? (
+            <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "16px" }}>
+              🏪 ลูกค้าหน้าร้าน (walk-in ไม่ต้องระบุชื่อ)
+            </div>
+          ) : (
+            <div className={styles.formGroup} style={{ marginBottom: "16px" }}>
+              <label className={styles.label}>ชื่อลูกค้า</label>
+              <input required type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className={styles.input} placeholder="ชื่อลูกค้า" />
+            </div>
+          )}
+
+          <div style={{ background: "rgba(255,255,255,0.05)", padding: "16px", borderRadius: "8px", marginBottom: "16px" }}>
+            <label className={styles.label} style={{ display: "block", marginBottom: "8px" }}>หมูที่ขาย</label>
+            {selected.length === 0 ? (
+              <p style={{ fontSize: "13px", color: "#ff6b6b", margin: 0 }}>⚠️ ยังไม่ได้เลือกชิ้นที่ขาย — เลือกจากรายการ "คลังหมูของฉัน" ด้านขวา</p>
+            ) : (
+              <>
+                <p style={{ fontSize: "20px", fontWeight: "bold", color: "var(--accent-green)", margin: "4px 0 0 0" }}>
+                  {totalWeight} กก. ({selected.length} ชิ้น)
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
+                  {selected.map((p) => (
+                    <span key={p.id} style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(88,166,255,0.15)", border: "1px solid var(--accent-blue)", borderRadius: "999px", padding: "6px 10px", fontSize: "13px" }}>
+                      {p.remainingWeight} กก.
+                      <button type="button" onClick={() => togglePiece(p)} style={{ background: "none", border: "none", color: "#ff6b6b", cursor: "pointer", fontWeight: "bold" }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className={styles.formGroup} style={{ marginBottom: "16px" }}>
+            <label className={styles.label}>ราคาที่ขายได้ (บาท)</label>
+            <input required type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} className={styles.input} placeholder="ราคาหมูกรอบ" />
+          </div>
+
+          {saleMsg && (
+            <div style={{ fontSize: "13px", color: saleMsg.startsWith("✅") ? "var(--accent-green)" : "#ff6b6b", marginBottom: "12px" }}>{saleMsg}</div>
+          )}
+
+          <button type="submit" className={styles.button} disabled={isSubmittingSale} style={{ width: "100%", marginTop: 0 }}>
+            {isSubmittingSale ? "กำลังบันทึก..." : "บันทึกการขาย"}
+          </button>
+        </form>
+
+        <div className="glass-panel" style={{ flex: "1 1 280px", padding: "20px 24px", borderRadius: "16px" }}>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: "16px" }}>📦 คลังหมูของฉัน</h2>
+          <div style={{ marginBottom: "16px", padding: "14px", background: "rgba(255,255,255,0.05)", borderRadius: "8px", display: "flex", justifyContent: "space-around", textAlign: "center" }}>
+            <div>
+              <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--accent-blue)" }}>{pieces.length}</div>
+              <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>ชิ้นคงเหลือ</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--accent-green)" }}>
+                {pieces.reduce((sum, p) => sum + p.remainingWeight, 0).toFixed(2)}
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>กก. คงเหลือ</div>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "12px" }}>
+            <label className={styles.label} style={{ display: "block", marginBottom: "6px", fontSize: "13px" }}>🔍 หาชิ้นใกล้เคียงน้ำหนัก (กก.)</label>
+            <input type="number" step="0.01" min="0" value={weightSearch} onChange={(e) => setWeightSearch(e.target.value)} className={styles.input} placeholder="เช่น 1.5" />
+          </div>
+
+          {pieces.length === 0 ? (
+            <div style={{ color: "var(--text-secondary)", fontSize: "14px", textAlign: "center", padding: "20px 0" }}>ไม่มีชิ้นหมูในคลัง</div>
+          ) : (
+            <>
+              <h3 style={{ fontSize: "14px", marginBottom: "10px", color: "var(--text-secondary)" }}>
+                {isSearching ? `ชิ้นที่ใกล้เคียง ${target} กก. มากที่สุด:` : "กดเพื่อเลือกชิ้นที่ขายไป:"}
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "320px", overflowY: "auto", paddingRight: "4px" }}>
+                {displayedPieces.map((p) => {
+                  const isClose = p.diff !== null && p.diff <= 0.1;
+                  const isAdded = selected.some((s) => s.id === p.id);
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => togglePiece(p)}
+                      style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "10px 14px", borderRadius: "8px", flexShrink: 0, cursor: "pointer",
+                        background: isAdded ? "rgba(88,166,255,0.16)" : isClose ? "rgba(63,185,80,0.12)" : "rgba(255,255,255,0.03)",
+                        border: `1px solid ${isAdded ? "var(--accent-blue)" : isClose ? "rgba(63,185,80,0.5)" : "rgba(255,255,255,0.08)"}`,
+                      }}
+                    >
+                      <span style={{ fontSize: "14px", color: "#ddd" }}>
+                        🐷 หมู 1 ชิ้น
+                        {isAdded && <span style={{ marginLeft: "8px", color: "var(--accent-blue)" }}>✓ เลือกแล้ว</span>}
+                        {!isAdded && isClose && <span style={{ marginLeft: "8px", color: "var(--accent-green)" }}>✓ ใกล้เคียงมาก</span>}
+                      </span>
+                      <span style={{ fontSize: "14px", color: "var(--accent-green)", fontWeight: "bold" }}>{p.remainingWeight} กก.</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ===== Order history ===== */}
+      <h2 style={{ fontSize: "1.1rem", marginBottom: "16px" }}>📋 ประวัติออเดอร์หน้าร้าน</h2>
 
       <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-end', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -146,8 +360,8 @@ export default function StorefrontPage() {
       {isLoading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>กำลังโหลด...</div>
       ) : (
-        <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '640px' }}>
             <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
               <tr>
                 <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>ลูกค้า</th>

@@ -332,6 +332,8 @@ export default function Home() {
   useEffect(() => {
     if (currentUser?.role === "PACKING") {
       router.replace("/packing");
+    } else if (currentUser?.role === "STOREFRONT") {
+      router.replace("/storefront");
     }
   }, [currentUser, router]);
 
@@ -983,7 +985,7 @@ export default function Home() {
     derivedWarning = `⚠️ หมูในคลังไม่มีเลย (ขาดอีก ${targetWeight} kg) - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
   }
 
-  if (currentUser?.role === "PACKING") return null;
+  if (currentUser?.role === "PACKING" || currentUser?.role === "STOREFRONT") return null;
 
   // Storefront staff pick the physical piece they just sold by weight rather
   // than typing a number and letting auto-allocate guess which piece(s) it

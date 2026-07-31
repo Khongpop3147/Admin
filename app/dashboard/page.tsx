@@ -236,7 +236,7 @@ export default function DashboardPage() {
     if (currentUser?.role === "PACKING") {
       router.replace("/packing");
     } else if (currentUser?.role === "STOREFRONT") {
-      router.replace("/orders");
+      router.replace("/storefront");
     }
   }, [currentUser, router]);
 

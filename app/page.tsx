@@ -15,6 +15,8 @@ export default function Home() {
       router.replace("/dashboard");
     } else if (currentUser.role === "PACKING") {
       router.replace("/packing");
+    } else if (currentUser.role === "STOREFRONT") {
+      router.replace("/storefront");
     } else {
       router.replace("/orders");
     }

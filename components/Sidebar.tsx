@@ -43,25 +43,27 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       <nav className={styles.nav}>
         {currentUser?.role !== "PACKING" && currentUser?.role !== "STOREFRONT" && (
-          <Link href="/dashboard" className={`${styles.navItem} ${pathname === '/dashboard' ? styles.active : ''}`}>
-            Dashboard
-          </Link>
-        )}
-        {currentUser?.role !== "PACKING" && (
-          <Link href="/orders" className={`${styles.navItem} ${pathname === '/orders' ? styles.active : ''}`}>
-            {currentUser?.role === "STOREFRONT" ? "ขายหน้าร้าน" : "Order Details"}
-          </Link>
+          <>
+            <Link href="/dashboard" className={`${styles.navItem} ${pathname === '/dashboard' ? styles.active : ''}`}>
+              Dashboard
+            </Link>
+            <Link href="/orders" className={`${styles.navItem} ${pathname === '/orders' ? styles.active : ''}`}>
+              Order Details
+            </Link>
+          </>
         )}
         {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "PACKING") && (
           <Link href="/packing" className={`${styles.navItem} ${pathname === '/packing' ? styles.active : ''}`}>
             Packing & Export
           </Link>
         )}
+        {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "STOREFRONT") && (
+          <Link href="/storefront" className={`${styles.navItem} ${pathname === '/storefront' ? styles.active : ''}`}>
+            ขายหน้าร้าน
+          </Link>
+        )}
         {isSuperAdminRole(currentUser?.role) && (
           <>
-            <Link href="/storefront" className={`${styles.navItem} ${pathname === '/storefront' ? styles.active : ''}`}>
-              Storefront Orders
-            </Link>
             <Link href="/racks" className={`${styles.navItem} ${pathname === '/racks' ? styles.active : ''}`}>
               Rack Management
             </Link>
