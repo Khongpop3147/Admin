@@ -205,6 +205,45 @@ function SlipVerificationBadge({ result }: { result: any }) {
   );
 }
 
+// True whenever the Thunder check came back anything other than a clean
+// pass — used to force the admin to explain why they're saving anyway.
+function hasSlipIssue(result: any): boolean {
+  if (!result) return false;
+  if (!result.success) return true;
+  if (result.isDuplicate) return true;
+  if (result.amountMatched === false) return true;
+  if (result.accountMatched === false) return true;
+  return false;
+}
+
+const SLIP_ISSUE_REASONS = [
+  "สลิปไม่มี QR โค้ด",
+  "รีเฟรชหน้าเว็บซ้ำ ระบบเลยแจ้งว่าสลิปซ้ำ (จริงๆ ไม่ซ้ำ)",
+  "ชื่อบัญชีปลายทางไม่ตรง แต่ตรวจสอบแล้วถูกต้อง",
+  "ยอดเงินไม่ตรง แต่ตรวจสอบแล้วถูกต้อง",
+  "อื่นๆ (ระบุเพิ่มในช่องหมายเหตุ)",
+];
+
+function SlipIssueReasonPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div style={{ marginTop: '8px' }}>
+      <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: '#ff6b6b', fontWeight: 600 }}>
+        ⚠️ สลิปมีปัญหา — เลือกเหตุผลก่อนบันทึกออเดอร์ *
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,107,107,0.4)', background: 'rgba(0,0,0,0.2)', color: '#fff', fontSize: '13px' }}
+      >
+        <option value="">-- เลือกเหตุผล --</option>
+        {SLIP_ISSUE_REASONS.map((reason) => (
+          <option key={reason} value={reason}>{reason}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function getOrderStatusInfo(status?: string) {
   switch (status) {
     case "Completed":
@@ -253,12 +292,14 @@ export default function Home() {
   const [isStorefrontMode, setIsStorefrontMode] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [slipVerification, setSlipVerification] = useState<any | null>(null);
+  const [slipIssueReason, setSlipIssueReason] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [isEditingOrder, setIsEditingOrder] = useState(false);
   const [editOrderData, setEditOrderData] = useState<any | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isEditUploading, setIsEditUploading] = useState(false);
   const [editSlipVerification, setEditSlipVerification] = useState<any | null>(null);
+  const [editSlipIssueReason, setEditSlipIssueReason] = useState("");
   const [alertData, setAlertData] = useState({
     show: false,
     message: "",
@@ -623,6 +664,7 @@ export default function Home() {
 
     setIsUploading(true);
     setSlipVerification(null);
+    setSlipIssueReason("");
     const form = new FormData();
     form.append("file", file);
 
@@ -655,12 +697,14 @@ export default function Home() {
     setEditOrderData({ ...selectedOrder });
     setIsEditingOrder(true);
     setEditSlipVerification(null);
+    setEditSlipIssueReason("");
   };
 
   const handleCancelEditOrder = () => {
     setIsEditingOrder(false);
     setEditOrderData(null);
     setEditSlipVerification(null);
+    setEditSlipIssueReason("");
   };
 
   const handleCloseOrderDetail = () => {
@@ -668,6 +712,7 @@ export default function Home() {
     setIsEditingOrder(false);
     setEditOrderData(null);
     setEditSlipVerification(null);
+    setEditSlipIssueReason("");
   };
 
   // Same "uploading a slip means it's paid" rule as the main new-order form —
@@ -679,6 +724,7 @@ export default function Home() {
 
     setIsEditUploading(true);
     setEditSlipVerification(null);
+    setEditSlipIssueReason("");
     const form = new FormData();
     form.append("file", file);
 
@@ -707,6 +753,12 @@ export default function Home() {
 
   const handleSaveOrderEdit = async () => {
     if (!editOrderData) return;
+    if (hasSlipIssue(editSlipVerification) && !editSlipIssueReason) {
+      alert("สลิปมีปัญหา กรุณาเลือกเหตุผลก่อนบันทึกออเดอร์");
+      return;
+    }
+    const slipIssueNote = hasSlipIssue(editSlipVerification) && editSlipIssueReason ? `[หมายเหตุสลิป: ${editSlipIssueReason}]` : "";
+    const combinedAdminNote = [editOrderData.adminNote, slipIssueNote].filter(Boolean).join(" ");
     setIsSavingEdit(true);
     try {
       const res = await fetch(`/api/orders/${editOrderData.id}`, {
@@ -720,7 +772,7 @@ export default function Home() {
           crispyPorkPiece: editOrderData.crispyPorkPiece,
           codAmount: editOrderData.codAmount,
           trackingNumber: editOrderData.trackingNumber,
-          adminNote: editOrderData.adminNote,
+          adminNote: combinedAdminNote,
           paymentStatus: editOrderData.paymentStatus,
           transferSlip: editOrderData.transferSlip,
           editedBy: currentUser?.name,
@@ -820,9 +872,16 @@ export default function Home() {
       alert("กรุณาเลือกช่องทางการขายก่อนบันทึกออเดอร์");
       return;
     }
+    if (hasSlipIssue(slipVerification) && !slipIssueReason) {
+      alert("สลิปมีปัญหา กรุณาเลือกเหตุผลก่อนบันทึกออเดอร์");
+      return;
+    }
 
     // Validation
     const requestedWeight = parseFloat(formData.crispyPorkWeight);
+
+    const slipIssueNote = hasSlipIssue(slipVerification) && slipIssueReason ? `[หมายเหตุสลิป: ${slipIssueReason}]` : "";
+    const combinedAdminNote = [derivedAdminNote, slipIssueNote].filter(Boolean).join(" ");
 
     setIsLoading(true);
     try {
@@ -832,7 +891,7 @@ export default function Home() {
         body: JSON.stringify({
           ...formData,
           orderStatus: isStorefrontMode ? "Completed" : formData.orderStatus,
-          adminNote: derivedAdminNote,
+          adminNote: combinedAdminNote,
           rackDetails: JSON.stringify(rackDetails),
           bypassDuplicateCheck,
         }),
@@ -853,6 +912,7 @@ export default function Home() {
         setAllocationMode(null);
         setAlertData({ show: false, message: "", customerName: "" });
         setSlipVerification(null);
+        setSlipIssueReason("");
         if (fileInputRef.current) fileInputRef.current.value = "";
         // The order just saved under the logged-in user's own name — make sure the
         // list refresh can actually show it, even if a SUPER_ADMIN had the filter
@@ -1301,10 +1361,13 @@ export default function Home() {
                 {formData.transferSlip && (
                   <div style={{ marginTop: '8px', fontSize: '12px' }}>
                     <a href={formData.transferSlip} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิปที่อัปโหลด</a>
-                    <button type="button" onClick={() => { setFormData(prev => ({ ...prev, transferSlip: "" })); setSlipVerification(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer' }}>ลบสลิป</button>
+                    <button type="button" onClick={() => { setFormData(prev => ({ ...prev, transferSlip: "" })); setSlipVerification(null); setSlipIssueReason(""); if (fileInputRef.current) fileInputRef.current.value = ""; }} style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer' }}>ลบสลิป</button>
                   </div>
                 )}
                 <SlipVerificationBadge result={slipVerification} />
+                {hasSlipIssue(slipVerification) && (
+                  <SlipIssueReasonPicker value={slipIssueReason} onChange={setSlipIssueReason} />
+                )}
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label}>ชื่อผู้ขาย (แอดมิน)</label>
@@ -1706,6 +1769,9 @@ export default function Home() {
                         </div>
                       )}
                       <SlipVerificationBadge result={editSlipVerification} />
+                      {hasSlipIssue(editSlipVerification) && (
+                        <SlipIssueReasonPicker value={editSlipIssueReason} onChange={setEditSlipIssueReason} />
+                      )}
                     </div>
 
                     <div className={styles.formGroup}>
