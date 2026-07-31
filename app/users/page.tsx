@@ -419,9 +419,9 @@ export default function UsersPage() {
                   </div>
                 </div>
               ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
                   <div style={{ fontSize: "22px" }}>{ROLE_ICONS[u.role]}</div>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: "1 1 140px" }}>
                     <div style={{ fontWeight: "bold", fontSize: "15px" }}>
                       {u.name}
                       {u.id === currentUser.id && (

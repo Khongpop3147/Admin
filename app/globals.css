@@ -39,10 +39,20 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: row;
-  background-image: 
+  background-image:
     radial-gradient(circle at 15% 50%, rgba(88, 166, 255, 0.08), transparent 25%),
     radial-gradient(circle at 85% 30%, rgba(248, 81, 73, 0.05), transparent 25%);
   background-attachment: fixed;
+  overflow-x: hidden;
+}
+
+/* Below this, the Sidebar becomes a fixed-position off-canvas drawer (see
+   Sidebar.module.css) instead of a row-flex sibling — switch body to a
+   column stack so the mobile top bar sits above <main> instead of beside it. */
+@media (max-width: 768px) {
+  body {
+    flex-direction: column;
+  }
 }
 
 h1, h2, h3, h4, h5, h6 {

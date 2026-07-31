@@ -1134,7 +1134,7 @@ export default function Home() {
 
                 <>
                   {rackDetails.map((rack, index) => (
-                    <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 100px auto', gap: '8px', marginBottom: '8px' }}>
+                    <div key={index} className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 100px auto', gap: '8px', marginBottom: '8px' }}>
                       <select
                         className={styles.input}
                         value={rack.assignmentId}
@@ -1644,7 +1644,7 @@ export default function Home() {
                       <label className={styles.label}>ที่อยู่</label>
                       <textarea className={styles.textarea} value={editOrderData.customerAddress || ''} onChange={e => setEditOrderData({ ...editOrderData, customerAddress: e.target.value })}></textarea>
                     </div>
-                    <div style={{ display: editOrderData.platform === "Storefront" && editOrderData.customerName === "วางขายหน้าร้าน" ? 'none' : 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div className={styles.mobileStackGrid} style={{ display: editOrderData.platform === "Storefront" && editOrderData.customerName === "วางขายหน้าร้าน" ? 'none' : 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                         <label className={styles.label}>ราคาสินค้า (บาท)</label>
                         <input type="number" step="0.01" className={styles.input} value={editOrderData.price ?? ''} onChange={e => setEditOrderData({ ...editOrderData, price: e.target.value })} />
@@ -1654,7 +1654,7 @@ export default function Home() {
                         <input type="number" step="0.01" className={styles.input} value={editOrderData.codAmount ?? ''} onChange={e => setEditOrderData({ ...editOrderData, codAmount: e.target.value })} />
                       </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                         <label className={styles.label}>น้ำหนัก (กก.)</label>
                         <input type="text" className={styles.input} value={editOrderData.crispyPorkWeight || ''} onChange={e => setEditOrderData({ ...editOrderData, crispyPorkWeight: e.target.value })} />

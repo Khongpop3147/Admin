@@ -20,6 +20,10 @@
   margin-bottom: 40px;
 }
 
+.closeBtn {
+  display: none;
+}
+
 .logoIcon {
   width: 36px;
   height: 36px;
@@ -125,4 +129,33 @@
 .userRole {
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 260px;
+    max-width: 82vw;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 300;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+
+  .closeBtn {
+    display: block;
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
 }

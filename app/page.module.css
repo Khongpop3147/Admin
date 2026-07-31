@@ -23,6 +23,24 @@
   font-size: 1.1rem;
 }
 
+@media (max-width: 768px) {
+  .container {
+    padding: 20px 14px;
+  }
+
+  .header {
+    margin-bottom: 24px;
+  }
+
+  .title {
+    font-size: 1.6rem;
+  }
+
+  .subtitle {
+    font-size: 0.9rem;
+  }
+}
+
 .layout {
   display: flex;
   gap: 24px;
@@ -74,6 +92,21 @@
 @media (max-width: 768px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .layout {
+    flex-direction: column;
+  }
+}
+
+/* Escape hatch for the many rigid inline `gridTemplateColumns` rows (e.g.
+   "1fr 1fr 2fr", "1fr 100px auto") scattered across form/modal JSX — add
+   this class alongside the inline style to collapse them to one column on
+   mobile without touching each one's desktop layout. Uses !important
+   because inline styles otherwise win over a plain class rule. */
+@media (max-width: 768px) {
+  .mobileStackGrid {
+    grid-template-columns: 1fr !important;
   }
 }
 

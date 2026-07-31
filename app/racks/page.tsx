@@ -891,7 +891,7 @@ export default function RacksPage() {
                   📍 ถาดสุดท้ายในระบบตอนนี้: <strong style={{ color: 'var(--text-primary)' }}>{lastPiece.prefix}{String(lastPiece.num).padStart(3, '0')} ชิ้นที่ {lastPiece.piece}</strong> ({lastPiece.owner}) — ระบบเริ่มให้ที่ {prefix}{String(startNum).padStart(3, '0')} ต่ออัตโนมัติ
                 </div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '12px', alignItems: 'end' }}>
+              <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '12px', alignItems: 'end' }}>
                     <div className={styles.formGroup}>
                       <label className={styles.label}>อักษรนำหน้า (Prefix)</label>
                       <input type="text" className={styles.input} value={prefix} onChange={handlePrefixChange} placeholder="เช่น A" style={{ textTransform: 'uppercase' }} />
@@ -956,7 +956,7 @@ export default function RacksPage() {
                         .map((rack, idx) => ({ ...rack, originalIdx: idx }))
                         .filter(r => !searchDraft || r.rackNo.toLowerCase().includes(searchDraft.toLowerCase()))
                         .map((rack) => (
-                        <div key={rack.originalIdx} style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr auto', gap: '12px', marginBottom: '8px', alignItems: 'center', background: rack.weight === 0 ? 'rgba(255,255,0,0.1)' : 'transparent', padding: rack.weight === 0 ? '4px' : '0' }}>
+                        <div key={rack.originalIdx} className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr auto', gap: '12px', marginBottom: '8px', alignItems: 'center', background: rack.weight === 0 ? 'rgba(255,255,0,0.1)' : 'transparent', padding: rack.weight === 0 ? '4px' : '0' }}>
                           <input
                             type="checkbox"
                             checked={!!rack.selected}
@@ -1075,7 +1075,7 @@ export default function RacksPage() {
                         <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
                           ใช้แก้ไขเลขถาดที่เพี้ยนไป ให้ทั้งระบบพร้อมกัน
                         </p>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'end' }}>
+                        <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'end' }}>
                           <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                             <input
                               type="text"
@@ -1124,7 +1124,7 @@ export default function RacksPage() {
                             ))}
                           </div>
                         )}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', alignItems: 'end' }}>
+                        <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', alignItems: 'end' }}>
                           <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                             <input
                               type="text"
@@ -1172,7 +1172,7 @@ export default function RacksPage() {
               >✕</button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '16px', marginBottom: '24px', alignItems: 'end' }}>
+            <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '16px', marginBottom: '24px', alignItems: 'end' }}>
               <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                 <label className={styles.label}>ตั้งแต่ชิ้น</label>
                 <input
@@ -1339,7 +1339,7 @@ export default function RacksPage() {
               )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'end', background: 'rgba(255,172,51,0.05)', padding: '24px', borderRadius: '8px', border: '1px solid rgba(255,172,51,0.2)' }}>
+            <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'end', background: 'rgba(255,172,51,0.05)', padding: '24px', borderRadius: '8px', border: '1px solid rgba(255,172,51,0.2)' }}>
               <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                 <label className={styles.label}>เลือกแอดมินที่จะรับ {selectedCentralRacks.size} ชิ้น</label>
                 <select

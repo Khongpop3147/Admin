@@ -14,7 +14,12 @@ const ROLE_LABELS: Record<string, string> = {
   DEV: "Dev",
 };
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { currentUser, sessionUser, setCurrentUser, users, logout } = useUser();
   const pathname = usePathname();
 
@@ -28,10 +33,11 @@ export default function Sidebar() {
   if (!currentUser) return null;
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className={`${styles.sidebar} ${isOpen ? styles.sidebarOpen : ''}`}>
       <div className={styles.logo}>
         <div className={styles.logoIcon}>A</div>
         <h2>AdminSpace</h2>
+        <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="ปิดเมนู">✕</button>
       </div>
 
       <nav className={styles.nav}>
