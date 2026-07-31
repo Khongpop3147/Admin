@@ -59,7 +59,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         )}
         {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "STOREFRONT") && (
           <Link href="/storefront" className={`${styles.navItem} ${pathname === '/storefront' ? styles.active : ''}`}>
-            ขายหน้าร้าน
+            Store Front
           </Link>
         )}
         {isSuperAdminRole(currentUser?.role) && (

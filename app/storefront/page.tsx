@@ -43,13 +43,17 @@ export default function StorefrontPage() {
   const { currentUser } = useUser();
 
   const canAccess = !!currentUser && (isSuperAdminRole(currentUser.role) || currentUser.role === "STOREFRONT");
-  const isStorefrontRole = currentUser?.role === "STOREFRONT";
+
+  // Every storefront sale is an anonymous walk-in rung up at a fixed rate —
+  // no customer name to type, no price to type. 250 บาท/กก. matches the
+  // "1 kg 250 บาท" promotion rate used elsewhere in the app.
+  const WALKIN_NAME = "ลูกค้าหน้าร้าน";
+  const RATE_PER_KG = 250;
+  const VAT_RATE = 0.07;
 
   // ===== Sale entry =====
   const [pieces, setPieces] = useState<Piece[]>([]);
-  const [customerName, setCustomerName] = useState("");
   const [selected, setSelected] = useState<Piece[]>([]);
-  const [price, setPrice] = useState("");
   const [weightSearch, setWeightSearch] = useState("");
   const [isSubmittingSale, setIsSubmittingSale] = useState(false);
   const [saleMsg, setSaleMsg] = useState("");
@@ -60,11 +64,10 @@ export default function StorefrontPage() {
     }
   }, [currentUser]);
 
-  useEffect(() => {
-    setCustomerName(isStorefrontRole ? "ลูกค้าหน้าร้าน" : "");
-  }, [isStorefrontRole]);
-
   const totalWeight = Number(selected.reduce((sum, p) => sum + p.remainingWeight, 0).toFixed(2));
+  const basePrice = Math.round(totalWeight * RATE_PER_KG);
+  const vatAmount = Math.round(basePrice * VAT_RATE);
+  const totalWithVat = basePrice + vatAmount;
 
   const togglePiece = (p: Piece) => {
     setSelected((prev) => (prev.some((x) => x.id === p.id) ? prev.filter((x) => x.id !== p.id) : [...prev, p]));
@@ -72,36 +75,25 @@ export default function StorefrontPage() {
 
   const handleSubmitSale = async (e: React.FormEvent) => {
     e.preventDefault();
-    const name = isStorefrontRole ? "ลูกค้าหน้าร้าน" : customerName.trim();
-    if (!isStorefrontRole && !name) {
-      setSaleMsg("กรุณาระบุชื่อลูกค้า");
-      return;
-    }
     if (selected.length === 0) {
       setSaleMsg("กรุณาเลือกชิ้นหมูที่ขายจากคลังหมูของฉัน");
-      return;
-    }
-    const p = Number(price);
-    if (!p || p <= 0) {
-      setSaleMsg("กรุณาใส่ราคาที่ขายได้");
       return;
     }
 
     setIsSubmittingSale(true);
     setSaleMsg("");
     try {
-      const actualReceivedAmount = Math.round(p * 1.07);
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerName: name,
+          customerName: WALKIN_NAME,
           platform: "Storefront",
           crispyPorkPiece: String(selected.length),
           crispyPorkWeight: String(totalWeight),
-          price: p,
+          price: basePrice,
           shippingMethod: "รับหน้าร้าน",
-          actualReceivedAmount,
+          actualReceivedAmount: totalWithVat,
           paymentStatus: "Paid",
           orderStatus: "Completed",
           rackDetails: JSON.stringify(selected.map((s) => ({ assignmentId: s.id, rackNo: s.rackNo, weight: s.remainingWeight }))),
@@ -121,8 +113,6 @@ export default function StorefrontPage() {
       const soldIds = new Set(selected.map((s) => s.id));
       setPieces((prev) => prev.filter((p) => !soldIds.has(p.id)));
       setSelected([]);
-      setPrice("");
-      setCustomerName(isStorefrontRole ? "ลูกค้าหน้าร้าน" : "");
       setSaleMsg("✅ บันทึกการขายเรียบร้อย");
       setTimeout(() => setSaleMsg(""), 3000);
       fetchOrders();
@@ -234,16 +224,9 @@ export default function StorefrontPage() {
         <form onSubmit={handleSubmitSale} className="glass-panel" style={{ flex: "2 1 380px", padding: "20px 24px", borderRadius: "16px" }}>
           <h2 style={{ fontSize: "1.1rem", marginBottom: "16px" }}>🧾 บันทึกการขาย</h2>
 
-          {isStorefrontRole ? (
-            <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "16px" }}>
-              🏪 ลูกค้าหน้าร้าน (walk-in ไม่ต้องระบุชื่อ)
-            </div>
-          ) : (
-            <div className={styles.formGroup} style={{ marginBottom: "16px" }}>
-              <label className={styles.label}>ชื่อลูกค้า</label>
-              <input required type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className={styles.input} placeholder="ชื่อลูกค้า" />
-            </div>
-          )}
+          <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "16px" }}>
+            🏪 ลูกค้าหน้าร้าน (walk-in ไม่ต้องระบุชื่อ)
+          </div>
 
           <div style={{ background: "rgba(255,255,255,0.05)", padding: "16px", borderRadius: "8px", marginBottom: "16px" }}>
             <label className={styles.label} style={{ display: "block", marginBottom: "8px" }}>หมูที่ขาย</label>
@@ -266,9 +249,20 @@ export default function StorefrontPage() {
             )}
           </div>
 
-          <div className={styles.formGroup} style={{ marginBottom: "16px" }}>
-            <label className={styles.label}>ราคาที่ขายได้ (บาท)</label>
-            <input required type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} className={styles.input} placeholder="ราคาหมูกรอบ" />
+          <div style={{ background: "rgba(63,185,80,0.08)", border: "1px solid rgba(63,185,80,0.25)", padding: "16px", borderRadius: "8px", marginBottom: "16px" }}>
+            <label className={styles.label} style={{ display: "block", marginBottom: "8px" }}>ราคา (โลละ {RATE_PER_KG} บาท)</label>
+            {selected.length === 0 ? (
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: 0 }}>เลือกชิ้นหมูก่อนเพื่อคำนวณราคา</p>
+            ) : (
+              <>
+                <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                  {totalWeight} กก. × {RATE_PER_KG} = ฿{formatMoney(basePrice)} + VAT 7% (฿{formatMoney(vatAmount)})
+                </div>
+                <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--accent-green)", marginTop: "4px" }}>
+                  ฿{formatMoney(totalWithVat)}
+                </div>
+              </>
+            )}
           </div>
 
           {saleMsg && (
