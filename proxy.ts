@@ -5,11 +5,13 @@ import { decryptSession } from "./lib/session";
 // Paths that work without being logged in at all.
 const PUBLIC_PATHS = ["/login"];
 const PUBLIC_API_PREFIXES = ["/api/auth/"];
-// Uploaded slip images live under public/uploads and are served as plain
-// static files. Thunder's slip-verification API fetches this URL directly
-// from its own servers (no session cookie) — it must stay reachable without
-// login, same as before auth existed at all.
-const PUBLIC_PATH_PREFIXES = ["/uploads/"];
+// Uploaded slip images must stay reachable without login — Thunder's
+// slip-verification API fetches the URL directly from its own servers (no
+// session cookie), same as before auth existed at all. New uploads are
+// served via /api/uploads/[filename] (a route handler, so it always reads
+// the current disk state); /uploads/ is kept public too for slip links
+// saved before that change, which the static public/ folder can still serve.
+const PUBLIC_PATH_PREFIXES = ["/uploads/", "/api/uploads/"];
 
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

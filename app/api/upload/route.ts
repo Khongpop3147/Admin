@@ -18,7 +18,11 @@ export async function POST(req: Request) {
     const uploadDir = path.join(process.cwd(), "public/uploads");
     await writeFile(path.join(uploadDir, filename), buffer);
 
-    const fileUrl = `/uploads/${filename}`;
+    // Served via a route handler (not the static /uploads/ pass-through) —
+    // Next.js's static public/ handler only reliably serves files that
+    // existed when the server process started, so a file uploaded seconds
+    // ago while the server is already running can silently 404 there.
+    const fileUrl = `/api/uploads/${filename}`;
 
     return NextResponse.json({ success: true, url: fileUrl }, { status: 201 });
   } catch (error) {
