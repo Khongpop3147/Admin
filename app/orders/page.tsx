@@ -989,6 +989,10 @@ export default function Home() {
   // named walk-in who paid by bank transfer still needs a price + slip).
   const showPriceAndSlip = !isStorefrontMode || formData.customerName !== "วางขายหน้าร้าน";
   const displayedOrders = showUnpaidOnly ? recentOrders.filter(o => o.paymentStatus === "Unpaid") : recentOrders;
+  // Storefront staff pick the physical piece they just sold by weight rather
+  // than typing a number and letting auto-allocate guess which piece(s) it
+  // was — simpler UI, and matches how the sale actually happens at the till.
+  const isStorefrontRole = currentUser?.role === "STOREFRONT";
 
   return (
     <div className={styles.container}>
@@ -1127,6 +1131,29 @@ export default function Home() {
             {/* Product Details */}
             <div className={styles.formSection}>
               <h3 className={styles.sectionTitle}>รายละเอียดสินค้า</h3>
+              {isStorefrontRole ? (
+                <div className={styles.formGroup} style={{ gridColumn: '1 / -1', background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px' }}>
+                  <label className={styles.label}>หมูที่ขาย</label>
+                  {rackDetails.length === 0 ? (
+                    <p style={{ fontSize: '13px', color: '#ff6b6b', margin: '4px 0 0 0' }}>⚠️ ยังไม่ได้เลือกชิ้นที่ขาย — เลือกจากรายการ "คลังหมูของฉัน" ด้านขวา</p>
+                  ) : (
+                    <>
+                      <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--accent-green)', margin: '4px 0 0 0' }}>
+                        {totalAllocated} กก. ({rackDetails.length} ชิ้น)
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
+                        {rackDetails.map((rack, index) => (
+                          <span key={index} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(88,166,255,0.15)', border: '1px solid var(--accent-blue)', borderRadius: '999px', padding: '6px 10px', fontSize: '13px' }}>
+                            {rack.weight} กก.
+                            <button type="button" onClick={() => handleRemoveRack(index)} style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <>
               <div className={styles.formGroup}>
                 <label className={styles.label}>น้ำหนักหมูกรอบ (กก.) <span style={{ color: '#ff6b6b' }}>*</span></label>
                 <input
@@ -1282,6 +1309,8 @@ export default function Home() {
                   </button>
                 </>
               </div>
+                </>
+              )}
 
 
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
@@ -1446,18 +1475,28 @@ export default function Home() {
                 const availableRacks = currentUser.racks.filter(r => !r.isUsedUp);
                 const target = parseFloat(weightSearch);
                 const isSearching = weightSearch !== "" && !isNaN(target) && target > 0;
+                // Storefront role always gets the flat pick-by-weight list —
+                // there's no auto-allocate form for them to fall back on, so
+                // this list IS how they mark a piece as sold.
+                const showFlatList = isSearching || isStorefrontRole;
 
-                if (isSearching) {
-                  const matches = [...availableRacks]
-                    .map((p: any) => ({ ...p, diff: Math.abs(p.remainingWeight - target) }))
-                    .sort((a: any, b: any) => a.diff - b.diff);
+                if (showFlatList) {
+                  const matches = isSearching
+                    ? [...availableRacks]
+                        .map((p: any) => ({ ...p, diff: Math.abs(p.remainingWeight - target) }))
+                        .sort((a: any, b: any) => a.diff - b.diff)
+                    : [...availableRacks]
+                        .sort((a: any, b: any) => b.remainingWeight - a.remainingWeight)
+                        .map((p: any) => ({ ...p, diff: null }));
 
                   return (
                     <>
-                      <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-secondary)' }}>ชิ้นที่ใกล้เคียง {target} กก. มากที่สุด:</h3>
+                      <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
+                        {isSearching ? `ชิ้นที่ใกล้เคียง ${target} กก. มากที่สุด:` : (isStorefrontRole ? 'กดเพื่อเลือกชิ้นที่ขายไป:' : 'รายการชิ้นหมูที่เหลือ:')}
+                      </h3>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
                         {matches.map((p: any, idx: number) => {
-                          const isClose = p.diff <= 0.1;
+                          const isClose = p.diff !== null && p.diff <= 0.1;
                           const isAdded = rackDetails.some(r => r.assignmentId === p.id);
                           return (
                             <div
@@ -1472,8 +1511,8 @@ export default function Home() {
                               title={isAdded ? "กดอีกครั้งเพื่อเอาออกจากออเดอร์" : "กดเพื่อเพิ่มชิ้นนี้เข้าออเดอร์"}
                             >
                               <span style={{ fontSize: '14px', color: '#ddd' }}>
-                                ถาด {p.rackNo?.split('-')[0] || '-'}{p.rackNo?.includes('-') ? ` • ชิ้นที่ ${p.rackNo.split('-')[1]}` : ''}
-                                {isAdded && <span style={{ marginLeft: '8px', color: 'var(--accent-blue)' }}>✓ เพิ่มในออเดอร์แล้ว</span>}
+                                {isStorefrontRole ? '🐷 หมู 1 ชิ้น' : `ถาด ${p.rackNo?.split('-')[0] || '-'}${p.rackNo?.includes('-') ? ` • ชิ้นที่ ${p.rackNo.split('-')[1]}` : ''}`}
+                                {isAdded && <span style={{ marginLeft: '8px', color: 'var(--accent-blue)' }}>✓ เลือกแล้ว</span>}
                                 {!isAdded && isClose && <span style={{ marginLeft: '8px', color: 'var(--accent-green)' }}>✓ ใกล้เคียงมาก</span>}
                               </span>
                               <span style={{ fontSize: '14px', color: 'var(--accent-green)', fontWeight: 'bold' }}>{p.remainingWeight} กก.</span>
