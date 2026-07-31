@@ -33,6 +33,10 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         url,
         checkDuplicate: true,
+        // Checks the slip's receiver against the bank account(s) registered
+        // in the Thunder dashboard (smart name matching, ~85% similarity).
+        // matchedAccount comes back null when nothing registered matches.
+        matchAccount: true,
         ...(expectedAmount !== null ? { matchAmount: expectedAmount } : {}),
       }),
     });
@@ -55,12 +59,18 @@ export async function POST(req: Request) {
       ? Math.abs(Number(slipAmount) - expectedAmount) < 0.5
       : null;
 
+    const matchedAccount = thunderData.data?.matchedAccount ?? null;
+
     return NextResponse.json({
       success: true,
       isDuplicate: thunderData.data?.isDuplicate ?? false,
       slipAmount,
       expectedAmount,
       amountMatched,
+      // true = receiver matched a registered account in Thunder, false = it
+      // didn't (money went somewhere else), null = Thunder couldn't tell.
+      accountMatched: matchedAccount ? true : false,
+      matchedAccountName: matchedAccount?.nameTh || matchedAccount?.nameEn || null,
       senderName: rawSlip?.sender?.account?.name?.th || null,
       senderBank: rawSlip?.sender?.bank?.short || rawSlip?.sender?.bank?.name || null,
       receiverName: rawSlip?.receiver?.account?.name?.th || null,

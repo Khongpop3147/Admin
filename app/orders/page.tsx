@@ -190,6 +190,14 @@ function SlipVerificationBadge({ result }: { result: any }) {
     );
   }
 
+  if (result.accountMatched === false) {
+    return (
+      <div style={{ marginTop: '8px', fontSize: '12px', color: '#ff6b6b', background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
+        ⚠️ ชื่อบัญชีปลายทางไม่ตรง — สลิปนี้โอนไปที่ {result.receiverName || 'บัญชีอื่น'} ({result.receiverBank || 'ไม่ทราบธนาคาร'}) ไม่ใช่บัญชีร้านที่ลงทะเบียนไว้ กรุณาตรวจสอบ
+      </div>
+    );
+  }
+
   return (
     <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
       ✅ เช็คสลิปผ่าน โอนจาก {result.senderName || 'ไม่ทราบชื่อ'} {result.senderBank ? `(${result.senderBank})` : ''} ยอด ฿{formatMoney(result.slipAmount)}
