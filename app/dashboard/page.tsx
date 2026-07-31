@@ -10,6 +10,7 @@ interface Order {
   price?: number;
   codAmount?: number;
   codConfirmed?: boolean;
+  isReturned?: boolean;
   actualReceivedAmount?: number;
   crispyPorkWeight?: string;
   orderStatus?: string;
@@ -32,6 +33,24 @@ function isShelfSale(o: Order): boolean {
 // order's received amount out of revenue totals until then.
 function isCodPending(o: Order): boolean {
   return Number(o.codAmount) > 0 && !o.codConfirmed;
+}
+
+// A returned ("ตีกลับ") package means the sale never actually happened — the
+// pork stock deduction stands, but no revenue or commission should count.
+function isExcludedFromRevenue(o: Order): boolean {
+  return isShelfSale(o) || o.isReturned === true;
+}
+
+const COMMISSION_RATE = 0.2;
+const RETURN_PENALTY = 50;
+
+// Commission per order: 0 while a shelf placement or a still-pending COD
+// (nothing confirmed sold yet), a flat -50 penalty if returned, otherwise
+// 20% of the product price.
+function commissionForOrder(o: Order): number {
+  if (o.isReturned) return -RETURN_PENALTY;
+  if (isShelfSale(o) || isCodPending(o)) return 0;
+  return (Number(o.price) || 0) * COMMISSION_RATE;
 }
 
 interface TrendPoint {
@@ -290,9 +309,9 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     const orderCount = orders.length;
     const totalWeight = orders.reduce((sum, o) => sum + (parseFloat(o.crispyPorkWeight || "0") || 0), 0);
-    const totalSales = orders.reduce((sum, o) => sum + (isShelfSale(o) ? 0 : Number(o.price) || 0), 0);
+    const totalSales = orders.reduce((sum, o) => sum + (isExcludedFromRevenue(o) ? 0 : Number(o.price) || 0), 0);
     const totalReceived = orders.reduce((sum, o) => {
-      if (isShelfSale(o) || isCodPending(o)) return sum;
+      if (isExcludedFromRevenue(o) || isCodPending(o)) return sum;
       return sum + (Number(o.actualReceivedAmount) || 0);
     }, 0);
     const totalCodHeld = orders.reduce((sum, o) => sum + (isCodPending(o) ? Number(o.actualReceivedAmount) || 0 : 0), 0);
@@ -309,14 +328,16 @@ export default function DashboardPage() {
 
   const perAdminBreakdown = useMemo(() => {
     if (!isSuperAdmin || viewTarget !== "") return [];
-    const map = new Map<string, { name: string; orderCount: number; weight: number; sales: number }>();
+    const map = new Map<string, { name: string; orderCount: number; weight: number; sales: number; commission: number; returnedCount: number }>();
     orders.forEach((o) => {
       const name = o.sellerName || "ไม่ระบุ";
-      if (!map.has(name)) map.set(name, { name, orderCount: 0, weight: 0, sales: 0 });
+      if (!map.has(name)) map.set(name, { name, orderCount: 0, weight: 0, sales: 0, commission: 0, returnedCount: 0 });
       const entry = map.get(name)!;
       entry.orderCount++;
       entry.weight += parseFloat(o.crispyPorkWeight || "0") || 0;
-      entry.sales += isShelfSale(o) ? 0 : Number(o.price) || 0;
+      entry.sales += isExcludedFromRevenue(o) ? 0 : Number(o.price) || 0;
+      entry.commission += commissionForOrder(o);
+      if (o.isReturned) entry.returnedCount++;
     });
     return Array.from(map.values()).sort((a, b) => b.sales - a.sales);
   }, [orders, isSuperAdmin, viewTarget]);
@@ -501,6 +522,8 @@ export default function DashboardPage() {
                           <th style={{ padding: "10px 12px", color: "var(--text-secondary)", fontWeight: "normal" }}>ออเดอร์</th>
                           <th style={{ padding: "10px 12px", color: "var(--text-secondary)", fontWeight: "normal" }}>น้ำหนัก (กก.)</th>
                           <th style={{ padding: "10px 12px", color: "var(--text-secondary)", fontWeight: "normal" }}>ยอดขาย (฿)</th>
+                          <th style={{ padding: "10px 12px", color: "var(--text-secondary)", fontWeight: "normal" }}>ตีกลับ</th>
+                          <th style={{ padding: "10px 12px", color: "var(--text-secondary)", fontWeight: "normal" }}>ค่าคอม (฿)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -510,6 +533,8 @@ export default function DashboardPage() {
                             <td style={{ padding: "10px 12px" }}>{a.orderCount}</td>
                             <td style={{ padding: "10px 12px" }}>{a.weight.toFixed(2)}</td>
                             <td style={{ padding: "10px 12px", color: "var(--accent-green)", fontWeight: "bold" }}>฿{formatMoney(a.sales)}</td>
+                            <td style={{ padding: "10px 12px", color: a.returnedCount > 0 ? "#ff6b6b" : "var(--text-secondary)" }}>{a.returnedCount > 0 ? `${a.returnedCount} ออเดอร์` : "-"}</td>
+                            <td style={{ padding: "10px 12px", color: a.commission < 0 ? "#ff6b6b" : "#ffac33", fontWeight: "bold" }}>฿{formatMoney(a.commission)}</td>
                           </tr>
                         ))}
                       </tbody>

@@ -24,6 +24,7 @@ interface Order {
   isCod: boolean;
   codAmount: number;
   codConfirmed: boolean;
+  isReturned: boolean;
   crispyPorkPiece: string;
   crispyPorkWeight: string;
   adminNote: string;
@@ -162,7 +163,16 @@ export default function PackingPage() {
     const exportOrders = orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending"));
     if (exportOrders.length === 0) return null;
 
-    return exportOrders.map(order => {
+    // Postone only needs the shipper's own name/phone/address filled in once
+    // per file — leaving it blank on every other row makes it fall back to
+    // that first row's shipper automatically.
+    const SENDER_NAME = "หมูกรอบอีซี่ l หมูกรอบ EASY";
+    const SENDER_PHONE = "0971622755";
+    const SENDER_ADDRESS = "153, ตำบล สมอแข อำเภอเมืองพิษณุโลก พิษณุโลก";
+    const SENDER_ZIP = "65000";
+    const COD_ACCOUNT = "0644177042";
+
+    return exportOrders.map((order, index) => {
       let phone = "";
       let zip = "";
       let address = order.customerAddress || "";
@@ -210,11 +220,24 @@ export default function PackingPage() {
       cleanNote = cleanNote.replace(/หมูในคลังไม่พอดี เกินมา \d+(\.\d+)? kg/g, "").trim();
       cleanNote = cleanNote.replace(/^- /, "").trim();
 
-      const note = `ชิ้น: ${order.crispyPorkPiece || '-'} น้ำหนัก: ${order.crispyPorkWeight || '-'}kg ${cleanNote ? `(${cleanNote})` : ''}`;
+      const note = `หมูกรอบ ชิ้น: ${order.crispyPorkPiece || '-'} น้ำหนัก: ${order.crispyPorkWeight || '-'}kg ${cleanNote ? `(${cleanNote})` : ''}`;
+
+      const isFirstRow = index === 0;
+
+      // The COD column has to be the FULL amount the courier collects in
+      // cash from the customer (product + shipping + COD fee) — not just
+      // the small COD service fee alone, or Postone would only ever get
+      // back a fraction of what's actually owed.
+      const isCodOrder = Number(order.codAmount) > 0;
+      const codTotal = isCodOrder ? (Number(order.actualReceivedAmount) || Number(order.codAmount)) : "";
 
       return [
-        "", "", "", "", "E", "", "",
-        order.codAmount || "", note,
+        isFirstRow ? SENDER_NAME : "",
+        isFirstRow ? SENDER_PHONE : "",
+        isFirstRow ? SENDER_ADDRESS : "",
+        isFirstRow ? SENDER_ZIP : "",
+        "E", "", COD_ACCOUNT,
+        codTotal, note,
         order.customerName, phone, address, zip
       ];
     });
@@ -238,102 +261,32 @@ export default function PackingPage() {
     }
 
     try {
+      // Rebuilding the file from scratch kept producing subtle structural
+      // differences from Postone's own template (extra spacer column, missing
+      // print area, different cell styles) that made their importer silently
+      // reject every row. Loading their real template and only overwriting
+      // the data cells guarantees the file stays byte-for-byte compatible.
+      const templateRes = await fetch('/Postone_Template.xlsx');
+      if (!templateRes.ok) throw new Error('โหลดไฟล์ template ไม่สำเร็จ');
+      const templateBuffer = await templateRes.arrayBuffer();
+
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Sheet1');
+      await workbook.xlsx.load(templateBuffer);
+      const worksheet = workbook.getWorksheet(1);
+      if (!worksheet) throw new Error('ไม่พบชีตในไฟล์ template');
 
-      // Add Headers Row 1
-      worksheet.getRow(1).values = [
-        "รายละเอียดผู้ฝากส่ง", "", "", "",
-        "รายละเอียดการจัดส่ง", "", "", "", "",
-        "รายละเอียดผู้รับปลายทาง", "", "", ""
-      ];
-
-      // Add Headers Row 2
-      worksheet.getRow(2).values = [
-        "ชื่อ-สกุล", "เบอร์โทร", "ที่อยู่", "รหัสไปรษณีย์",
-        "บริการ", "Barcode", "COD Account", "COD", "รายการสินค้า/หมายเหตุ",
-        "ชื่อ-สกุล", "เบอร์โทร", "ที่อยู่", "รหัสไปรษณีย์"
-      ];
-
-      // Merge cells for Row 1
-      worksheet.mergeCells('A1:D1');
-      worksheet.mergeCells('E1:I1');
-      worksheet.mergeCells('J1:M1');
-
-      // Style Row 1
-      const titleFont = { bold: true };
-      const centerAlign: Partial<ExcelJS.Alignment> = { vertical: 'middle', horizontal: 'center' };
-      const borderStyle: Partial<ExcelJS.Borders> = { 
-        top: { style: 'thin' }, left: { style: 'thin' }, 
-        bottom: { style: 'thin' }, right: { style: 'thin' } 
-      };
-
-      const styleHeaderCell = (cellName: string, argbColor: string) => {
-        const cell = worksheet.getCell(cellName);
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argbColor } };
-        cell.font = titleFont;
-        cell.alignment = centerAlign;
-        cell.border = borderStyle;
-      };
-
-      styleHeaderCell('A1', 'FF92CDDC'); // Light Blue
-      styleHeaderCell('E1', 'FF92D050'); // Light Green
-      styleHeaderCell('J1', 'FFFABF8F'); // Light Orange
-
-      // Style Row 2
-      const row2 = worksheet.getRow(2);
-      row2.eachCell((cell, colNumber) => {
-        if (colNumber <= 13) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEEF3' } };
-          cell.border = borderStyle;
-        }
-      });
-
-      // Add Data Rows
-      dataRows.forEach(row => {
-        const newRow = worksheet.addRow(row);
-        // Optional: add borders to data cells
-        newRow.eachCell((cell, colNumber) => {
-          if (colNumber <= 13) cell.border = borderStyle;
+      // Template's own example row starts at row 3 (rows 1-2 are the
+      // headers) — overwrite it and every row after with real order data.
+      // Column N (instructions) is left completely untouched since our rows
+      // are only 13 columns wide (A-M).
+      dataRows.forEach((row, i) => {
+        const excelRow = worksheet.getRow(i + 3);
+        row.forEach((val, colIdx) => {
+          excelRow.getCell(colIdx + 1).value = val;
         });
+        excelRow.commit();
       });
 
-      // Set column widths roughly based on content
-      worksheet.columns = [
-        { width: 20 }, { width: 15 }, { width: 40 }, { width: 12 }, // Sender
-        { width: 10 }, { width: 15 }, { width: 15 }, { width: 10 }, { width: 30 }, // Delivery
-        { width: 20 }, { width: 15 }, { width: 40 }, { width: 12 } // Recipient
-      ];
-
-      // Add Instructions Box to the right (O2 to Q10)
-      worksheet.mergeCells('O2:Q2');
-      const insTitle = worksheet.getCell('O2');
-      insTitle.value = 'คำแนะนำการใช้งาน';
-      insTitle.alignment = centerAlign;
-      insTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEEF3' } };
-      insTitle.border = borderStyle;
-
-      const insData = [
-        ['กรณีผู้ฝากส่งเป็นคนเดียวกันให้กรอกเพียง 1 roll เท่านั้น'],
-        ['ทั้งนี้หากไม่กรอกระบบจะใช้ที่อยู่เริ่มต้นของร้าน'],
-        [],
-        ['ช่อง "บริการ" ให้กรอกตัวอักษรย่อ 1 ตัวดังนี้'],
-        ['E = EMS'],
-        ['O = eCo-Post'],
-        ['R = ลงทะเบียน'],
-        ['P = พัสดุไปรษณีย์ธรรมดา'],
-        ['T = ขนส่งโดยร้านค้า']
-      ];
-
-      insData.forEach((row, i) => {
-        const rIndex = i + 3;
-        worksheet.mergeCells(`O${rIndex}:Q${rIndex}`);
-        const c = worksheet.getCell(`O${rIndex}`);
-        c.value = row[0] || "";
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6F4F8' } }; // Lighter cyan
-      });
-
-      // Export
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       saveAs(blob, `Postone_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -449,6 +402,28 @@ export default function PackingPage() {
     } finally {
       setIsLoading(false);
       if (codFileInputRef.current) codFileInputRef.current.value = "";
+    }
+  };
+
+  const handleToggleReturned = async (order: Order) => {
+    const nextValue = !order.isReturned;
+    if (nextValue && !confirm(`ยืนยันว่าออเดอร์ "${order.customerName}" ถูกตีกลับใช่ไหม? ค่าคอมของแอดมินจะโดนหัก 50 บาทสำหรับออเดอร์นี้`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isReturned: nextValue }),
+      });
+      if (res.ok) {
+        setOrders(orders.map(o => o.id === order.id ? { ...o, isReturned: nextValue } : o));
+      } else {
+        alert("อัปเดตสถานะตีกลับไม่สำเร็จ");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะอัปเดต");
     }
   };
 
@@ -594,7 +569,7 @@ export default function PackingPage() {
             </thead>
             <tbody>
               {orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")).map(order => (
-                <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)', background: order.isReturned ? 'rgba(255,107,107,0.06)' : undefined, opacity: order.isReturned ? 0.75 : 1 }}>
                   <td style={{ padding: '16px', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 'bold' }}>{order.orderNo || "?"} - {order.customerName}</div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '250px' }}>{order.customerAddress}</div>
@@ -676,6 +651,24 @@ export default function PackingPage() {
                       >
                         ✏️ แก้ไข
                       </button>
+                      {order.codAmount > 0 && (
+                        <button
+                          onClick={() => handleToggleReturned(order)}
+                          title="ติ๊กถ้าออเดอร์นี้ถูกตีกลับ (ไม่นับยอดขาย + หักค่าคอม 50 บาท)"
+                          style={{
+                            background: order.isReturned ? '#ff6b6b' : 'rgba(255,107,107,0.15)',
+                            color: order.isReturned ? '#fff' : '#ff6b6b',
+                            border: '1px solid #ff6b6b',
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          {order.isReturned ? '🔙 ตีกลับแล้ว' : '🔙 ตีกลับ'}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

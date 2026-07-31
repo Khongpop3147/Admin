@@ -38,6 +38,7 @@ export async function PATCH(
     if (body.price !== undefined) updateData.price = Number(body.price) || 0;
     if (body.paymentStatus !== undefined) updateData.paymentStatus = body.paymentStatus;
     if (body.transferSlip !== undefined) updateData.transferSlip = body.transferSlip;
+    if (body.isReturned !== undefined) updateData.isReturned = !!body.isReturned;
 
     const updatedOrder = await prisma.order.update({
       where: { id },

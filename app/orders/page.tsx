@@ -108,6 +108,55 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
+// Simplified inline brand marks for the sales-channel picker — self-contained
+// SVGs so there's no dependency on an external icon CDN.
+function FacebookIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="12" fill="#1877F2" />
+      <path fill="#fff" d="M16.5 12.5h-2.2v7h-3v-7H9.7v-2.6h1.6V8.3c0-1.5.9-2.9 3.2-2.9.9 0 1.6.08 1.8.11v2.3h-1.3c-.7 0-.8.34-.8.83v1.86h2.4l-.1 2.6z" />
+    </svg>
+  );
+}
+
+function LineIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="6" fill="#06C755" />
+      <path fill="#fff" d="M19 11.2c0-3.1-3.1-5.7-7-5.7s-7 2.6-7 5.7c0 2.8 2.5 5.1 5.8 5.6.23.05.53.15.6.34.07.17.05.44.02.61l-.1.6c-.03.17-.13.66.58.36s3.8-2.24 5.2-3.83c.95-1.05 1.9-2.1 1.9-3.68z" />
+    </svg>
+  );
+}
+
+function TikTokIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="6" fill="#000" />
+      <path fill="#fff" d="M15.5 5.5c.4 1.8 1.6 3 3.5 3.2v2.4c-1.2 0-2.3-.4-3.2-1v5.1c0 2.6-2.1 4.8-4.8 4.8-2.6 0-4.8-2.1-4.8-4.8 0-2.6 2.1-4.8 4.8-4.8.3 0 .5 0 .8.07v2.5c-.25-.1-.5-.15-.8-.15-1.3 0-2.3 1-2.3 2.3s1 2.3 2.3 2.3 2.4-1 2.4-2.3V5.5h2.1z" />
+    </svg>
+  );
+}
+
+function ShopeeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="6" fill="#EE4D2D" />
+      <path fill="#fff" d="M9.5 9V7.5a2.5 2.5 0 015 0V9h1.5l.8 9.4a1.5 1.5 0 01-1.5 1.6H8.7a1.5 1.5 0 01-1.5-1.6L8 9h1.5zm1.5 0h2V7.5a1 1 0 00-2 0V9z" />
+    </svg>
+  );
+}
+
+function OtherPlatformIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24">
+      <rect width="24" height="24" rx="6" fill="#6b7280" />
+      <circle cx="7" cy="12" r="1.5" fill="#fff" />
+      <circle cx="12" cy="12" r="1.5" fill="#fff" />
+      <circle cx="17" cy="12" r="1.5" fill="#fff" />
+    </svg>
+  );
+}
+
 function formatMoney(value: unknown): string {
   const num = typeof value === "string" ? parseFloat(value) : (value as number);
   if (num === undefined || num === null || isNaN(num)) return "0";
@@ -759,6 +808,10 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent, bypassDuplicateCheck = false) => {
     e.preventDefault();
     if (!formData.customerName.trim()) return;
+    if (!isStorefrontMode && !formData.platform) {
+      alert("กรุณาเลือกช่องทางการขายก่อนบันทึกออเดอร์");
+      return;
+    }
 
     // Validation
     const requestedWeight = parseFloat(formData.crispyPorkWeight);
@@ -933,16 +986,42 @@ export default function Home() {
               </div>
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
                 <label className={styles.label}>ช่องทางการขาย <span style={{ color: '#ff6b6b' }}>*</span></label>
-                <select required={!isStorefrontMode} name="platform" value={formData.platform} onChange={handleChange} className={styles.input}>
-                  <option value="">-- เลือกช่องทางขาย --</option>
-                  <option value="Facebook">Facebook</option>
-                  <option value="Line">Line</option>
-                  <option value="Instagram">Instagram</option>
-                  <option value="TikTok">TikTok</option>
-                  <option value="Shopee">Shopee</option>
-                  <option value="Lazada">Lazada</option>
-                  <option value="Other">อื่นๆ</option>
-                </select>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {[
+                    { value: 'Facebook', label: 'Facebook', icon: <FacebookIcon /> },
+                    { value: 'Line', label: 'Line', icon: <LineIcon /> },
+                    { value: 'TikTok', label: 'TikTok', icon: <TikTokIcon /> },
+                    { value: 'Shopee', label: 'Shopee', icon: <ShopeeIcon /> },
+                    { value: 'Other', label: 'อื่นๆ', icon: <OtherPlatformIcon /> },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, platform: opt.value }))}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '8px 16px',
+                        borderRadius: '8px',
+                        border: formData.platform === opt.value ? '2px solid var(--accent-blue)' : '1px solid var(--border-color)',
+                        background: formData.platform === opt.value ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                        color: formData.platform === opt.value ? '#fff' : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: formData.platform === opt.value ? 'bold' : 'normal',
+                      }}
+                    >
+                      {opt.icon}
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {!formData.platform && (
+                  <div style={{ fontSize: '12px', color: '#ff6b6b', marginTop: '6px' }}>
+                    ⚠️ ยังไม่ได้เลือกช่องทางขาย
+                  </div>
+                )}
               </div>
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
                 <label className={styles.label}>ชื่อบัญชี / เพจ (ถ้ามี)</label>
