@@ -335,6 +335,22 @@ export default function Home() {
     }
   }, [currentUser, router]);
 
+  // The storefront role only ever rings up walk-in cash sales — lock them
+  // into the simplified storefront-mode form instead of the full order form.
+  // Mirrors what the (Super-Admin-only) toggle button itself sets on turn-on,
+  // since this role never sees that button to trigger it normally.
+  useEffect(() => {
+    if (currentUser?.role === "STOREFRONT") {
+      setIsStorefrontMode(true);
+      setFormData(prev => ({
+        ...prev,
+        platform: "Storefront",
+        shippingMethod: "รับหน้าร้าน",
+        paymentStatus: "Paid",
+      }));
+    }
+  }, [currentUser]);
+
   // First time the order list loads for a Super Admin, default the filter to
   // their own name so they see their own orders first — they can still switch
   // to "แอดมินทั้งหมด" or another admin afterward, and that choice sticks.
@@ -906,7 +922,14 @@ export default function Home() {
           customerName: formData.customerName.trim(),
         });
       } else if (data.success) {
-        setFormData(initialForm);
+        // Storefront role stays locked into storefront mode across sales —
+        // a plain reset to initialForm would wipe platform/shippingMethod/
+        // paymentStatus back to empty, breaking the next sale's submission.
+        setFormData(
+          currentUser?.role === "STOREFRONT"
+            ? { ...initialForm, platform: "Storefront", shippingMethod: "รับหน้าร้าน", paymentStatus: "Paid" }
+            : initialForm
+        );
         setRackDetails([]);
         setDesiredPieceCount("");
         setAllocationMode(null);

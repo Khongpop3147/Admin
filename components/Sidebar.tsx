@@ -10,6 +10,7 @@ const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
   ADMIN: "แอดมิน",
   PACKING: "แพ็คของ",
+  STOREFRONT: "หน้าร้าน",
   CENTRAL_INVENTORY: "คลังกลาง",
   DEV: "Dev",
 };
@@ -41,15 +42,15 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       </div>
 
       <nav className={styles.nav}>
+        {currentUser?.role !== "PACKING" && currentUser?.role !== "STOREFRONT" && (
+          <Link href="/dashboard" className={`${styles.navItem} ${pathname === '/dashboard' ? styles.active : ''}`}>
+            Dashboard
+          </Link>
+        )}
         {currentUser?.role !== "PACKING" && (
-          <>
-            <Link href="/dashboard" className={`${styles.navItem} ${pathname === '/dashboard' ? styles.active : ''}`}>
-              Dashboard
-            </Link>
-            <Link href="/orders" className={`${styles.navItem} ${pathname === '/orders' ? styles.active : ''}`}>
-              Order Details
-            </Link>
-          </>
+          <Link href="/orders" className={`${styles.navItem} ${pathname === '/orders' ? styles.active : ''}`}>
+            {currentUser?.role === "STOREFRONT" ? "ขายหน้าร้าน" : "Order Details"}
+          </Link>
         )}
         {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "PACKING") && (
           <Link href="/packing" className={`${styles.navItem} ${pathname === '/packing' ? styles.active : ''}`}>

@@ -235,6 +235,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (currentUser?.role === "PACKING") {
       router.replace("/packing");
+    } else if (currentUser?.role === "STOREFRONT") {
+      router.replace("/orders");
     }
   }, [currentUser, router]);
 
@@ -391,7 +393,7 @@ export default function DashboardPage() {
     };
   }, [isSuperAdmin, viewTarget, users]);
 
-  if (!currentUser || currentUser.role === "PACKING") return null;
+  if (!currentUser || currentUser.role === "PACKING" || currentUser.role === "STOREFRONT") return null;
 
   const adminOptions = users.filter((u) => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING" && u.id !== currentUser.id);
 

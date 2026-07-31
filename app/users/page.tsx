@@ -12,6 +12,7 @@ const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
   ADMIN: "แอดมิน",
   PACKING: "แพ็คของ",
+  STOREFRONT: "หน้าร้าน",
   CENTRAL_INVENTORY: "คลังกลาง",
 };
 
@@ -19,6 +20,7 @@ const ROLE_ICONS: Record<string, string> = {
   SUPER_ADMIN: "👑",
   ADMIN: "🧑‍💼",
   PACKING: "📦",
+  STOREFRONT: "🏪",
   CENTRAL_INVENTORY: "🏭",
 };
 
@@ -393,6 +395,7 @@ export default function UsersPage() {
                       <option value="SUPER_ADMIN">Super Admin</option>
                       <option value="ADMIN">แอดมิน</option>
                       <option value="PACKING">แพ็คของ</option>
+                      <option value="STOREFRONT">หน้าร้าน</option>
                     </select>
                     <div style={{ flex: "1 1 180px" }}>
                       <PasswordField
@@ -665,6 +668,7 @@ export default function UsersPage() {
                 <option value="ADMIN">แอดมิน (รับออเดอร์)</option>
                 <option value="SUPER_ADMIN">Super Admin</option>
                 <option value="PACKING">แพ็คของ</option>
+                <option value="STOREFRONT">หน้าร้าน</option>
               </select>
             </div>
 

@@ -20,7 +20,7 @@ if (globalForPrisma.prisma) {
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN", "PACKING"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN", "PACKING", "STOREFRONT"];
 
 function stripPassword<T extends { password?: string | null }>(user: T) {
   const { password, ...rest } = user;
