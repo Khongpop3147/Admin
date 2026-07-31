@@ -344,6 +344,7 @@ export default function Home() {
       setIsStorefrontMode(true);
       setFormData(prev => ({
         ...prev,
+        customerName: "ลูกค้าหน้าร้าน",
         platform: "Storefront",
         shippingMethod: "รับหน้าร้าน",
         paymentStatus: "Paid",
@@ -927,7 +928,7 @@ export default function Home() {
         // paymentStatus back to empty, breaking the next sale's submission.
         setFormData(
           currentUser?.role === "STOREFRONT"
-            ? { ...initialForm, platform: "Storefront", shippingMethod: "รับหน้าร้าน", paymentStatus: "Paid" }
+            ? { ...initialForm, customerName: "ลูกค้าหน้าร้าน", platform: "Storefront", shippingMethod: "รับหน้าร้าน", paymentStatus: "Paid" }
             : initialForm
         );
         setRackDetails([]);
@@ -984,15 +985,21 @@ export default function Home() {
 
   if (currentUser?.role === "PACKING") return null;
 
-  // Full storefront mode skips price/slip entirely — unless the admin has
-  // named a real customer, in which case those fields come back (e.g. a
-  // named walk-in who paid by bank transfer still needs a price + slip).
-  const showPriceAndSlip = !isStorefrontMode || formData.customerName !== "วางขายหน้าร้าน";
-  const displayedOrders = showUnpaidOnly ? recentOrders.filter(o => o.paymentStatus === "Unpaid") : recentOrders;
   // Storefront staff pick the physical piece they just sold by weight rather
   // than typing a number and letting auto-allocate guess which piece(s) it
   // was — simpler UI, and matches how the sale actually happens at the till.
   const isStorefrontRole = currentUser?.role === "STOREFRONT";
+  // Full storefront mode skips price/slip entirely — unless the admin has
+  // named a real customer, in which case those fields come back (e.g. a
+  // named walk-in who paid by bank transfer still needs a price + slip).
+  // The storefront role always needs the price field (that's the whole
+  // point of the role — recording what a piece sold for).
+  const showPriceAndSlip = isStorefrontRole || !isStorefrontMode || formData.customerName !== "วางขายหน้าร้าน";
+  const displayedOrders = showUnpaidOnly ? recentOrders.filter(o => o.paymentStatus === "Unpaid") : recentOrders;
+  // Super Admin/DEV using storefront mode themselves get the same click-a-
+  // piece picker as the storefront role, instead of the full weight/piece-
+  // count auto-allocate form meant for shipped orders.
+  const useSimplifiedPicker = isStorefrontMode && (isStorefrontRole || isSuperAdminRole(currentUser?.role));
 
   return (
     <div className={styles.container}>
@@ -1054,28 +1061,11 @@ export default function Home() {
               <div className={styles.formGroup}>
                 <label className={styles.label}>ชื่อลูกค้า <span style={{ color: '#ff6b6b' }}>*</span></label>
 
-                {isStorefrontMode && (
-                  <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                      <input
-                        type="radio"
-                        checked={formData.customerName !== "วางขายหน้าร้าน"}
-                        onChange={() => setFormData({ ...formData, customerName: "" })}
-                      />
-                      ระบุชื่อลูกค้า
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                      <input
-                        type="radio"
-                        checked={formData.customerName === "วางขายหน้าร้าน"}
-                        onChange={() => setFormData({ ...formData, customerName: "วางขายหน้าร้าน", shippingMethod: "รับหน้าร้าน" })}
-                      />
-                      วางขายหน้าร้าน
-                    </label>
+                {isStorefrontMode && isStorefrontRole ? (
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '12px 0' }}>
+                    🏪 ลูกค้าหน้าร้าน (walk-in ไม่ต้องระบุชื่อ)
                   </div>
-                )}
-
-                {(!isStorefrontMode || formData.customerName !== "วางขายหน้าร้าน") && (
+                ) : (
                   <input required type="text" name="customerName" value={formData.customerName} onChange={handleChange} className={styles.input} placeholder="ชื่อลูกค้า" />
                 )}
               </div>
@@ -1131,7 +1121,7 @@ export default function Home() {
             {/* Product Details */}
             <div className={styles.formSection}>
               <h3 className={styles.sectionTitle}>รายละเอียดสินค้า</h3>
-              {isStorefrontRole ? (
+              {useSimplifiedPicker ? (
                 <div className={styles.formGroup} style={{ gridColumn: '1 / -1', background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px' }}>
                   <label className={styles.label}>หมูที่ขาย</label>
                   {rackDetails.length === 0 ? (
@@ -1478,7 +1468,7 @@ export default function Home() {
                 // Storefront role always gets the flat pick-by-weight list —
                 // there's no auto-allocate form for them to fall back on, so
                 // this list IS how they mark a piece as sold.
-                const showFlatList = isSearching || isStorefrontRole;
+                const showFlatList = isSearching || useSimplifiedPicker;
 
                 if (showFlatList) {
                   const matches = isSearching
@@ -1492,7 +1482,7 @@ export default function Home() {
                   return (
                     <>
                       <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
-                        {isSearching ? `ชิ้นที่ใกล้เคียง ${target} กก. มากที่สุด:` : (isStorefrontRole ? 'กดเพื่อเลือกชิ้นที่ขายไป:' : 'รายการชิ้นหมูที่เหลือ:')}
+                        {isSearching ? `ชิ้นที่ใกล้เคียง ${target} กก. มากที่สุด:` : (useSimplifiedPicker ? 'กดเพื่อเลือกชิ้นที่ขายไป:' : 'รายการชิ้นหมูที่เหลือ:')}
                       </h3>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
                         {matches.map((p: any, idx: number) => {
@@ -1511,7 +1501,7 @@ export default function Home() {
                               title={isAdded ? "กดอีกครั้งเพื่อเอาออกจากออเดอร์" : "กดเพื่อเพิ่มชิ้นนี้เข้าออเดอร์"}
                             >
                               <span style={{ fontSize: '14px', color: '#ddd' }}>
-                                {isStorefrontRole ? '🐷 หมู 1 ชิ้น' : `ถาด ${p.rackNo?.split('-')[0] || '-'}${p.rackNo?.includes('-') ? ` • ชิ้นที่ ${p.rackNo.split('-')[1]}` : ''}`}
+                                {useSimplifiedPicker ? '🐷 หมู 1 ชิ้น' : `ถาด ${p.rackNo?.split('-')[0] || '-'}${p.rackNo?.includes('-') ? ` • ชิ้นที่ ${p.rackNo.split('-')[1]}` : ''}`}
                                 {isAdded && <span style={{ marginLeft: '8px', color: 'var(--accent-blue)' }}>✓ เลือกแล้ว</span>}
                                 {!isAdded && isClose && <span style={{ marginLeft: '8px', color: 'var(--accent-green)' }}>✓ ใกล้เคียงมาก</span>}
                               </span>
