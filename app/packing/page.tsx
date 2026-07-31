@@ -7,6 +7,7 @@ import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
 import { useRef } from "react";
 import { useUser } from "../../components/UserProvider";
+import { isSuperAdminRole } from "../../lib/roles";
 import styles from "../page.module.css";
 
 function formatMoney(value: unknown): string {
@@ -43,7 +44,7 @@ export default function PackingPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (currentUser && currentUser.role !== "SUPER_ADMIN" && currentUser.role !== "PACKING") {
+    if (currentUser && !isSuperAdminRole(currentUser.role) && currentUser.role !== "PACKING") {
       router.replace("/orders");
     }
   }, [currentUser, router]);
@@ -428,7 +429,7 @@ export default function PackingPage() {
     }
   };
 
-  if (currentUser && currentUser.role !== "SUPER_ADMIN" && currentUser.role !== "PACKING") return null;
+  if (currentUser && !isSuperAdminRole(currentUser.role) && currentUser.role !== "PACKING") return null;
 
   return (
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', color: '#fff' }}>
@@ -521,7 +522,7 @@ export default function PackingPage() {
             🔓 ยืนยันรับ COD
           </button>
 
-          {currentUser?.role === "SUPER_ADMIN" && (
+          {isSuperAdminRole(currentUser?.role) && (
             <button
               onClick={async () => {
                 if (confirm("ต้องการเปลี่ยนสถานะออเดอร์ของวันนี้ทั้งหมดเป็น 'จัดส่งแล้ว' และเริ่มหน้าจอวันใหม่ใช่หรือไม่?")) {

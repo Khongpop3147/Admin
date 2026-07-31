@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "../components/UserProvider";
+import { isSuperAdminRole } from "../lib/roles";
 
 export default function Home() {
   const { currentUser } = useUser();
@@ -10,7 +11,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!currentUser) return;
-    if (currentUser.role === "SUPER_ADMIN") {
+    if (isSuperAdminRole(currentUser.role)) {
       router.replace("/dashboard");
     } else if (currentUser.role === "PACKING") {
       router.replace("/packing");

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import styles from "../page.module.css";
 import { useUser } from "../../components/UserProvider";
 import { useSettings, calculateCodAmount, AppSettings } from "../../components/SettingsProvider";
+import { isSuperAdminRole } from "../../lib/roles";
 
 interface Order {
   id: string;
@@ -289,7 +290,7 @@ export default function Home() {
   // their own name so they see their own orders first — they can still switch
   // to "แอดมินทั้งหมด" or another admin afterward, and that choice sticks.
   useEffect(() => {
-    if (currentUser?.role === "SUPER_ADMIN" && !hasDefaultedFilterAdmin.current) {
+    if (currentUser && isSuperAdminRole(currentUser.role) && !hasDefaultedFilterAdmin.current) {
       hasDefaultedFilterAdmin.current = true;
       setFilterAdminName(currentUser.name);
     }
@@ -306,7 +307,7 @@ export default function Home() {
       // A name search looks across all dates — otherwise it'd miss a
       // customer's older orders just because today's date filter is active.
       const dateForFetch = customerSearch ? undefined : filterDate;
-      if (currentUser.role === "SUPER_ADMIN") {
+      if (isSuperAdminRole(currentUser.role)) {
         fetchOrders(filterAdminName, dateForFetch, customerSearch);
       } else {
         fetchOrders(currentUser.name, dateForFetch, customerSearch);
@@ -723,7 +724,7 @@ export default function Home() {
         setIsEditingOrder(false);
         setEditOrderData(null);
         const dateForFetch = customerSearch ? undefined : filterDate;
-        if (currentUser?.role === "SUPER_ADMIN") {
+        if (isSuperAdminRole(currentUser?.role)) {
           fetchOrders(filterAdminName, dateForFetch, customerSearch);
         } else {
           fetchOrders(currentUser?.name, dateForFetch, customerSearch);
@@ -848,7 +849,7 @@ export default function Home() {
         // The order just saved under the logged-in user's own name — make sure the
         // list refresh can actually show it, even if a SUPER_ADMIN had the filter
         // set to browse a different admin's orders.
-        if (currentUser?.role === "SUPER_ADMIN") {
+        if (isSuperAdminRole(currentUser?.role)) {
           setFilterAdminName("");
           fetchOrders("", customerSearch ? undefined : filterDate, customerSearch);
         } else {
@@ -909,7 +910,7 @@ export default function Home() {
         <div className={`${styles.mainContent} glass-panel`}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h2 className={styles.cardTitle} style={{ marginBottom: 0 }}>{isStorefrontMode ? "ขายหน้าร้าน" : "รายละเอียดออเดอร์"}</h2>
-            {currentUser?.role === "SUPER_ADMIN" && (
+            {isSuperAdminRole(currentUser?.role) && (
               <button
                 type="button"
                 onClick={() => {
@@ -1473,7 +1474,7 @@ export default function Home() {
             )}
 
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-              {currentUser?.role === "SUPER_ADMIN" && (
+              {currentUser && isSuperAdminRole(currentUser.role) && (
                 <select
                   className={styles.input}
                   style={{ fontSize: '13px', flex: '1 1 200px' }}
@@ -1482,7 +1483,7 @@ export default function Home() {
                 >
                   <option value="">แอดมินทั้งหมด</option>
                   <option value={currentUser.name}>👤 ตัวเอง ({currentUser.name})</option>
-                  {users.filter(u => u.role !== "SUPER_ADMIN" && u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING" && u.id !== currentUser.id).map(u => (
+                  {users.filter(u => !isSuperAdminRole(u.role) && u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING" && u.id !== currentUser.id).map(u => (
                     <option key={u.id} value={u.name}>
                       {u.name} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} กก.)
                     </option>
