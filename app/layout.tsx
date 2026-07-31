@@ -17,8 +17,9 @@ export const metadata: Metadata = {
   description: "ระบบจัดการออเดอร์และคลังหมูกรอบ",
 };
 
-import Sidebar from "../components/Sidebar";
+import AppShell from "../components/AppShell";
 import { UserProvider } from "../components/UserProvider";
+import { SettingsProvider } from "../components/SettingsProvider";
 
 export default function RootLayout({
   children,
@@ -29,10 +30,9 @@ export default function RootLayout({
     <html lang="th" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
         <UserProvider>
-          <Sidebar />
-          <main style={{ flex: 1, overflowY: "auto" }}>
-            {children}
-          </main>
+          <SettingsProvider>
+            <AppShell>{children}</AppShell>
+          </SettingsProvider>
         </UserProvider>
       </body>
     </html>

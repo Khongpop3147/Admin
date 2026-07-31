@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import styles from "../page.module.css";
 import { useUser } from "../../components/UserProvider";
+import { useSettings, calculateCodAmount, AppSettings } from "../../components/SettingsProvider";
 
 interface Order {
   id: string;
@@ -59,18 +60,14 @@ function calculateShippingCost(method: string, weight: number): number {
   return 0;
 }
 
-function calculateCodAmount(weight: number): number {
-  if (weight <= 2.29) return 50;
-  return (weight / 1.5) * 20;
-}
-
 // Shared by both the weight-input flow and the piece-count flow, so price/COD/
 // shipping stay consistent no matter which one drove the allocation.
 function computeWeightDerivedFields(
   promotion: string,
   isCod: boolean,
   shippingMethod: string,
-  weightStr: string
+  weightStr: string,
+  settings: AppSettings
 ) {
   const updates: { crispyPorkWeight: string; price?: string; codAmount?: string; additionalShippingCost?: string } = {
     crispyPorkWeight: weightStr,
@@ -82,7 +79,7 @@ function computeWeightDerivedFields(
     updates.price = (parsedWeight * 250).toFixed(2);
   }
   if (isCod) {
-    updates.codAmount = calculateCodAmount(parsedWeight).toFixed(2);
+    updates.codAmount = calculateCodAmount(parsedWeight, settings).toFixed(2);
   }
   if (shippingMethod === "EMS" || shippingMethod === "NIM Express") {
     updates.additionalShippingCost = calculateShippingCost(shippingMethod, parsedWeight).toFixed(2);
@@ -278,6 +275,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { currentUser, users, fetchUsers } = useUser();
+  const { settings } = useSettings();
   const router = useRouter();
   const hasDefaultedFilterAdmin = useRef(false);
 
@@ -351,7 +349,7 @@ export default function Home() {
       if (allocationMode === 'count') {
         const totalWeight = Number(rackDetails.reduce((sum, r) => sum + (r.weight || 0), 0).toFixed(2));
         const weightStr = totalWeight > 0 ? String(totalWeight) : "";
-        Object.assign(updates, computeWeightDerivedFields(prev.promotion, prev.isCod, prev.shippingMethod, weightStr));
+        Object.assign(updates, computeWeightDerivedFields(prev.promotion, prev.isCod, prev.shippingMethod, weightStr, settings));
       }
       return updates;
     });
@@ -542,7 +540,7 @@ export default function Home() {
         const applyCod = name === "isCod" ? value : newData.isCod;
 
         if (applyCod && !isNaN(parsedWeight) && parsedWeight > 0) {
-          newData.codAmount = calculateCodAmount(parsedWeight).toFixed(2);
+          newData.codAmount = calculateCodAmount(parsedWeight, settings).toFixed(2);
         } else if (name === "isCod" && !applyCod) {
           newData.codAmount = "";
         }
@@ -716,6 +714,7 @@ export default function Home() {
           adminNote: editOrderData.adminNote,
           paymentStatus: editOrderData.paymentStatus,
           transferSlip: editOrderData.transferSlip,
+          editedBy: currentUser?.name,
         }),
       });
       const data = await res.json();
@@ -751,7 +750,7 @@ export default function Home() {
     setFormData(prev => ({
       ...prev,
       crispyPorkPiece: newRackDetails.length.toString(),
-      ...computeWeightDerivedFields(prev.promotion, prev.isCod, prev.shippingMethod, weightStr),
+      ...computeWeightDerivedFields(prev.promotion, prev.isCod, prev.shippingMethod, weightStr, settings),
     }));
     // Nothing selected anymore — release the weight/count lock so either
     // method can be picked fresh, instead of staying stuck on whichever mode

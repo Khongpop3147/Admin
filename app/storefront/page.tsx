@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useUser } from "../../components/UserProvider";
+import { isSuperAdminRole } from "../../lib/roles";
 import styles from "../page.module.css";
 
 interface Order {
@@ -109,7 +110,7 @@ export default function StorefrontPage() {
 
   if (!isMounted) return null;
 
-  if (!currentUser || currentUser.role !== "SUPER_ADMIN") {
+  if (!currentUser || !isSuperAdminRole(currentUser.role)) {
     return (
       <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', color: '#fff' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>ไม่มีสิทธิ์เข้าถึง</h1>

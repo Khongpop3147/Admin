@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { useUser } from "../../components/UserProvider";
+import { isSuperAdminRole } from "../../lib/roles";
 import styles from "../page.module.css";
 
 interface DraftRack {
@@ -166,7 +167,7 @@ export default function RacksPage() {
   };
 
   useEffect(() => {
-    if (currentUser?.role === "SUPER_ADMIN") {
+    if (isSuperAdminRole(currentUser?.role)) {
       fetchDeletedLogs();
     }
   }, [currentUser]);
@@ -439,7 +440,7 @@ export default function RacksPage() {
   };
 
   if (!currentUser) return null;
-  if (currentUser.role !== "SUPER_ADMIN") {
+  if (!isSuperAdminRole(currentUser.role)) {
     return (
       <div className={styles.container}>
         <div className={styles.header}>

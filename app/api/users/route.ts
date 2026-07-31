@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import bcrypt from "bcryptjs";
+import { getSessionUser } from "../../../lib/session";
+import { isSuperAdminRole } from "../../../lib/roles";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -18,6 +21,11 @@ if (globalForPrisma.prisma) {
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export const dynamic = 'force-dynamic';
+
+function stripPassword<T extends { password?: string | null }>(user: T) {
+  const { password, ...rest } = user;
+  return { ...rest, hasPassword: !!password };
+}
 
 export async function GET() {
   try {
@@ -41,9 +49,47 @@ export async function GET() {
         name: "asc",
       },
     });
-    return NextResponse.json({ users }, { status: 200 });
+    return NextResponse.json({ users: users.map(stripPassword) }, { status: 200 });
   } catch (error) {
     console.error("Error fetching users:", error);
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
+  }
+}
+
+// "DEV" is intentionally excluded — that role can only be set directly in
+// the database, never through this API, no matter who's calling it.
+const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN", "PACKING"];
+
+export async function POST(req: Request) {
+  try {
+    const session = await getSessionUser();
+    if (!session || !isSuperAdminRole(session.role)) {
+      return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const name = (body.name || "").trim();
+    const role = body.role;
+    const password = body.password || "";
+
+    if (!name) {
+      return NextResponse.json({ error: "กรุณาใส่ชื่อ" }, { status: 400 });
+    }
+    if (!ALLOWED_ROLES.includes(role)) {
+      return NextResponse.json({ error: "ตำแหน่งไม่ถูกต้อง" }, { status: 400 });
+    }
+    if (!password || password.length < 4) {
+      return NextResponse.json({ error: "รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร" }, { status: 400 });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: { name, role, password: hashedPassword },
+      include: { racks: true },
+    });
+    return NextResponse.json({ user: stripPassword(user) }, { status: 201 });
+  } catch (error) {
+    console.error("Error creating user:", error);
     return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }

@@ -104,7 +104,7 @@ export default function PackingPage() {
       const res = await fetch(`/api/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderStatus: newStatus })
+        body: JSON.stringify({ orderStatus: newStatus, editedBy: currentUser?.name })
       });
       if (res.ok) {
         setOrders(orders.map(o => o.id === id ? { ...o, orderStatus: newStatus } : o));
@@ -119,7 +119,7 @@ export default function PackingPage() {
       const res = await fetch(`/api/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackingNumber: tracking })
+        body: JSON.stringify({ trackingNumber: tracking, editedBy: currentUser?.name })
       });
       if (res.ok) {
         setOrders(orders.map(o => o.id === id ? { ...o, trackingNumber: tracking } : o));
@@ -143,7 +143,8 @@ export default function PackingPage() {
           codAmount: editingOrder.codAmount,
           crispyPorkPiece: editingOrder.crispyPorkPiece,
           crispyPorkWeight: editingOrder.crispyPorkWeight,
-          adminNote: editingOrder.adminNote
+          adminNote: editingOrder.adminNote,
+          editedBy: currentUser?.name
         })
       });
       
@@ -414,7 +415,7 @@ export default function PackingPage() {
       const res = await fetch(`/api/orders/${order.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isReturned: nextValue }),
+        body: JSON.stringify({ isReturned: nextValue, editedBy: currentUser?.name }),
       });
       if (res.ok) {
         setOrders(orders.map(o => o.id === order.id ? { ...o, isReturned: nextValue } : o));

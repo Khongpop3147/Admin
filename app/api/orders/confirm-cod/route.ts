@@ -50,6 +50,12 @@ export async function POST(req: Request) {
         where: { id: { in: matchedOrders.map((o) => o.id) } },
         data: { codConfirmed: true },
       });
+      await prisma.orderAuditLog.create({
+        data: {
+          action: "EDIT",
+          summary: `ยืนยันรับ COD แล้ว ${matchedOrders.length} ออเดอร์ (เลขพัสดุ: ${matchedOrders.map((o) => o.trackingNumber).join(", ")})`,
+        },
+      });
     }
 
     const matchedTrackingNumbers = new Set(matchedOrders.map((o) => o.trackingNumber));

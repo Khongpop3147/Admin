@@ -2,6 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import bcrypt from "bcryptjs";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -18,19 +19,32 @@ const users = [
   { id: "user-packing-1", name: "Packing Staff", role: "PACKING" },
 ];
 
+// Only the Super Admin gets a starter password — everyone else stays locked
+// out (password: null) until the Super Admin sets one for them from the
+// Super Admin Setting page. This default only applies on first create; a
+// re-run of seed never overwrites a password someone already set.
+const DEFAULT_SUPER_ADMIN_PASSWORD = "changeme123";
+
 async function main() {
   console.log("Seeding database with default users...");
 
   for (const u of users) {
+    const isSuperAdmin = u.role === "SUPER_ADMIN";
     const result = await prisma.user.upsert({
       where: { id: u.id },
       update: {},
-      create: { id: u.id, name: u.name, role: u.role },
+      create: {
+        id: u.id,
+        name: u.name,
+        role: u.role,
+        password: isSuperAdmin ? await bcrypt.hash(DEFAULT_SUPER_ADMIN_PASSWORD, 10) : null,
+      },
     });
     console.log(" -", result.name, `(${result.role})`);
   }
 
   console.log("Seed complete.");
+  console.log(`Super Admin starter password (only set if the account was just created): ${DEFAULT_SUPER_ADMIN_PASSWORD} — change it immediately from Super Admin Setting.`);
 }
 
 main()

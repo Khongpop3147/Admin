@@ -40,9 +40,10 @@ model Order {
 }
 
 model User {
-  id       String @id @default(uuid())
+  id       String  @id @default(uuid())
   name     String
-  role     String @default("ADMIN") // "SUPER_ADMIN" | "ADMIN"
+  role     String  @default("ADMIN") // "SUPER_ADMIN" | "ADMIN" | "PACKING" | "CENTRAL_INVENTORY" | "DEV"
+  password String? // bcrypt hash; null = login not set up yet for this account
   racks    RackAssignment[]
 }
 
@@ -70,4 +71,24 @@ model DeletedPorkLog {
   weight          Float
   userName        String
   deletedAt       DateTime @default(now())
+}
+
+model Settings {
+  id                  String   @id
+  commissionRate      Float    @default(0.2)
+  returnPenalty       Float    @default(50)
+  codFlatFeeThreshold Float    @default(2.29)
+  codFlatFee          Float    @default(50)
+  codDivisor          Float    @default(1.5)
+  codMultiplier       Float    @default(20)
+  updatedAt           DateTime @updatedAt
+}
+
+model OrderAuditLog {
+  id          String   @id @default(uuid())
+  orderId     String?
+  action      String
+  summary     String
+  performedBy String?
+  createdAt   DateTime @default(now())
 }

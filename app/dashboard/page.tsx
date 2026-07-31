@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "../../components/UserProvider";
+import { useSettings, AppSettings } from "../../components/SettingsProvider";
+import { isSuperAdminRole } from "../../lib/roles";
 import styles from "../page.module.css";
 
 interface Order {
@@ -41,16 +43,14 @@ function isExcludedFromRevenue(o: Order): boolean {
   return isShelfSale(o) || o.isReturned === true;
 }
 
-const COMMISSION_RATE = 0.2;
-const RETURN_PENALTY = 50;
-
 // Commission per order: 0 while a shelf placement or a still-pending COD
-// (nothing confirmed sold yet), a flat -50 penalty if returned, otherwise
-// 20% of the product price.
-function commissionForOrder(o: Order): number {
-  if (o.isReturned) return -RETURN_PENALTY;
+// (nothing confirmed sold yet), a flat penalty if returned, otherwise
+// commissionRate of the product price. Rate/penalty come from Super Admin
+// Setting so policy changes don't require a code change.
+function commissionForOrder(o: Order, settings: AppSettings): number {
+  if (o.isReturned) return -settings.returnPenalty;
   if (isShelfSale(o) || isCodPending(o)) return 0;
-  return (Number(o.price) || 0) * COMMISSION_RATE;
+  return (Number(o.price) || 0) * settings.commissionRate;
 }
 
 interface TrendPoint {
@@ -229,6 +229,7 @@ function AdminBarChart({ data, color }: { data: { name: string; sales: number }[
 
 export default function DashboardPage() {
   const { currentUser, users } = useUser();
+  const { settings } = useSettings();
   const router = useRouter();
 
   useEffect(() => {
@@ -244,13 +245,17 @@ export default function DashboardPage() {
   });
   // "" = company-wide (super admin only). Otherwise a seller name.
   const [viewTarget, setViewTarget] = useState("");
+  // How wide a window of orders feeds the stat cards / status / per-admin
+  // panels — "day" is exactly selectedDate, the other two trail backward
+  // from it so picking one date still gives a meaningful range.
+  const [statsPeriod, setStatsPeriod] = useState<"day" | "7d" | "1m">("day");
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [trendMetric, setTrendMetric] = useState<"sales" | "orders">("sales");
   const [isTrendLoading, setIsTrendLoading] = useState(false);
 
-  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+  const isSuperAdmin = isSuperAdminRole(currentUser?.role);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -259,9 +264,13 @@ export default function DashboardPage() {
       setIsLoading(true);
       try {
         const sellerName = isSuperAdmin ? viewTarget : currentUser.name;
+        const dateParams =
+          statsPeriod === "day"
+            ? `date=${selectedDate}`
+            : `dateFrom=${addDays(selectedDate, statsPeriod === "7d" ? -6 : -29)}&dateTo=${selectedDate}`;
         const url = sellerName
-          ? `/api/orders?date=${selectedDate}&sellerName=${encodeURIComponent(sellerName)}`
-          : `/api/orders?date=${selectedDate}`;
+          ? `/api/orders?${dateParams}&sellerName=${encodeURIComponent(sellerName)}`
+          : `/api/orders?${dateParams}`;
         const res = await fetch(url);
         const data = await res.json();
         setOrders(data.orders || []);
@@ -273,7 +282,7 @@ export default function DashboardPage() {
     };
 
     fetchOrders();
-  }, [selectedDate, viewTarget, currentUser, isSuperAdmin]);
+  }, [selectedDate, viewTarget, statsPeriod, currentUser, isSuperAdmin]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -336,11 +345,11 @@ export default function DashboardPage() {
       entry.orderCount++;
       entry.weight += parseFloat(o.crispyPorkWeight || "0") || 0;
       entry.sales += isExcludedFromRevenue(o) ? 0 : Number(o.price) || 0;
-      entry.commission += commissionForOrder(o);
+      entry.commission += commissionForOrder(o, settings);
       if (o.isReturned) entry.returnedCount++;
     });
     return Array.from(map.values()).sort((a, b) => b.sales - a.sales);
-  }, [orders, isSuperAdmin, viewTarget]);
+  }, [orders, isSuperAdmin, viewTarget, settings]);
 
   const inventoryTargetUser = useMemo(() => {
     if (!isSuperAdmin) return currentUser;
@@ -398,7 +407,7 @@ export default function DashboardPage() {
 
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "28px", alignItems: "flex-end" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>วันที่</label>
+          <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>{statsPeriod === "day" ? "วันที่" : "ถึงวันที่"}</label>
           <input
             type="date"
             value={selectedDate}
@@ -406,6 +415,35 @@ export default function DashboardPage() {
             className={styles.input}
             style={{ padding: "10px 16px" }}
           />
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ช่วงเวลา</label>
+          <div style={{ display: "flex", gap: "6px" }}>
+            {([
+              { key: "day", label: "ต่อวัน" },
+              { key: "7d", label: "7 วัน" },
+              { key: "1m", label: "1 เดือน" },
+            ] as const).map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setStatsPeriod(opt.key)}
+                style={{
+                  background: statsPeriod === opt.key ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                  color: statsPeriod === opt.key ? "#fff" : "var(--text-secondary)",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "10px 16px",
+                  fontSize: "13px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {isSuperAdmin && (
@@ -431,6 +469,11 @@ export default function DashboardPage() {
         <div style={{ textAlign: "center", padding: "60px", color: "var(--text-secondary)" }}>กำลังโหลด...</div>
       ) : (
         <>
+          {statsPeriod !== "day" && (
+            <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+              📅 แสดงข้อมูล {addDays(selectedDate, statsPeriod === "7d" ? -6 : -29)} ถึง {selectedDate}
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px", marginBottom: "24px" }}>
             <StatCard label="จำนวนออเดอร์" value={stats.orderCount.toLocaleString("th-TH")} color="#58a6ff" />
             <StatCard label="น้ำหนักหมูที่ขาย" value={`${stats.totalWeight.toFixed(2)} กก.`} color="#3fb950" />
@@ -508,7 +551,7 @@ export default function DashboardPage() {
             <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "24px" }}>
               <h3 style={{ fontSize: "15px", marginBottom: "16px", color: "var(--text-secondary)" }}>แยกตามแอดมิน</h3>
               {perAdminBreakdown.length === 0 ? (
-                <div style={{ color: "var(--text-secondary)", textAlign: "center", padding: "20px 0" }}>ยังไม่มีออเดอร์ในวันที่เลือก</div>
+                <div style={{ color: "var(--text-secondary)", textAlign: "center", padding: "20px 0" }}>ยังไม่มีออเดอร์ในช่วงที่เลือก</div>
               ) : (
                 <>
                   <div style={{ marginBottom: "20px" }}>

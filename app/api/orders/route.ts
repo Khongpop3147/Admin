@@ -179,6 +179,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const sellerName = searchParams.get("sellerName");
     const dateStr = searchParams.get("date"); // format: YYYY-MM-DD
+    const dateFrom = searchParams.get("dateFrom"); // format: YYYY-MM-DD
+    const dateTo = searchParams.get("dateTo"); // format: YYYY-MM-DD
     const platform = searchParams.get("platform");
     const customerName = searchParams.get("customerName");
 
@@ -199,12 +201,17 @@ export async function GET(req: Request) {
         gte: startDate,
         lte: endDate
       };
+    } else if (dateFrom || dateTo) {
+      whereClause.createdAt = {
+        ...(dateFrom ? { gte: new Date(`${dateFrom}T00:00:00+07:00`) } : {}),
+        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999+07:00`) } : {}),
+      };
     }
 
     // Any explicit, scoped filter (date, platform, or a name search) means the
     // caller wants everything matching, not a "give me something recent"
     // sample — only cap the truly unscoped call.
-    const isScoped = Boolean(dateStr || platform || customerName);
+    const isScoped = Boolean(dateStr || dateFrom || dateTo || platform || customerName);
 
     const orders = await prisma.order.findMany({
       where: whereClause,
