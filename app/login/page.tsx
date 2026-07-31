@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import PasswordField from "../../components/PasswordField";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -105,10 +106,9 @@ export default function LoginPage() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>รหัสผ่าน</label>
-          <input
-            type="password"
+          <PasswordField
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
             placeholder="••••••••"
             style={{
               background: "rgba(0,0,0,0.2)",

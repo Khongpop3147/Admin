@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { useUser } from "../../components/UserProvider";
 import { useSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
+import PasswordField from "../../components/PasswordField";
 import styles from "../page.module.css";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -393,14 +394,15 @@ export default function UsersPage() {
                       <option value="ADMIN">แอดมิน</option>
                       <option value="PACKING">แพ็คของ</option>
                     </select>
-                    <input
-                      type="password"
-                      className={styles.input}
-                      style={{ flex: "1 1 180px", padding: "8px 12px", fontSize: "14px" }}
-                      value={editPassword}
-                      onChange={(e) => setEditPassword(e.target.value)}
-                      placeholder="ตั้งรหัสผ่านใหม่ (เว้นว่างถ้าไม่เปลี่ยน)"
-                    />
+                    <div style={{ flex: "1 1 180px" }}>
+                      <PasswordField
+                        className={styles.input}
+                        style={{ padding: "8px 12px", fontSize: "14px" }}
+                        value={editPassword}
+                        onChange={setEditPassword}
+                        placeholder="ตั้งรหัสผ่านใหม่ (เว้นว่างถ้าไม่เปลี่ยน)"
+                      />
+                    </div>
                     <button
                       onClick={() => saveEdit(u.id)}
                       disabled={isSaving}
@@ -668,11 +670,10 @@ export default function UsersPage() {
 
             <div className={styles.formGroup} style={{ marginBottom: "8px" }}>
               <label className={styles.label}>รหัสผ่าน</label>
-              <input
-                type="password"
+              <PasswordField
                 className={styles.input}
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={setNewPassword}
                 placeholder="อย่างน้อย 4 ตัวอักษร"
               />
             </div>
