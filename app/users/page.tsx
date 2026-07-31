@@ -191,7 +191,7 @@ export default function UsersPage() {
 
   const handleDelete = async (u: (typeof users)[number]) => {
     const rackCount = u.racks?.length || 0;
-    const rackWarning = rackCount > 0 ? `\n\n⚠️ คนนี้มีชิ้นหมูที่มอบหมายอยู่ ${rackCount} รายการ จะถูกลบไปด้วย` : "";
+    const rackWarning = rackCount > 0 ? `\n\n📦 คนนี้มีชิ้นหมูที่มอบหมายอยู่ ${rackCount} รายการ จะถูกย้ายกลับเข้าคลังกลางให้อัตโนมัติ` : "";
     const confirmed = confirm(`ลบ "${u.name}" (${ROLE_LABELS[u.role] || u.role}) ออกจากระบบ?${rackWarning}\n\nออเดอร์เก่าที่คนนี้เคยสร้างไว้จะยังอยู่ครบ ไม่ถูกลบ`);
     if (!confirmed) return;
 
