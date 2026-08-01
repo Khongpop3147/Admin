@@ -79,6 +79,40 @@ function dayLabel(dateStr: string): string {
   return `${days[date.getUTCDay()]} ${d}/${m}`;
 }
 
+const THAI_MONTHS = [
+  "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+  "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
+];
+
+function todayStr(): string {
+  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function currentMonthStr(): string {
+  return todayStr().slice(0, 7);
+}
+
+// "YYYY-MM" + a delta in months, wrapping the year as needed.
+function shiftMonth(ym: string, delta: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const total = (y * 12 + (m - 1)) + delta;
+  const newY = Math.floor(total / 12);
+  const newM = (total % 12) + 1;
+  return `${newY}-${String(newM).padStart(2, "0")}`;
+}
+
+function lastDayOfMonthStr(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${ym}-${String(lastDay).padStart(2, "0")}`;
+}
+
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return `${THAI_MONTHS[m - 1]} ${y}`;
+}
+
 // 4px-rounded top corners, square baseline — bar grows up from y+h.
 function roundedTopRectPath(x: number, y: number, w: number, h: number, r: number): string {
   const radius = Math.min(r, h, w / 2);
@@ -251,9 +285,11 @@ export default function DashboardPage() {
   // "" = company-wide (super admin only). Otherwise a seller name.
   const [viewTarget, setViewTarget] = useState("");
   // How wide a window of orders feeds the stat cards / status / per-admin
-  // panels — "day" is exactly selectedDate, the other two trail backward
-  // from it so picking one date still gives a meaningful range.
+  // panels — "day" is exactly selectedDate, "7d" trails backward from it,
+  // and "1m" is a real calendar month (independent of selectedDate) picked
+  // via selectedMonth below — resets to 0 on the 1st instead of rolling.
   const [statsPeriod, setStatsPeriod] = useState<"day" | "7d" | "1m">("day");
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonthStr());
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
@@ -261,6 +297,14 @@ export default function DashboardPage() {
   const [isTrendLoading, setIsTrendLoading] = useState(false);
 
   const isSuperAdmin = isSuperAdminRole(currentUser?.role);
+
+  // The current month is capped at today (no point showing empty future
+  // days); any other month — past or, in theory, future — shows in full.
+  const monthRange = useMemo(() => {
+    const lastDay = lastDayOfMonthStr(selectedMonth);
+    const to = selectedMonth === currentMonthStr() && todayStr() < lastDay ? todayStr() : lastDay;
+    return { from: `${selectedMonth}-01`, to };
+  }, [selectedMonth]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -272,7 +316,9 @@ export default function DashboardPage() {
         const dateParams =
           statsPeriod === "day"
             ? `date=${selectedDate}`
-            : `dateFrom=${addDays(selectedDate, statsPeriod === "7d" ? -6 : -29)}&dateTo=${selectedDate}`;
+            : statsPeriod === "7d"
+              ? `dateFrom=${addDays(selectedDate, -6)}&dateTo=${selectedDate}`
+              : `dateFrom=${monthRange.from}&dateTo=${monthRange.to}`;
         const url = sellerName
           ? `/api/orders?${dateParams}&sellerName=${encodeURIComponent(sellerName)}`
           : `/api/orders?${dateParams}`;
@@ -287,7 +333,7 @@ export default function DashboardPage() {
     };
 
     fetchOrders();
-  }, [selectedDate, viewTarget, statsPeriod, currentUser, isSuperAdmin]);
+  }, [selectedDate, viewTarget, statsPeriod, currentUser, isSuperAdmin, monthRange]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -296,8 +342,14 @@ export default function DashboardPage() {
       setIsTrendLoading(true);
       try {
         const sellerName = isSuperAdmin ? viewTarget : currentUser.name;
-        const trendDays = statsPeriod === "1m" ? 30 : 7;
-        const dates = Array.from({ length: trendDays }, (_, i) => addDays(selectedDate, i - (trendDays - 1)));
+        let dates: string[];
+        if (statsPeriod === "1m") {
+          dates = [];
+          for (let d = monthRange.from; d <= monthRange.to; d = addDays(d, 1)) dates.push(d);
+        } else {
+          const trendDays = 7;
+          dates = Array.from({ length: trendDays }, (_, i) => addDays(selectedDate, i - (trendDays - 1)));
+        }
         const results = await Promise.all(
           dates.map(async (d) => {
             const url = sellerName
@@ -319,7 +371,7 @@ export default function DashboardPage() {
     };
 
     fetchTrend();
-  }, [selectedDate, viewTarget, currentUser, isSuperAdmin, statsPeriod]);
+  }, [selectedDate, viewTarget, currentUser, isSuperAdmin, statsPeriod, monthRange]);
 
   const stats = useMemo(() => {
     const orderCount = orders.length;
@@ -412,16 +464,47 @@ export default function DashboardPage() {
       </div>
 
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "28px", alignItems: "flex-end" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>{statsPeriod === "day" ? "วันที่" : "ถึงวันที่"}</label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className={styles.input}
-            style={{ padding: "10px 16px" }}
-          />
-        </div>
+        {statsPeriod === "1m" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>เดือน</label>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))}
+                aria-label="เดือนก่อนหน้า"
+                style={{ background: "rgba(255,255,255,0.08)", color: "var(--text-secondary)", border: "none", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", cursor: "pointer" }}
+              >
+                ◀
+              </button>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => e.target.value && setSelectedMonth(e.target.value)}
+                className={styles.input}
+                style={{ padding: "10px 16px" }}
+              />
+              <button
+                type="button"
+                onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))}
+                aria-label="เดือนถัดไป"
+                style={{ background: "rgba(255,255,255,0.08)", color: "var(--text-secondary)", border: "none", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", cursor: "pointer" }}
+              >
+                ▶
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>{statsPeriod === "day" ? "วันที่" : "ถึงวันที่"}</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className={styles.input}
+              style={{ padding: "10px 16px" }}
+            />
+          </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ช่วงเวลา</label>
@@ -475,9 +558,14 @@ export default function DashboardPage() {
         <div style={{ textAlign: "center", padding: "60px", color: "var(--text-secondary)" }}>กำลังโหลด...</div>
       ) : (
         <>
-          {statsPeriod !== "day" && (
+          {statsPeriod === "7d" && (
             <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
-              📅 แสดงข้อมูล {addDays(selectedDate, statsPeriod === "7d" ? -6 : -29)} ถึง {selectedDate}
+              📅 แสดงข้อมูล {addDays(selectedDate, -6)} ถึง {selectedDate}
+            </div>
+          )}
+          {statsPeriod === "1m" && (
+            <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+              📅 แสดงข้อมูลเดือน {monthLabel(selectedMonth)} ({monthRange.from} ถึง {monthRange.to})
             </div>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px", marginBottom: "24px" }}>
@@ -509,7 +597,7 @@ export default function DashboardPage() {
           <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "24px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
               <h3 style={{ fontSize: "15px", color: "var(--text-secondary)", margin: 0 }}>
-                แนวโน้ม {statsPeriod === "1m" ? "1 เดือนล่าสุด" : "7 วันล่าสุด"}
+                แนวโน้ม {statsPeriod === "1m" ? monthLabel(selectedMonth) : "7 วันล่าสุด"}
               </h3>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 <div style={{ display: "flex", gap: "8px" }}>
