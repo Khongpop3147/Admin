@@ -928,10 +928,13 @@ export default function Home() {
         // Storefront role stays locked into storefront mode across sales —
         // a plain reset to initialForm would wipe platform/shippingMethod/
         // paymentStatus back to empty, breaking the next sale's submission.
+        // sellerName is also reapplied here since it's normally set by a
+        // useEffect keyed on currentUser, which won't re-fire on its own
+        // just because the form was reset.
         setFormData(
           currentUser?.role === "STOREFRONT"
-            ? { ...initialForm, customerName: "ลูกค้าหน้าร้าน", platform: "Storefront", shippingMethod: "รับหน้าร้าน", paymentStatus: "Paid" }
-            : initialForm
+            ? { ...initialForm, customerName: "ลูกค้าหน้าร้าน", platform: "Storefront", shippingMethod: "รับหน้าร้าน", paymentStatus: "Paid", sellerName: currentUser?.name || "" }
+            : { ...initialForm, sellerName: currentUser?.name || "" }
         );
         setRackDetails([]);
         setDesiredPieceCount("");
