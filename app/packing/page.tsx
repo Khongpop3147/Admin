@@ -309,7 +309,13 @@ export default function PackingPage() {
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(blob, `Postone_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      // selectedDate is already the Bangkok-anchored date being exported —
+      // using it (instead of new Date().toISOString(), which is UTC) avoids
+      // the filename landing on the wrong day when exporting between
+      // 00:00-06:59 Bangkok time, and is also just the more correct date to
+      // put in the filename regardless (the date being exported, not the
+      // moment of the click).
+      saveAs(blob, `Postone_Export_${selectedDate}.xlsx`);
 
     } catch (error) {
       console.error("Error exporting excel:", error);

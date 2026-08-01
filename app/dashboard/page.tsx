@@ -478,8 +478,14 @@ export default function DashboardPage() {
       if (isExcludedFromRevenue(o) || isCodPending(o)) return sum;
       return sum + (Number(o.actualReceivedAmount) || 0);
     }, 0);
-    const totalCodHeld = orders.reduce((sum, o) => sum + (isCodPending(o) ? Number(o.actualReceivedAmount) || 0 : 0), 0);
-    const codHeldCount = orders.filter(isCodPending).length;
+    // A returned COD order will never get codConfirmed (delivery never
+    // completed, so the courier's "collected" report never mentions it) —
+    // without the isExcludedFromRevenue check it would sit in "COD held"
+    // forever even though that money is never coming in and totalReceived
+    // has already (correctly) written it off.
+    const isCodHeld = (o: Order) => isCodPending(o) && !isExcludedFromRevenue(o);
+    const totalCodHeld = orders.reduce((sum, o) => sum + (isCodHeld(o) ? Number(o.actualReceivedAmount) || 0 : 0), 0);
+    const codHeldCount = orders.filter(isCodHeld).length;
 
     const statusCounts: Record<string, number> = { Pending: 0, Packed: 0, Shipped: 0, Completed: 0 };
     orders.forEach((o) => {

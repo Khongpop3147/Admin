@@ -30,7 +30,12 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [sessionUserRaw, setSessionUserRaw] = useState<User | null>(null);
-  const [overrideUser, setOverrideUser] = useState<User | null>(null);
+  // Just the id, not the whole User object — the object itself is derived
+  // fresh from `users` below every render (same reasoning as sessionUser:
+  // storing a frozen snapshot here would go stale the same way sessionUser
+  // used to, since fetchUsers() keeps `users` current but would never touch
+  // a separately-held override object).
+  const [overrideUserId, setOverrideUserId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
@@ -80,16 +85,17 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     : null;
 
   const isDev = sessionUser?.role === "DEV";
+  const overrideUser = overrideUserId ? users.find((u) => u.id === overrideUserId) || null : null;
   const currentUser = isDev && overrideUser ? overrideUser : sessionUser;
 
   const setCurrentUser = (user: User | null) => {
-    if (isDev) setOverrideUser(user);
+    if (isDev) setOverrideUserId(user?.id ?? null);
   };
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     setSessionUserRaw(null);
-    setOverrideUser(null);
+    setOverrideUserId(null);
     window.location.href = "/login";
   };
 
