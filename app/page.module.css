@@ -436,17 +436,25 @@
   box-shadow: none;
 }
 
-/* Hides a dense desktop table on mobile — pairs with .mobileCardList below,
-   which shows a stacked card list instead. Used wherever a multi-column
-   table's horizontal scroll would make rows hard to read/tap on a phone
-   (Store Front's order history, Dashboard's per-admin breakdown, ...). */
+/* Swap a dense desktop layout for a simpler mobile one. Used wherever a
+   multi-column table or a thin-bar SVG chart is hard to read/tap on a phone
+   (Store Front's order history, Dashboard's per-admin breakdown and trend
+   chart, ...) — pair .desktopOnly with .mobileOnly (or .mobileCardList). */
 .desktopOnly {
   display: block;
+}
+
+.mobileOnly {
+  display: none;
 }
 
 @media (max-width: 768px) {
   .desktopOnly {
     display: none;
+  }
+
+  .mobileOnly {
+    display: block;
   }
 }
 

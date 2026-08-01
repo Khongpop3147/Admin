@@ -240,6 +240,49 @@ function TrendBarChart({
   );
 }
 
+// Mobile alternative to TrendBarChart — thin vertical bars packed side by
+// side get unreadable on a narrow phone (tiny labels, tiny bars). Stacking
+// one full-width horizontal row per period instead keeps the label and
+// value legible regardless of how many periods there are.
+function TrendListChart({
+  data,
+  color,
+  formatValue,
+  labelFn = dayLabel,
+}: {
+  data: TrendPoint[];
+  color: string;
+  formatValue: (n: number) => string;
+  labelFn?: (key: string) => string;
+}) {
+  const values = data.map((d) => (d as any).__value as number);
+  const max = Math.max(1, ...values);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "360px", overflowY: "auto", paddingRight: "4px" }}>
+      {data.map((d) => {
+        const value = (d as any).__value as number;
+        return (
+          <div key={d.date} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ width: "52px", fontSize: "12px", color: "var(--text-secondary)", flexShrink: 0 }}>{labelFn(d.date)}</div>
+            <div style={{ flex: 1, background: "rgba(255,255,255,0.05)", borderRadius: "6px", height: "18px" }}>
+              <div
+                style={{
+                  width: `${(value / max) * 100}%`,
+                  minWidth: value > 0 ? "4px" : 0,
+                  background: color,
+                  height: "100%",
+                  borderRadius: "6px",
+                }}
+              />
+            </div>
+            <div style={{ width: "76px", textAlign: "right", fontSize: "13px", fontWeight: "bold", flexShrink: 0 }}>{formatValue(value)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // Horizontal ranked bars — magnitude across admins, one hue, direct labels.
 function AdminBarChart({ data, color }: { data: { name: string; sales: number }[]; color: string }) {
   const max = Math.max(1, ...data.map((d) => d.sales));
@@ -729,7 +772,12 @@ export default function DashboardPage() {
               <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>กำลังโหลดกราฟ...</div>
             ) : (
               <div style={{ opacity: isTrendLoading ? 0.5 : 1, transition: "opacity 0.2s ease" }}>
-                <TrendBarChart data={trendChartData} color="var(--accent-blue)" formatValue={trendFormatter} labelFn={statsPeriod === "year" ? monthShortLabel : dayLabel} />
+                <div className={styles.desktopOnly}>
+                  <TrendBarChart data={trendChartData} color="var(--accent-blue)" formatValue={trendFormatter} labelFn={statsPeriod === "year" ? monthShortLabel : dayLabel} />
+                </div>
+                <div className={styles.mobileOnly}>
+                  <TrendListChart data={trendChartData} color="var(--accent-blue)" formatValue={trendFormatter} labelFn={statsPeriod === "year" ? monthShortLabel : dayLabel} />
+                </div>
               </div>
             )}
           </div>
