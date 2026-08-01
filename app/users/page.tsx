@@ -488,6 +488,18 @@ export default function UsersPage() {
           </div>
         </div>
 
+        <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "16px", marginBottom: "16px" }}>
+          <div className={styles.formGroup} style={{ maxWidth: "240px" }}>
+            <label className={styles.label}>ราคาหมูกรอบ (บาท/กก.)</label>
+            <input
+              type="number"
+              className={styles.input}
+              value={settingsForm.porkPricePerKg}
+              onChange={(e) => setSettingsForm((prev) => ({ ...prev, porkPricePerKg: Number(e.target.value) || 0 }))}
+            />
+          </div>
+        </div>
+
         <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "16px", marginBottom: "8px" }}>
           <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
             สูตรคำนวณค่า COD: ถ้าน้ำหนัก ≤ <strong>{settingsForm.codFlatFeeThreshold}</strong> กก. คิดเหมา <strong>{settingsForm.codFlatFee}</strong> บาท,

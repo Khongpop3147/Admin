@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Settings" ADD COLUMN     "porkPricePerKg" DOUBLE PRECISION NOT NULL DEFAULT 250;

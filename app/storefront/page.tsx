@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useUser } from "../../components/UserProvider";
+import { useSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import styles from "../page.module.css";
 
@@ -41,14 +42,15 @@ function formatMoney(value: unknown): string {
 
 export default function StorefrontPage() {
   const { currentUser } = useUser();
+  const { settings } = useSettings();
 
   const canAccess = !!currentUser && (isSuperAdminRole(currentUser.role) || currentUser.role === "STOREFRONT");
 
   // Every storefront sale is an anonymous walk-in rung up at a fixed rate —
-  // no customer name to type, no price to type. 250 บาท/กก. matches the
-  // "1 kg 250 บาท" promotion rate used elsewhere in the app.
+  // no customer name to type, no price to type. Rate comes from Super Admin
+  // Setting (ราคาหมูกรอบ) so it can change without a code deploy.
   const WALKIN_NAME = "ลูกค้าหน้าร้าน";
-  const RATE_PER_KG = 250;
+  const RATE_PER_KG = settings.porkPricePerKg;
   const VAT_RATE = 0.07;
 
   // ===== Sale entry =====

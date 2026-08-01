@@ -81,6 +81,7 @@ model Settings {
   codFlatFee          Float    @default(50)
   codDivisor          Float    @default(1.5)
   codMultiplier       Float    @default(20)
+  porkPricePerKg      Float    @default(250)
   updatedAt           DateTime @updatedAt
 }
 

@@ -77,7 +77,7 @@ function computeWeightDerivedFields(
   if (isNaN(parsedWeight) || parsedWeight <= 0) return updates;
 
   if (promotion === "1 kg 250 บาท") {
-    updates.price = (parsedWeight * 250).toFixed(2);
+    updates.price = (parsedWeight * settings.porkPricePerKg).toFixed(2);
   }
   if (isCod) {
     updates.codAmount = calculateCodAmount(parsedWeight, settings).toFixed(2);
@@ -597,7 +597,7 @@ export default function Home() {
         if (promo === "1 kg 250 บาท") {
           const parsedWeight = parseFloat(String(weightStr));
           if (!isNaN(parsedWeight) && parsedWeight > 0) {
-            newData.price = (parsedWeight * 250).toFixed(2);
+            newData.price = (parsedWeight * settings.porkPricePerKg).toFixed(2);
           }
         }
       }
@@ -1309,7 +1309,7 @@ export default function Home() {
                 <label className={styles.label}>โปรโมชั่น</label>
                 <select name="promotion" value={formData.promotion} onChange={handleChange} className={styles.input}>
                   <option value="">ไม่มีโปรโมชั่น</option>
-                  <option value="1 kg 250 บาท">1 กก. 250 บาท</option>
+                  <option value="1 kg 250 บาท">1 กก. {settings.porkPricePerKg} บาท</option>
                 </select>
               </div>
             </div>

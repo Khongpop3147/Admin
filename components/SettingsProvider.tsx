@@ -9,6 +9,7 @@ export interface AppSettings {
   codFlatFee: number;
   codDivisor: number;
   codMultiplier: number;
+  porkPricePerKg: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   codFlatFee: 50,
   codDivisor: 1.5,
   codMultiplier: 20,
+  porkPricePerKg: 250,
 };
 
 interface SettingsContextType {
@@ -47,6 +49,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           codFlatFee: data.settings.codFlatFee,
           codDivisor: data.settings.codDivisor,
           codMultiplier: data.settings.codMultiplier,
+          porkPricePerKg: data.settings.porkPricePerKg,
         });
       }
     } catch (e) {
