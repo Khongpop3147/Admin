@@ -237,12 +237,10 @@ export default function PackingPage() {
       // Clean up stray characters at the end (like trailing colons or dashes)
       address = address.replace(/[\s:,.-]+$/, "").trim();
 
-      let cleanNote = order.adminNote || "";
-      cleanNote = cleanNote.replace(/หมูในคลังไม่พอดี ขาดอีก \d+(\.\d+)? kg/g, "").trim();
-      cleanNote = cleanNote.replace(/หมูในคลังไม่พอดี เกินมา \d+(\.\d+)? kg/g, "").trim();
-      cleanNote = cleanNote.replace(/^- /, "").trim();
-
-      const note = `หมูกรอบ ชิ้น: ${order.crispyPorkPiece || '-'} น้ำหนัก: ${order.crispyPorkWeight || '-'}kg ${cleanNote ? `(${cleanNote})` : ''}`;
+      // adminNote (internal packing/admin remarks) is deliberately left out of
+      // this column — it's for staff, not something that should go out on the
+      // shipping label.
+      const note = `หมูกรอบ ชิ้น: ${order.crispyPorkPiece || '-'} น้ำหนัก: ${order.crispyPorkWeight || '-'}kg`;
 
       const isFirstRow = index === 0;
 
