@@ -29,7 +29,7 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [sessionUser, setSessionUser] = useState<User | null>(null);
+  const [sessionUserRaw, setSessionUserRaw] = useState<User | null>(null);
   const [overrideUser, setOverrideUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -50,12 +50,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch("/api/auth/me");
       if (res.ok) {
         const data = await res.json();
-        setSessionUser(data.user);
+        setSessionUserRaw(data.user);
       } else {
-        setSessionUser(null);
+        setSessionUserRaw(null);
       }
     } catch (e) {
-      setSessionUser(null);
+      setSessionUserRaw(null);
     } finally {
       setIsAuthLoading(false);
     }
@@ -66,8 +66,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (sessionUser) fetchUsers();
-  }, [sessionUser]);
+    if (sessionUserRaw) fetchUsers();
+  }, [sessionUserRaw]);
+
+  // /api/auth/me only runs once at login — its snapshot of racks goes stale
+  // the moment any order is placed. `users` gets refreshed constantly
+  // (fetchUsers() runs after every order/rack change across the app), so
+  // once it's loaded, prefer that copy of the logged-in user over the frozen
+  // one from the session fetch. Falls back to the raw snapshot before
+  // fetchUsers has resolved for the first time.
+  const sessionUser = sessionUserRaw
+    ? users.find((u) => u.id === sessionUserRaw.id) || sessionUserRaw
+    : null;
 
   const isDev = sessionUser?.role === "DEV";
   const currentUser = isDev && overrideUser ? overrideUser : sessionUser;
@@ -78,7 +88,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    setSessionUser(null);
+    setSessionUserRaw(null);
     setOverrideUser(null);
     window.location.href = "/login";
   };
