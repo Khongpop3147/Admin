@@ -436,6 +436,55 @@
   box-shadow: none;
 }
 
+/* Hides a dense desktop table on mobile — pairs with .sfCardList below,
+   which shows a stacked card list instead. Used on pages like Store Front
+   where the table's horizontal scroll makes rows hard to read/tap on a
+   phone. */
+.desktopOnly {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .desktopOnly {
+    display: none;
+  }
+}
+
+/* Store Front: the sale-entry/inventory glass panels use a fixed inline
+   padding (20px 24px) that's a bit tight on a phone screen — shrink it on
+   mobile. !important is needed because the inline style otherwise wins. */
+.sfPanel {
+  padding: 20px 24px;
+}
+
+@media (max-width: 768px) {
+  .sfPanel {
+    padding: 16px !important;
+  }
+}
+
+.sfCardList {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .sfCardList {
+    display: flex;
+  }
+}
+
+.sfOrderCard {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .emptyState {
   text-align: center;
   color: var(--text-secondary);

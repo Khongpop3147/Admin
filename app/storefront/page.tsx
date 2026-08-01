@@ -40,6 +40,21 @@ function formatMoney(value: unknown): string {
   return Math.round(num).toLocaleString("th-TH");
 }
 
+// Shared by both the desktop table and the mobile card list so the two
+// views never drift out of sync on how the grand total is derived.
+function getOrderTotal(order: Order): number {
+  const p = Number(order.price) || 0;
+  const s = Number(order.additionalShippingCost) || 0;
+  const c = Number(order.codAmount) || 0;
+  const calculatedTotal = (p + s) * 1.07 + c;
+
+  const actual = Number(order.actualReceivedAmount) || 0;
+  if (actual > 0 && actual >= (p + s) * 0.5) {
+    return actual;
+  }
+  return calculatedTotal;
+}
+
 export default function StorefrontPage() {
   const { currentUser } = useUser();
   const { settings } = useSettings();
@@ -215,7 +230,7 @@ export default function StorefrontPage() {
     : [...pieces].sort((a, b) => b.remainingWeight - a.remainingWeight).map((p) => ({ ...p, diff: null as number | null }));
 
   return (
-    <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
+    <div className={styles.container} style={{ color: "#fff" }}>
       <div className={styles.header} style={{ textAlign: "left", marginBottom: "24px" }}>
         <h1 className={styles.title} style={{ fontSize: "2rem" }}>ขายหน้าร้าน</h1>
         <p className={styles.subtitle}>บันทึกการขายหน้าร้าน และดูประวัติออเดอร์หน้าร้านทั้งหมด</p>
@@ -223,7 +238,7 @@ export default function StorefrontPage() {
 
       {/* ===== Sale entry ===== */}
       <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", marginBottom: "32px" }}>
-        <form onSubmit={handleSubmitSale} className="glass-panel" style={{ flex: "2 1 380px", padding: "20px 24px", borderRadius: "16px" }}>
+        <form onSubmit={handleSubmitSale} className={`glass-panel ${styles.sfPanel}`} style={{ flex: "2 1 380px", borderRadius: "16px" }}>
           <h2 style={{ fontSize: "1.1rem", marginBottom: "16px" }}>🧾 บันทึกการขาย</h2>
 
           <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "16px" }}>
@@ -276,7 +291,7 @@ export default function StorefrontPage() {
           </button>
         </form>
 
-        <div className="glass-panel" style={{ flex: "1 1 280px", padding: "20px 24px", borderRadius: "16px" }}>
+        <div className={`glass-panel ${styles.sfPanel}`} style={{ flex: "1 1 280px", borderRadius: "16px" }}>
           <h2 style={{ fontSize: "1.1rem", marginBottom: "16px" }}>📦 คลังหมูของฉัน</h2>
           <div style={{ marginBottom: "16px", padding: "14px", background: "rgba(255,255,255,0.05)", borderRadius: "8px", display: "flex", justifyContent: "space-around", textAlign: "center" }}>
             <div>
@@ -313,7 +328,7 @@ export default function StorefrontPage() {
                       onClick={() => togglePiece(p)}
                       style={{
                         display: "flex", justifyContent: "space-between", alignItems: "center",
-                        padding: "10px 14px", borderRadius: "8px", flexShrink: 0, cursor: "pointer",
+                        padding: "13px 14px", borderRadius: "8px", flexShrink: 0, cursor: "pointer",
                         background: isAdded ? "rgba(88,166,255,0.16)" : isClose ? "rgba(63,185,80,0.12)" : "rgba(255,255,255,0.03)",
                         border: `1px solid ${isAdded ? "var(--accent-blue)" : isClose ? "rgba(63,185,80,0.5)" : "rgba(255,255,255,0.08)"}`,
                       }}
@@ -356,99 +371,147 @@ export default function StorefrontPage() {
       {isLoading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>กำลังโหลด...</div>
       ) : (
-        <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden', overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '640px' }}>
-            <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
-              <tr>
-                <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>ลูกค้า</th>
-                <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>รายการสินค้า</th>
-                <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>สถานะ</th>
-                <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>จัดการ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")).map(order => (
-                <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ padding: '16px', verticalAlign: 'top' }}>
-                    <div style={{ fontWeight: 'bold' }}>{order.customerName}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '250px' }}>{order.customerAddress}</div>
-                  </td>
-                  <td style={{ padding: '16px', verticalAlign: 'top' }}>
-                    <div>{order.crispyPorkPiece ? `${order.crispyPorkPiece} ชิ้น` : '-'} / {order.crispyPorkWeight ? `${order.crispyPorkWeight} กก.` : '-'}</div>
-                    <div style={{ fontSize: '12px', marginTop: '6px', color: '#a0a0a0', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
-                      หมู: ฿{formatMoney(order.price)} | ส่ง: ฿{formatMoney(order.additionalShippingCost)} | COD: {order.codAmount > 0 ? `฿${formatMoney(order.codAmount)}` : '-'} | <strong style={{ color: 'white' }}>รวม: ฿{
-                        (() => {
-                          const p = Number(order.price) || 0;
-                          const s = Number(order.additionalShippingCost) || 0;
-                          const c = Number(order.codAmount) || 0;
-                          const calculatedTotal = (p + s) * 1.07 + c;
+        (() => {
+          const filteredOrders = orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending"));
 
-                          const actual = Number(order.actualReceivedAmount) || 0;
-                          if (actual > 0 && actual >= (p + s) * 0.5) {
-                            return formatMoney(actual);
-                          }
-                          return formatMoney(calculatedTotal);
-                        })()
-                      }</strong>
+          const statusSelectProps = (order: Order) => ({
+            value: order.orderStatus || "Pending",
+            onChange: (e: React.ChangeEvent<HTMLSelectElement>) => updateOrderStatus(order.id, e.target.value),
+            style: {
+              padding: '6px 12px',
+              borderRadius: '16px',
+              border: 'none',
+              fontSize: '12px',
+              fontWeight: 'bold' as const,
+              cursor: 'pointer',
+              background: order.orderStatus === "Completed" ? "rgba(63,185,80,0.2)" :
+                         (order.orderStatus || "Pending") === "Pending" ? "rgba(255,172,51,0.2)" :
+                         order.orderStatus === "Packed" ? "rgba(79,172,254,0.2)" :
+                         "rgba(0,242,254,0.2)",
+              color: order.orderStatus === "Completed" ? "var(--accent-green)" :
+                     (order.orderStatus || "Pending") === "Pending" ? "#ffac33" :
+                     order.orderStatus === "Packed" ? "#4facfe" :
+                     "var(--accent-green)"
+            },
+          });
+
+          const StatusOptions = () => (
+            <>
+              <option value="Pending" style={{ color: '#000' }}>รอดำเนินการ</option>
+              <option value="Packed" style={{ color: '#000' }}>แพ็คแล้ว</option>
+              <option value="Shipped" style={{ color: '#000' }}>จัดส่งแล้ว</option>
+              <option value="Completed" style={{ color: '#000' }}>เสร็จสิ้น</option>
+            </>
+          );
+
+          if (filteredOrders.length === 0) {
+            return (
+              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                ไม่พบออเดอร์
+              </div>
+            );
+          }
+
+          return (
+            <>
+              {/* Desktop: dense table */}
+              <div className={styles.desktopOnly} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '640px' }}>
+                  <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
+                    <tr>
+                      <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>ลูกค้า</th>
+                      <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>รายการสินค้า</th>
+                      <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>สถานะ</th>
+                      <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOrders.map(order => (
+                      <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '16px', verticalAlign: 'top' }}>
+                          <div style={{ fontWeight: 'bold' }}>{order.customerName}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '250px' }}>{order.customerAddress}</div>
+                        </td>
+                        <td style={{ padding: '16px', verticalAlign: 'top' }}>
+                          <div>{order.crispyPorkPiece ? `${order.crispyPorkPiece} ชิ้น` : '-'} / {order.crispyPorkWeight ? `${order.crispyPorkWeight} กก.` : '-'}</div>
+                          <div style={{ fontSize: '12px', marginTop: '6px', color: '#a0a0a0', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
+                            หมู: ฿{formatMoney(order.price)} | ส่ง: ฿{formatMoney(order.additionalShippingCost)} | COD: {order.codAmount > 0 ? `฿${formatMoney(order.codAmount)}` : '-'} | <strong style={{ color: 'white' }}>รวม: ฿{formatMoney(getOrderTotal(order))}</strong>
+                          </div>
+                          {order.adminNote && <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '4px' }}>หมายเหตุ: {order.adminNote}</div>}
+                          {order.sellerName && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>โดย: {order.sellerName}</div>}
+                        </td>
+                        <td style={{ padding: '16px', verticalAlign: 'top' }}>
+                          <select {...statusSelectProps(order)}>
+                            <StatusOptions />
+                          </select>
+                        </td>
+                        <td style={{ padding: '16px', verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => setViewingRacks(order)}
+                              style={{ background: 'rgba(79,172,254,0.2)', color: '#4facfe', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                            >
+                              👁️ ดูถาด
+                            </button>
+                            <button
+                              onClick={() => setEditingOrder({ ...order })}
+                              style={{ background: 'rgba(255,172,51,0.2)', color: '#ffac33', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                            >
+                              ✏️ แก้ไข
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: stacked cards — the table's horizontal scroll makes rows
+                  hard to read/tap on a phone at the counter, so each order gets
+                  its own full-width card instead. */}
+              <div className={styles.sfCardList}>
+                {filteredOrders.map(order => (
+                  <div key={order.id} className={styles.sfOrderCard}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <div>
+                        <div style={{ fontWeight: 'bold' }}>{order.customerName}</div>
+                        {order.customerAddress && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{order.customerAddress}</div>}
+                      </div>
+                      <select {...statusSelectProps(order)} style={{ ...statusSelectProps(order).style, flexShrink: 0 }}>
+                        <StatusOptions />
+                      </select>
                     </div>
-                    {order.adminNote && <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '4px' }}>หมายเหตุ: {order.adminNote}</div>}
-                    {order.sellerName && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>โดย: {order.sellerName}</div>}
-                  </td>
-                  <td style={{ padding: '16px', verticalAlign: 'top' }}>
-                    <select
-                      value={order.orderStatus || "Pending"}
-                      onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: '16px',
-                        border: 'none',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer',
-                        background: order.orderStatus === "Completed" ? "rgba(63,185,80,0.2)" :
-                                   (order.orderStatus || "Pending") === "Pending" ? "rgba(255,172,51,0.2)" :
-                                   order.orderStatus === "Packed" ? "rgba(79,172,254,0.2)" :
-                                   "rgba(0,242,254,0.2)",
-                        color: order.orderStatus === "Completed" ? "var(--accent-green)" :
-                               (order.orderStatus || "Pending") === "Pending" ? "#ffac33" :
-                               order.orderStatus === "Packed" ? "#4facfe" :
-                               "var(--accent-green)"
-                      }}
-                    >
-                      <option value="Pending" style={{ color: '#000' }}>รอดำเนินการ</option>
-                      <option value="Packed" style={{ color: '#000' }}>แพ็คแล้ว</option>
-                      <option value="Shipped" style={{ color: '#000' }}>จัดส่งแล้ว</option>
-                      <option value="Completed" style={{ color: '#000' }}>เสร็จสิ้น</option>
-                    </select>
-                  </td>
-                  <td style={{ padding: '16px', verticalAlign: 'top' }}>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+
+                    <div style={{ fontSize: '13px' }}>{order.crispyPorkPiece ? `${order.crispyPorkPiece} ชิ้น` : '-'} / {order.crispyPorkWeight ? `${order.crispyPorkWeight} กก.` : '-'}</div>
+                    <div style={{ fontSize: '12px', color: '#a0a0a0', background: 'rgba(255,255,255,0.05)', padding: '8px 10px', borderRadius: '6px' }}>
+                      <div>หมู: ฿{formatMoney(order.price)} | ส่ง: ฿{formatMoney(order.additionalShippingCost)}</div>
+                      <div>COD: {order.codAmount > 0 ? `฿${formatMoney(order.codAmount)}` : '-'}</div>
+                      <div style={{ marginTop: '4px' }}><strong style={{ color: 'white', fontSize: '14px' }}>รวม: ฿{formatMoney(getOrderTotal(order))}</strong></div>
+                    </div>
+                    {order.adminNote && <div style={{ fontSize: '12px', color: '#ffac33' }}>หมายเหตุ: {order.adminNote}</div>}
+                    {order.sellerName && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>โดย: {order.sellerName}</div>}
+
+                    <div style={{ display: 'flex', gap: '8px' }}>
                       <button
                         onClick={() => setViewingRacks(order)}
-                        style={{ background: 'rgba(79,172,254,0.2)', color: '#4facfe', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                        style={{ flex: 1, background: 'rgba(79,172,254,0.2)', color: '#4facfe', border: 'none', padding: '10px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
                       >
                         👁️ ดูถาด
                       </button>
                       <button
                         onClick={() => setEditingOrder({ ...order })}
-                        style={{ background: 'rgba(255,172,51,0.2)', color: '#ffac33', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                        style={{ flex: 1, background: 'rgba(255,172,51,0.2)', color: '#ffac33', border: 'none', padding: '10px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
                       >
                         ✏️ แก้ไข
                       </button>
                     </div>
-                  </td>
-                </tr>
-              ))}
-              {orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")).length === 0 && (
-                <tr>
-                  <td colSpan={4} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                    ไม่พบออเดอร์
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          );
+        })()
       )}
 
       {/* Edit Order Modal */}
