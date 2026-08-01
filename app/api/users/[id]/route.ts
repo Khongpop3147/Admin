@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import bcrypt from "bcryptjs";
@@ -55,15 +55,17 @@ export async function PATCH(
       if (!name) return NextResponse.json({ error: "กรุณาใส่ชื่อ" }, { status: 400 });
       updateData.name = name;
     }
+    // Only set when demoting an existing SUPER_ADMIN — the actual count
+    // check has to happen inside the same transaction as the write (see
+    // below), not here, or two concurrent demotions could both read "2 left"
+    // before either commits and both proceed, leaving 0 Super Admins.
+    let mustKeepOneSuperAdmin = false;
     if (body.role !== undefined) {
       if (!ALLOWED_ROLES.includes(body.role)) {
         return NextResponse.json({ error: "ตำแหน่งไม่ถูกต้อง" }, { status: 400 });
       }
       if (existing.role === "SUPER_ADMIN" && body.role !== "SUPER_ADMIN") {
-        const superAdminCount = await prisma.user.count({ where: { role: "SUPER_ADMIN" } });
-        if (superAdminCount <= 1) {
-          return NextResponse.json({ error: "ต้องมี Super Admin เหลืออย่างน้อย 1 คนเสมอ" }, { status: 400 });
-        }
+        mustKeepOneSuperAdmin = true;
       }
       updateData.role = body.role;
     }
@@ -74,14 +76,29 @@ export async function PATCH(
       updateData.password = await bcrypt.hash(String(body.password), 10);
     }
 
-    const user = await prisma.user.update({
-      where: { id },
-      data: updateData,
-      include: { racks: true },
-    });
+    const user = await prisma.$transaction(async (tx) => {
+      if (mustKeepOneSuperAdmin) {
+        const superAdminCount = await tx.user.count({ where: { role: "SUPER_ADMIN" } });
+        if (superAdminCount <= 1) {
+          throw new Error("LAST_SUPER_ADMIN");
+        }
+      }
+      return tx.user.update({
+        where: { id },
+        data: updateData,
+        include: { racks: true },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
     return NextResponse.json({ user: stripPassword(user) }, { status: 200 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating user:", error);
+    if (error?.message === "LAST_SUPER_ADMIN") {
+      return NextResponse.json({ error: "ต้องมี Super Admin เหลืออย่างน้อย 1 คนเสมอ" }, { status: 400 });
+    }
+    if (error?.code === "P2034" || error?.cause?.kind === "TransactionWriteConflict") {
+      return NextResponse.json({ error: "มีการแก้ไขพร้อมกันจากที่อื่น กรุณาลองใหม่อีกครั้ง" }, { status: 409 });
+    }
     return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }
@@ -105,26 +122,40 @@ export async function DELETE(
     if (existing.role === "CENTRAL_INVENTORY" || existing.role === "DEV") {
       return NextResponse.json({ error: "ไม่สามารถลบ user นี้ได้" }, { status: 400 });
     }
-    if (existing.role === "SUPER_ADMIN") {
-      const superAdminCount = await prisma.user.count({ where: { role: "SUPER_ADMIN" } });
-      if (superAdminCount <= 1) {
-        return NextResponse.json({ error: "ต้องมี Super Admin เหลืออย่างน้อย 1 คนเสมอ" }, { status: 400 });
-      }
-    }
-
     // Rack pieces are cascade-deleted with the user by default — return them
     // to Central Inventory first so deleting an account never destroys pork
-    // that's still physically there.
+    // that's still physically there. Independent of the Super-Admin-count
+    // guard below, so it's fine to run outside that transaction (upsert is
+    // already atomic on its own).
     const centralUser = await ensureCentralInventoryUser(prisma);
-    await prisma.rackAssignment.updateMany({
-      where: { userId: id },
-      data: { userId: centralUser.id },
-    });
 
-    await prisma.user.delete({ where: { id } });
+    // The count check and the actual delete have to be one atomic unit —
+    // otherwise two concurrent deletes of the last two Super Admins could
+    // both read "2 left" before either commits and both proceed, leaving 0
+    // Super Admins with no way to manage users/roles anymore.
+    await prisma.$transaction(async (tx) => {
+      if (existing.role === "SUPER_ADMIN") {
+        const superAdminCount = await tx.user.count({ where: { role: "SUPER_ADMIN" } });
+        if (superAdminCount <= 1) {
+          throw new Error("LAST_SUPER_ADMIN");
+        }
+      }
+      await tx.rackAssignment.updateMany({
+        where: { userId: id },
+        data: { userId: centralUser.id },
+      });
+      await tx.user.delete({ where: { id } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
     return NextResponse.json({ success: true }, { status: 200 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error deleting user:", error);
+    if (error?.message === "LAST_SUPER_ADMIN") {
+      return NextResponse.json({ error: "ต้องมี Super Admin เหลืออย่างน้อย 1 คนเสมอ" }, { status: 400 });
+    }
+    if (error?.code === "P2034" || error?.cause?.kind === "TransactionWriteConflict") {
+      return NextResponse.json({ error: "มีการแก้ไขพร้อมกันจากที่อื่น กรุณาลองใหม่อีกครั้ง" }, { status: 409 });
+    }
     return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }

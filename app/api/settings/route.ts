@@ -23,12 +23,17 @@ export const dynamic = 'force-dynamic';
 
 const SETTINGS_ID = "singleton";
 
+// upsert (atomic at the DB level) instead of findUnique-then-create — the
+// old pattern raced on a fresh install: two concurrent requests before the
+// Settings row ever existed could both see "not found" and both try to
+// create it, and the second create would throw on the id collision instead
+// of just succeeding (same bug class as lib/centralInventory.ts).
 async function getOrCreateSettings() {
-  let settings = await prisma.settings.findUnique({ where: { id: SETTINGS_ID } });
-  if (!settings) {
-    settings = await prisma.settings.create({ data: { id: SETTINGS_ID } });
-  }
-  return settings;
+  return prisma.settings.upsert({
+    where: { id: SETTINGS_ID },
+    update: {},
+    create: { id: SETTINGS_ID },
+  });
 }
 
 export async function GET() {
