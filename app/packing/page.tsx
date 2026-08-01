@@ -59,6 +59,11 @@ export default function PackingPage() {
   const [viewingRacks, setViewingRacks] = useState<Order | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const codFileInputRef = useRef<HTMLInputElement>(null);
+  // Tracks which date the most recently *fired* fetch was for, so that if the
+  // admin flips the date picker quickly (e.g. A -> B -> A) and the requests
+  // resolve out of order, a late-arriving response for an old date can't
+  // clobber the screen with stale (or empty) data for the current date.
+  const latestRequestedDateRef = useRef<string | null>(null);
 
   const [selectedDate, setSelectedDate] = useState(() => {
     // Default to today in Thai time
@@ -80,10 +85,16 @@ export default function PackingPage() {
   };
 
   const fetchOrders = async () => {
+    const requestedDate = selectedDate;
+    latestRequestedDateRef.current = requestedDate;
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/orders?date=${selectedDate}`);
+      const res = await fetch(`/api/orders?date=${requestedDate}`);
       const data = await res.json();
+      // A newer request may have fired (and already resolved) while this one
+      // was in flight — if so, drop this response instead of overwriting the
+      // screen with data for a date the user has since navigated away from.
+      if (latestRequestedDateRef.current !== requestedDate) return;
       if (res.ok) {
         const packingOrders = data.orders.filter((o: any) =>
           o.orderStatus !== "Completed" &&
@@ -96,7 +107,7 @@ export default function PackingPage() {
     } catch (e) {
       console.error(e);
     } finally {
-      setIsLoading(false);
+      if (latestRequestedDateRef.current === requestedDate) setIsLoading(false);
     }
   };
 
