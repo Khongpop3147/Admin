@@ -436,10 +436,10 @@
   box-shadow: none;
 }
 
-/* Hides a dense desktop table on mobile — pairs with .sfCardList below,
-   which shows a stacked card list instead. Used on pages like Store Front
-   where the table's horizontal scroll makes rows hard to read/tap on a
-   phone. */
+/* Hides a dense desktop table on mobile — pairs with .mobileCardList below,
+   which shows a stacked card list instead. Used wherever a multi-column
+   table's horizontal scroll would make rows hard to read/tap on a phone
+   (Store Front's order history, Dashboard's per-admin breakdown, ...). */
 .desktopOnly {
   display: block;
 }
@@ -463,19 +463,19 @@
   }
 }
 
-.sfCardList {
+.mobileCardList {
   display: none;
   flex-direction: column;
   gap: 12px;
 }
 
 @media (max-width: 768px) {
-  .sfCardList {
+  .mobileCardList {
     display: flex;
   }
 }
 
-.sfOrderCard {
+.mobileCard {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -483,6 +483,16 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* Stat-card grids (Dashboard) default to a wide auto-fit minmax that
+   collapses to a single column on a phone — one card per row means a lot of
+   scrolling for 4 short numbers. Force 2 columns below 768px instead.
+   !important because it pairs with an inline gridTemplateColumns. */
+@media (max-width: 768px) {
+  .statGrid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
 }
 
 .emptyState {

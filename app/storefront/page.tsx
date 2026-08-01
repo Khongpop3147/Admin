@@ -470,9 +470,9 @@ export default function StorefrontPage() {
               {/* Mobile: stacked cards — the table's horizontal scroll makes rows
                   hard to read/tap on a phone at the counter, so each order gets
                   its own full-width card instead. */}
-              <div className={styles.sfCardList}>
+              <div className={styles.mobileCardList}>
                 {filteredOrders.map(order => (
-                  <div key={order.id} className={styles.sfOrderCard}>
+                  <div key={order.id} className={styles.mobileCard}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                       <div>
                         <div style={{ fontWeight: 'bold' }}>{order.customerName}</div>

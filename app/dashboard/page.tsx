@@ -657,7 +657,7 @@ export default function DashboardPage() {
               📅 แสดงข้อมูลปี {selectedYear} ({yearRange.from} ถึง {yearRange.to})
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px", marginBottom: "24px" }}>
+          <div className={styles.statGrid} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px", marginBottom: "24px" }}>
             <StatCard label="จำนวนออเดอร์" value={stats.orderCount.toLocaleString("th-TH")} color="#58a6ff" />
             <StatCard label="น้ำหนักหมูที่ขาย" value={`${stats.totalWeight.toFixed(2)} กก.`} color="#3fb950" />
             <StatCard label="ยอดขายสินค้า" value={`฿${formatMoney(stats.totalSales)}`} color="#ffac33" />
@@ -744,7 +744,8 @@ export default function DashboardPage() {
                   <div style={{ marginBottom: "20px" }}>
                     <AdminBarChart data={perAdminBreakdown} color="var(--accent-blue)" />
                   </div>
-                  <div style={{ overflowX: "auto" }}>
+                  {/* Desktop: dense table */}
+                  <div className={styles.desktopOnly} style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
                       <thead>
                         <tr style={{ textAlign: "left", borderBottom: "1px solid var(--border-color)" }}>
@@ -769,6 +770,31 @@ export default function DashboardPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Mobile: stacked cards — a 6-column table has no room to
+                      breathe on a phone; each admin gets its own card instead. */}
+                  <div className={styles.mobileCardList}>
+                    {perAdminBreakdown.map((a) => (
+                      <div key={a.name} className={styles.mobileCard}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div style={{ fontWeight: "bold" }}>{a.name}</div>
+                          <div style={{ color: "var(--accent-green)", fontWeight: "bold", fontSize: "16px" }}>฿{formatMoney(a.sales)}</div>
+                        </div>
+                        <div style={{ display: "flex", gap: "16px", fontSize: "13px", color: "var(--text-secondary)" }}>
+                          <div>{a.orderCount} ออเดอร์</div>
+                          <div>{a.weight.toFixed(2)} กก.</div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
+                          <div style={{ color: a.returnedCount > 0 ? "#ff6b6b" : "var(--text-secondary)" }}>
+                            ตีกลับ: {a.returnedCount > 0 ? `${a.returnedCount} ออเดอร์` : "-"}
+                          </div>
+                          <div style={{ color: a.commission < 0 ? "#ff6b6b" : "#ffac33", fontWeight: "bold" }}>
+                            ค่าคอม: ฿{formatMoney(a.commission)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </>
               )}
