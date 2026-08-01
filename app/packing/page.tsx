@@ -52,6 +52,7 @@ export default function PackingPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
+  const [sortBy, setSortBy] = useState<"date" | "admin">("date");
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
@@ -161,8 +162,16 @@ export default function PackingPage() {
     }
   };
 
+  // Groups same-admin orders together when sorting by admin (stable sort
+  // keeps each admin's own orders in their original date order); otherwise
+  // leaves the API's own newest-first order untouched.
+  const sortOrders = (list: Order[]) => {
+    if (sortBy !== "admin") return list;
+    return [...list].sort((a, b) => (a.sellerName || "").localeCompare(b.sellerName || "", "th"));
+  };
+
   const generateExportData = () => {
-    const exportOrders = orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending"));
+    const exportOrders = sortOrders(orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")));
     if (exportOrders.length === 0) return null;
 
     // Postone only needs the shipper's own name/phone/address filled in once
@@ -463,6 +472,17 @@ export default function PackingPage() {
               <option value="Shipped" style={{ color: '#000' }}>จัดส่งแล้ว</option>
             </select>
           </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>เรียงตาม</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as "date" | "admin")}
+              style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '14px' }}
+            >
+              <option value="date" style={{ color: '#000' }}>วันที่ล่าสุด</option>
+              <option value="admin" style={{ color: '#000' }}>แอดมิน</option>
+            </select>
+          </div>
         </div>
 
         {/* Actions */}
@@ -570,7 +590,7 @@ export default function PackingPage() {
               </tr>
             </thead>
             <tbody>
-              {orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")).map(order => (
+              {sortOrders(orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending"))).map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)', background: order.isReturned ? 'rgba(255,107,107,0.06)' : undefined, opacity: order.isReturned ? 0.75 : 1 }}>
                   <td style={{ padding: '16px', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 'bold' }}>{order.orderNo || "?"} - {order.customerName}</div>
