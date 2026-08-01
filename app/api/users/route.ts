@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { getSessionUser } from "../../../lib/session";
 import { isSuperAdminRole } from "../../../lib/roles";
 import { runMonthlyPorkCleanupIfNeeded } from "../../../lib/porkCleanup";
+import { runSlipCleanupIfNeeded } from "../../../lib/slipCleanup";
 import { ensureCentralInventoryUser } from "../../../lib/centralInventory";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
@@ -31,11 +32,12 @@ function stripPassword<T extends { password?: string | null }>(user: T) {
 
 export async function GET() {
   try {
-    // Piggybacks the monthly used-up-pork cleanup on this endpoint since
-    // it's hit constantly (every page load, after every order/rack change)
-    // and there's no cron infrastructure — cheap no-op except the first
-    // request after the month rolls over.
+    // Piggybacks both cleanup jobs on this endpoint since it's hit
+    // constantly (every page load, after every order/rack change) and
+    // there's no cron infrastructure — cheap no-op except the first
+    // request after their respective windows roll over.
     await runMonthlyPorkCleanupIfNeeded(prisma);
+    await runSlipCleanupIfNeeded(prisma);
 
     await ensureCentralInventoryUser(prisma);
 
