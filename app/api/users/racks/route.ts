@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
@@ -25,37 +25,53 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "User ID and Rack No are required" }, { status: 400 });
     }
 
-    // Check if this rack is already active anywhere globally
-    const existingActiveRack = await prisma.rackAssignment.findFirst({
-      where: {
-        rackNo,
-        isUsedUp: false
-      }
-    });
-
-    if (existingActiveRack) {
-      return NextResponse.json({ error: `ไม่สามารถเพิ่มได้ เนื่องจากมีชิ้นหมู ${rackNo} กำลังถูกใช้งานอยู่` }, { status: 400 });
-    }
-
     const data: any = {
       userId,
       rackNo,
     };
-    
+
     if (weight !== undefined) {
       data.initialWeight = Number(weight);
       data.remainingWeight = Number(weight);
     }
 
-    const assignment = await prisma.rackAssignment.create({
-      data,
-    });
+    // Check-then-create has to be one atomic unit — otherwise two overlapping
+    // requests for the same rackNo (e.g. added from two tabs, or a
+    // double-click) can both pass the "not already active" check before
+    // either commits, assigning the same physical piece to two different
+    // users. Serializable isolation makes Postgres abort one of the two
+    // transactions instead of letting that happen.
+    const assignment = await prisma.$transaction(async (tx) => {
+      const existingActiveRack = await tx.rackAssignment.findFirst({
+        where: {
+          rackNo,
+          isUsedUp: false
+        }
+      });
+
+      if (existingActiveRack) {
+        throw new Error(`DUPLICATE_RACK:${rackNo}`);
+      }
+
+      return tx.rackAssignment.create({ data });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     return NextResponse.json({ success: true, assignment }, { status: 201 });
   } catch (error: any) {
     console.error("Error assigning rack:", error);
+    if (typeof error?.message === 'string' && error.message.startsWith('DUPLICATE_RACK:')) {
+      const rackName = error.message.slice('DUPLICATE_RACK:'.length);
+      return NextResponse.json({ error: `ไม่สามารถเพิ่มได้ เนื่องจากมีชิ้นหมู ${rackName} กำลังถูกใช้งานอยู่` }, { status: 400 });
+    }
     if (error.code === 'P2002') {
       return NextResponse.json({ error: "ชิ้นนี้ถูกมอบหมายให้ผู้ใช้คนนี้อยู่แล้ว" }, { status: 400 });
+    }
+    // Serializable-isolation write conflicts surface as P2034 through
+    // Prisma's own engine, but as a DriverAdapterError with this `cause`
+    // shape when going through @prisma/adapter-pg (as this project does) —
+    // check both so the retry message actually gets used either way.
+    if (error.code === 'P2034' || error?.cause?.kind === 'TransactionWriteConflict') {
+      return NextResponse.json({ error: "มีการแก้ไขคลังพร้อมกันจากที่อื่น กรุณาลองใหม่อีกครั้ง" }, { status: 409 });
     }
     return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
