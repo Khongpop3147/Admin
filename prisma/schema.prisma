@@ -59,8 +59,9 @@ model RackAssignment {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   initialWeight   Float    @default(0)
   remainingWeight Float    @default(0)
-  isUsedUp        Boolean  @default(false)
-  createdAt       DateTime @default(now())
+  isUsedUp        Boolean   @default(false)
+  usedUpAt        DateTime?
+  createdAt       DateTime  @default(now())
 
   @@unique([userId, rackNo])
 }

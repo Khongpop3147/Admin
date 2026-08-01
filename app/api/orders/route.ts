@@ -161,7 +161,7 @@ export async function POST(req: Request) {
         // Check if we need to set isUsedUp (if weight is practically 0)
         const updatedRack = await tx.rackAssignment.findUnique({ where: { id: rack.assignmentId } });
         if (updatedRack && updatedRack.remainingWeight <= 0.001) {
-           await tx.rackAssignment.update({ where: { id: rack.assignmentId }, data: { isUsedUp: true, remainingWeight: 0 } });
+           await tx.rackAssignment.update({ where: { id: rack.assignmentId }, data: { isUsedUp: true, remainingWeight: 0, usedUpAt: new Date() } });
         }
       }
 

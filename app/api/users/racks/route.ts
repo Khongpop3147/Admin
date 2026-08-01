@@ -125,7 +125,11 @@ export async function PATCH(req: Request) {
     const dataToUpdate: any = { rackNo };
     if (weight !== undefined) {
       dataToUpdate.remainingWeight = Number(weight);
-      dataToUpdate.isUsedUp = Number(weight) <= 0;
+      const isNowUsedUp = Number(weight) <= 0;
+      dataToUpdate.isUsedUp = isNowUsedUp;
+      // Drives the monthly cleanup's "keep last day of the month one extra
+      // cycle" grace window (see lib/porkCleanup.ts) — null when not used up.
+      dataToUpdate.usedUpAt = isNowUsedUp ? new Date() : null;
     }
 
     const updated = await prisma.rackAssignment.update({
