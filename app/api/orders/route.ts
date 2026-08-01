@@ -17,6 +17,17 @@ if (globalForPrisma.prisma2) {
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma2 = prisma;
 
+// Strips common Thai honorific prefixes and whitespace so "คุณเมธานันท์" and
+// "เมธานันท์" (same person, typed differently by different admins) are
+// recognized as the same customer for duplicate-order detection.
+function normalizeCustomerName(name: string): string {
+  return name
+    .trim()
+    .replace(/^(คุณ|นาย|นาง|นางสาว|น\.ส\.|ด\.ช\.|ด\.ญ\.)\s*/, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -40,22 +51,24 @@ export async function POST(req: Request) {
       // weight showing up again on day 4+ is treated as a legitimate repeat
       // order, not an accidental double-submit.
       const duplicateWindowCutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-      const sameNameOrders = await prisma.order.findMany({
+      const recentOrders = await prisma.order.findMany({
         where: {
-          customerName: {
-            equals: customerName,
-          },
           createdAt: {
             gte: duplicateWindowCutoff,
           },
         },
       });
 
+      const normalizedNewName = normalizeCustomerName(customerName);
       const currentWeight = parseFloat(crispyPorkWeight);
       const matchingOrder = !isNaN(currentWeight)
-        ? sameNameOrders.find((o) => {
+        ? recentOrders.find((o) => {
             const w = parseFloat(o.crispyPorkWeight || "");
-            return !isNaN(w) && Math.abs(w - currentWeight) < 0.001;
+            return (
+              !isNaN(w) &&
+              Math.abs(w - currentWeight) < 0.001 &&
+              normalizeCustomerName(o.customerName) === normalizedNewName
+            );
           })
         : undefined;
 
