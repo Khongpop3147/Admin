@@ -449,6 +449,24 @@ export default function PackingPage() {
     }
   };
 
+  const handleDeleteOrder = async (order: Order) => {
+    if (!confirm(`ลบออเดอร์ "${order.customerName}" ใช่ไหม? การลบนี้ย้อนกลับไม่ได้ (น้ำหนักหมูที่ตัดไปจะถูกคืนเข้าคลังให้อัตโนมัติ)`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok) {
+        setOrders(orders.filter(o => o.id !== order.id));
+      } else {
+        alert(data.error || "ลบออเดอร์ไม่สำเร็จ");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะลบออเดอร์");
+    }
+  };
+
   if (currentUser && !isSuperAdminRole(currentUser.role) && currentUser.role !== "PACKING") return null;
 
   return (
@@ -700,6 +718,14 @@ export default function PackingPage() {
                           }}
                         >
                           {order.isReturned ? '🔙 ตีกลับแล้ว' : '🔙 ตีกลับ'}
+                        </button>
+                      )}
+                      {isSuperAdminRole(currentUser?.role) && (
+                        <button
+                          onClick={() => handleDeleteOrder(order)}
+                          style={{ background: 'rgba(255,107,107,0.15)', color: '#ff6b6b', border: '1px solid #ff6b6b', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                        >
+                          🗑️ ลบ
                         </button>
                       )}
                     </div>

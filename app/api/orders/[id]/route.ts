@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import { getSessionUser } from "../../../../lib/session";
+import { isSuperAdminRole } from "../../../../lib/roles";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 let prisma: PrismaClient;
@@ -88,6 +90,70 @@ export async function PATCH(
     return NextResponse.json({ success: true, order: updatedOrder }, { status: 200 });
   } catch (error: any) {
     console.error("Error updating order:", error);
+    if (error?.code === "P2025") {
+      return NextResponse.json({ error: "ไม่พบออเดอร์นี้ อาจถูกลบไปแล้ว" }, { status: 404 });
+    }
+    return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getSessionUser();
+    if (!session || !isSuperAdminRole(session.role)) {
+      return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
+    }
+
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
+
+    const order = await prisma.order.findUnique({ where: { id } });
+    if (!order) {
+      return NextResponse.json({ error: "ไม่พบออเดอร์นี้ อาจถูกลบไปแล้ว" }, { status: 404 });
+    }
+
+    let rackDetails: { assignmentId?: string; rackNo?: string; weight?: number }[] = [];
+    if (order.rackDetails) {
+      try {
+        rackDetails = JSON.parse(order.rackDetails);
+      } catch (e) { }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Give back the pork weight this order took out of the rack it was
+      // allocated from — otherwise deleting the order permanently loses that
+      // weight from inventory instead of just undoing the sale.
+      for (const detail of rackDetails) {
+        if (!detail.assignmentId || !detail.weight) continue;
+        const assignment = await tx.rackAssignment.findUnique({ where: { id: detail.assignmentId } });
+        if (!assignment) continue;
+        await tx.rackAssignment.update({
+          where: { id: detail.assignmentId },
+          data: {
+            remainingWeight: assignment.remainingWeight + detail.weight,
+            isUsedUp: false,
+          },
+        });
+      }
+
+      await tx.orderAuditLog.create({
+        data: {
+          orderId: id,
+          action: "DELETE",
+          summary: `ลบออเดอร์ #${order.orderNo || "-"} (${order.customerName}) — คืนน้ำหนักหมู ${rackDetails.length} รายการเข้าคลัง`,
+          performedBy: session.name,
+        },
+      });
+
+      await tx.order.delete({ where: { id } });
+    });
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error: any) {
+    console.error("Error deleting order:", error);
     if (error?.code === "P2025") {
       return NextResponse.json({ error: "ไม่พบออเดอร์นี้ อาจถูกลบไปแล้ว" }, { status: 404 });
     }
