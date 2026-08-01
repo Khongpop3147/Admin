@@ -23,7 +23,7 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma2 = prisma;
 function normalizeCustomerName(name: string): string {
   return name
     .trim()
-    .replace(/^(คุณ|นาย|นาง|นางสาว|น\.ส\.|ด\.ช\.|ด\.ญ\.)\s*/, "")
+    .replace(/^(คุณ|นางสาว|นาย|นาง|น\.ส\.|ด\.ช\.|ด\.ญ\.)\s*/, "")
     .replace(/\s+/g, "")
     .toLowerCase();
 }
