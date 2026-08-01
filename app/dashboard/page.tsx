@@ -126,6 +126,9 @@ function TrendBarChart({
   const n = data.length || 1;
   const bandW = width / n;
   const barW = Math.min(28, bandW * 0.5);
+  // With ~30 daily bars the x-axis labels overlap into unreadable mush —
+  // thin them out to roughly 8 evenly-spaced labels regardless of period.
+  const labelEvery = Math.max(1, Math.ceil(n / 8));
 
   return (
     <div style={{ position: "relative" }}>
@@ -151,10 +154,10 @@ function TrendBarChart({
               <rect x={i * bandW} y={paddingTop} width={bandW} height={chartH} fill="transparent" />
               <path d={roundedTopRectPath(x, y, barW, Math.max(barH, 2), 4)} fill={color} opacity={isHover ? 1 : 0.82} />
               <text x={x + barW / 2} y={y - 8} textAnchor="middle" fontSize="11" fill="var(--text-secondary)">
-                {barH > 2 ? formatValue(value) : ""}
+                {barH > 2 && i % labelEvery === 0 ? formatValue(value) : ""}
               </text>
               <text x={x + barW / 2} y={height - 8} textAnchor="middle" fontSize="11" fill="var(--text-secondary)">
-                {dayLabel(d.date)}
+                {i % labelEvery === 0 ? dayLabel(d.date) : ""}
               </text>
             </g>
           );
@@ -255,6 +258,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [trendMetric, setTrendMetric] = useState<"sales" | "orders">("sales");
+  const [trendPeriod, setTrendPeriod] = useState<"7d" | "1m">("7d");
   const [isTrendLoading, setIsTrendLoading] = useState(false);
 
   const isSuperAdmin = isSuperAdminRole(currentUser?.role);
@@ -293,7 +297,8 @@ export default function DashboardPage() {
       setIsTrendLoading(true);
       try {
         const sellerName = isSuperAdmin ? viewTarget : currentUser.name;
-        const dates = Array.from({ length: 7 }, (_, i) => addDays(selectedDate, i - 6));
+        const trendDays = trendPeriod === "7d" ? 7 : 30;
+        const dates = Array.from({ length: trendDays }, (_, i) => addDays(selectedDate, i - (trendDays - 1)));
         const results = await Promise.all(
           dates.map(async (d) => {
             const url = sellerName
@@ -315,7 +320,7 @@ export default function DashboardPage() {
     };
 
     fetchTrend();
-  }, [selectedDate, viewTarget, currentUser, isSuperAdmin]);
+  }, [selectedDate, viewTarget, currentUser, isSuperAdmin, trendPeriod]);
 
   const stats = useMemo(() => {
     const orderCount = orders.length;
@@ -504,40 +509,79 @@ export default function DashboardPage() {
 
           <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "24px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
-              <h3 style={{ fontSize: "15px", color: "var(--text-secondary)", margin: 0 }}>แนวโน้ม 7 วันล่าสุด</h3>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  type="button"
-                  onClick={() => setTrendMetric("sales")}
-                  style={{
-                    background: trendMetric === "sales" ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
-                    color: trendMetric === "sales" ? "#fff" : "var(--text-secondary)",
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "6px 14px",
-                    fontSize: "12px",
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                  }}
-                >
-                  ยอดขาย
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTrendMetric("orders")}
-                  style={{
-                    background: trendMetric === "orders" ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
-                    color: trendMetric === "orders" ? "#fff" : "var(--text-secondary)",
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "6px 14px",
-                    fontSize: "12px",
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                  }}
-                >
-                  จำนวนออเดอร์
-                </button>
+              <h3 style={{ fontSize: "15px", color: "var(--text-secondary)", margin: 0 }}>
+                แนวโน้ม {trendPeriod === "7d" ? "7 วันล่าสุด" : "1 เดือนล่าสุด"}
+              </h3>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setTrendPeriod("7d")}
+                    style={{
+                      background: trendPeriod === "7d" ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                      color: trendPeriod === "7d" ? "#fff" : "var(--text-secondary)",
+                      border: "none",
+                      borderRadius: "999px",
+                      padding: "6px 14px",
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                    }}
+                  >
+                    7 วัน
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTrendPeriod("1m")}
+                    style={{
+                      background: trendPeriod === "1m" ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                      color: trendPeriod === "1m" ? "#fff" : "var(--text-secondary)",
+                      border: "none",
+                      borderRadius: "999px",
+                      padding: "6px 14px",
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                    }}
+                  >
+                    1 เดือน
+                  </button>
+                </div>
+                <div style={{ width: "1px", background: "var(--border-color)", margin: "2px 4px" }} />
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setTrendMetric("sales")}
+                    style={{
+                      background: trendMetric === "sales" ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                      color: trendMetric === "sales" ? "#fff" : "var(--text-secondary)",
+                      border: "none",
+                      borderRadius: "999px",
+                      padding: "6px 14px",
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ยอดขาย
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTrendMetric("orders")}
+                    style={{
+                      background: trendMetric === "orders" ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                      color: trendMetric === "orders" ? "#fff" : "var(--text-secondary)",
+                      border: "none",
+                      borderRadius: "999px",
+                      padding: "6px 14px",
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                    }}
+                  >
+                    จำนวนออเดอร์
+                  </button>
+                </div>
               </div>
             </div>
             {isTrendLoading && trendData.length === 0 ? (
