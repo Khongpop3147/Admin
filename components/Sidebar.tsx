@@ -36,7 +36,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
     <aside className={`${styles.sidebar} ${isOpen ? styles.sidebarOpen : ''}`}>
       <div className={styles.logo}>
-        <div className={styles.logoIcon}>A</div>
+        <img src="/logo.png" alt="EASY Crispy Pork" className={styles.logoIcon} />
         <h2>AdminSpace</h2>
         <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="ปิดเมนู">✕</button>
       </div>
