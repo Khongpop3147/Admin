@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { getSessionUser } from "../../../lib/session";
 import { isSuperAdminRole } from "../../../lib/roles";
 import { runMonthlyPorkCleanupIfNeeded } from "../../../lib/porkCleanup";
+import { ensureCentralInventoryUser } from "../../../lib/centralInventory";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -36,17 +37,7 @@ export async function GET() {
     // request after the month rolls over.
     await runMonthlyPorkCleanupIfNeeded(prisma);
 
-    // Ensure Central Inventory exists
-    let centralUser = await prisma.user.findFirst({ where: { role: 'CENTRAL_INVENTORY' } });
-    if (!centralUser) {
-      centralUser = await prisma.user.create({
-        data: {
-          id: 'central-inventory-id',
-          name: 'Central Inventory',
-          role: 'CENTRAL_INVENTORY'
-        }
-      });
-    }
+    await ensureCentralInventoryUser(prisma);
 
     const users = await prisma.user.findMany({
       include: {

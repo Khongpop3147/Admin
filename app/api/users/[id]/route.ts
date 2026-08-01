@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 import { getSessionUser } from "../../../../lib/session";
 import { isSuperAdminRole } from "../../../../lib/roles";
+import { ensureCentralInventoryUser } from "../../../../lib/centralInventory";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -114,12 +115,7 @@ export async function DELETE(
     // Rack pieces are cascade-deleted with the user by default — return them
     // to Central Inventory first so deleting an account never destroys pork
     // that's still physically there.
-    let centralUser = await prisma.user.findFirst({ where: { role: "CENTRAL_INVENTORY" } });
-    if (!centralUser) {
-      centralUser = await prisma.user.create({
-        data: { id: "central-inventory-id", name: "Central Inventory", role: "CENTRAL_INVENTORY" },
-      });
-    }
+    const centralUser = await ensureCentralInventoryUser(prisma);
     await prisma.rackAssignment.updateMany({
       where: { userId: id },
       data: { userId: centralUser.id },
