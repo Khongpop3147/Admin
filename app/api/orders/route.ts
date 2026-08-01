@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import { getSessionUser } from "../../../lib/session";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 
@@ -30,6 +31,13 @@ function normalizeCustomerName(name: string): string {
 
 export async function POST(req: Request) {
   try {
+    const session = await getSessionUser();
+    // Every staff role creates orders through some page — CENTRAL_INVENTORY
+    // is the only one with no order-entry UI at all.
+    if (!session || session.role === "CENTRAL_INVENTORY") {
+      return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
+    }
+
     const body = await req.json();
     const { 
       customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price, 
@@ -189,6 +197,11 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const sellerName = searchParams.get("sellerName");
     const dateStr = searchParams.get("date"); // format: YYYY-MM-DD
@@ -200,6 +213,12 @@ export async function GET(req: Request) {
     let whereClause: any = sellerName ? { sellerName } : {};
     if (platform) {
       whereClause.platform = platform;
+    }
+    // STOREFRONT's own page only ever asks for platform=Storefront — force
+    // it server-side too, so that role can't be used to pull every other
+    // channel's customer names/addresses/prices by just dropping the param.
+    if (session.role === "STOREFRONT") {
+      whereClause.platform = "Storefront";
     }
     if (customerName) {
       whereClause.customerName = { contains: customerName, mode: "insensitive" };

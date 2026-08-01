@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import { getSessionUser } from "../../../../lib/session";
+import { isSuperAdminRole } from "../../../../lib/roles";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 let prisma: PrismaClient;
@@ -18,6 +20,11 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma2 = prisma;
 
 export async function PATCH(req: Request) {
   try {
+    const session = await getSessionUser();
+    if (!session || !isSuperAdminRole(session.role)) {
+      return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
+    }
+
     const body = await req.json();
     const { date, status } = body;
 
