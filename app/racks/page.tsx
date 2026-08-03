@@ -360,7 +360,14 @@ export default function RacksPage() {
 
   const globalMissingPieces = useMemo(() => {
     const missing = new Set<string>();
-    
+
+    // Rack numbering runs sequentially across the whole business, not per
+    // admin — whoever happened to receive the next batch just continues the
+    // count. Scanning each admin's list separately (the old approach) misses
+    // exactly the gaps that matter most: a piece missing right at the
+    // boundary between two admins, where neither admin's own list has a
+    // neighboring entry to compare against. Building one combined list
+    // across everyone (+ central) first is what actually catches those.
     const findGaps = (rackList: any[]) => {
       const sorted = [...rackList].sort((a: any, b: any) => {
         const matchA = a.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
@@ -399,9 +406,12 @@ export default function RacksPage() {
       }
     };
 
-    users.forEach(u => findGaps(u.racks || []));
-    findGaps(centralRacks);
-    
+    const combined = [
+      ...users.flatMap(u => u.racks || []),
+      ...centralRacks,
+    ];
+    findGaps(combined);
+
     return Array.from(missing).sort();
   }, [users, centralRacks, allRackNos]);
 
