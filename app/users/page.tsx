@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { useUser } from "../../components/UserProvider";
 import { useSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
+import { BASE_PATH } from "../../lib/basePath";
 import PasswordField from "../../components/PasswordField";
 import styles from "../page.module.css";
 
@@ -125,7 +126,7 @@ export default function UsersPage() {
     setIsSaving(true);
     setErrorMsg("");
     try {
-      const res = await fetch("/api/users", {
+      const res = await fetch(`${BASE_PATH}/api/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, nickname: newNickname.trim(), role: newRole, password: newPassword }),
@@ -177,7 +178,7 @@ export default function UsersPage() {
     try {
       const body: any = { name, role: editRole, nickname: editNickname.trim() };
       if (editPassword) body.password = editPassword;
-      const res = await fetch(`/api/users/${id}`, {
+      const res = await fetch(`${BASE_PATH}/api/users/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -204,7 +205,7 @@ export default function UsersPage() {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
+      const res = await fetch(`${BASE_PATH}/api/users/${u.id}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) {
         alert(data.error || "เกิดข้อผิดพลาดในการลบ");
@@ -221,7 +222,7 @@ export default function UsersPage() {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/users/${u.id}/kick`, { method: "POST" });
+      const res = await fetch(`${BASE_PATH}/api/users/${u.id}/kick`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         alert(data.error || "เกิดข้อผิดพลาดในการบังคับออกจากระบบ");
@@ -238,7 +239,7 @@ export default function UsersPage() {
     setIsSavingSettings(true);
     setSettingsMsg("");
     try {
-      const res = await fetch("/api/settings", {
+      const res = await fetch(`${BASE_PATH}/api/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settingsForm),
@@ -267,7 +268,7 @@ export default function UsersPage() {
     setIsExporting(true);
     setExportMsg("");
     try {
-      const res = await fetch(`/api/orders?dateFrom=${exportFrom}&dateTo=${exportTo}`);
+      const res = await fetch(`${BASE_PATH}/api/orders?dateFrom=${exportFrom}&dateTo=${exportTo}`);
       const data = await res.json();
       const orders = data.orders || [];
       if (orders.length === 0) {
@@ -312,7 +313,7 @@ export default function UsersPage() {
   const fetchAuditLog = async () => {
     setIsLoadingLog(true);
     try {
-      const res = await fetch("/api/audit-log");
+      const res = await fetch(`${BASE_PATH}/api/audit-log`);
       const data = await res.json();
       setAuditLogs(data.logs || []);
     } catch (e) {
@@ -346,7 +347,7 @@ export default function UsersPage() {
     setIsClearing(true);
     setClearMsg("");
     try {
-      const res = await fetch("/api/admin/clear-orders", {
+      const res = await fetch(`${BASE_PATH}/api/admin/clear-orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect } from "react";
+import { BASE_PATH } from "../lib/basePath";
 
 export interface AppSettings {
   commissionRate: number;
@@ -39,7 +40,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch("/api/settings");
+      const res = await fetch(`${BASE_PATH}/api/settings`);
       const data = await res.json();
       if (data.settings) {
         setSettings({

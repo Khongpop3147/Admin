@@ -6,6 +6,7 @@ import styles from "../page.module.css";
 import { useUser } from "../../components/UserProvider";
 import { useSettings, calculateCodAmount, AppSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
+import { BASE_PATH } from "../../lib/basePath";
 
 interface Order {
   id: string;
@@ -445,7 +446,7 @@ export default function Home() {
       if (date) params.set("date", date);
       if (customerNameSearch) params.set("customerName", customerNameSearch);
       const qs = params.toString();
-      const url = qs ? `/api/orders?${qs}` : "/api/orders";
+      const url = qs ? `${BASE_PATH}/api/orders?${qs}` : `${BASE_PATH}/api/orders`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.orders) {
@@ -679,7 +680,7 @@ export default function Home() {
   // themselves) — won't resolve on localhost without a tunnel like ngrok.
   const verifySlip = async (url: string, matchAmount?: number) => {
     try {
-      const res = await fetch("/api/verify-slip", {
+      const res = await fetch(`${BASE_PATH}/api/verify-slip`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, matchAmount }),
@@ -702,15 +703,16 @@ export default function Home() {
     form.append("file", file);
 
     try {
-      const res = await fetch("/api/upload", {
+      const res = await fetch(`${BASE_PATH}/api/upload`, {
         method: "POST",
         body: form,
       });
       const data = await res.json();
       if (data.url) {
         setFormData(prev => ({ ...prev, transferSlip: data.url, paymentStatus: "Paid" }));
-        // /api/upload returns a path like "/uploads/xxx.jpg" — Thunder needs a
-        // full absolute URL, not a bare path.
+        // /api/upload returns a basePath-prefixed path like
+        // "/admin/api/uploads/xxx.jpg" — Thunder needs a full absolute URL,
+        // not a bare path.
         const absoluteSlipUrl = data.url.startsWith("http") ? data.url : `${window.location.origin}${data.url}`;
         const expectedAmount = parseFloat(formData.actualReceivedAmount);
         const result = await verifySlip(absoluteSlipUrl, !isNaN(expectedAmount) && expectedAmount > 0 ? expectedAmount : undefined);
@@ -762,7 +764,7 @@ export default function Home() {
     form.append("file", file);
 
     try {
-      const res = await fetch("/api/upload", {
+      const res = await fetch(`${BASE_PATH}/api/upload`, {
         method: "POST",
         body: form,
       });
@@ -794,7 +796,7 @@ export default function Home() {
     const combinedAdminNote = [editOrderData.adminNote, slipIssueNote].filter(Boolean).join(" ");
     setIsSavingEdit(true);
     try {
-      const res = await fetch(`/api/orders/${editOrderData.id}`, {
+      const res = await fetch(`${BASE_PATH}/api/orders/${editOrderData.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -918,7 +920,7 @@ export default function Home() {
 
     setIsLoading(true);
     try {
-      const res = await fetch("/api/orders", {
+      const res = await fetch(`${BASE_PATH}/api/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

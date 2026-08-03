@@ -15,6 +15,16 @@ const PUBLIC_PATH_PREFIXES = ["/uploads/", "/api/uploads/"];
 
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // request.nextUrl.pathname is already basePath-stripped (a request for
+  // /admin/orders reports pathname "/orders" here — verified empirically).
+  // Since basePath IS "/admin", visiting /admin itself strips to pathname
+  // "/", which already lines up exactly with the app's real root page
+  // (app/page.tsx's role-based router) — no separate bridging needed here;
+  // that only happens for the bare domain root, which sits outside
+  // basePath's scope entirely and is handled by redirects() in
+  // next.config.ts instead (proxy never even sees those requests).
+  const basePath = request.nextUrl.basePath || "";
+  const withBase = (path: string) => new URL(basePath + path, request.url);
 
   if (
     PUBLIC_PATHS.includes(pathname) ||
@@ -31,29 +41,17 @@ export default async function proxy(request: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
     }
-    // The bare domain is meant to visibly bounce through /admin (the
-    // memorable entry point) on its way to the actual login page — only
-    // for a fresh, unauthenticated visit; an already-signed-in visit to
-    // "/" below falls through untouched, which is what keeps this from
-    // looping with the "/admin" handling right after.
-    if (pathname === "/") {
-      return NextResponse.redirect(new URL("/admin", request.url));
-    }
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // "/admin" has no page of its own — it's just the memorable entry point —
-  // so once authenticated (or once the /login redirect above has done its
-  // job and the user logs in), bounce it into the app's real role-based
-  // router at "/".
-  if (pathname === "/admin" || pathname === "/admin/") {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(withBase("/login"));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // The plain "/" entry matters: a request for the bare basePath root
+  // (i.e. exactly /admin, no trailing segment) strips to an empty pathname
+  // that the broad regex below doesn't match on its own (it requires a
+  // leading "/") — verified empirically, this proxy silently never ran for
+  // that exact one request shape without this explicit entry.
+  matcher: ["/", "/((?!_next/static|_next/image|favicon.ico).*)"],
 };

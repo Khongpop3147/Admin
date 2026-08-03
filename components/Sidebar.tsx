@@ -5,6 +5,7 @@ import styles from "./Sidebar.module.css";
 import { useUser } from "./UserProvider";
 import { usePathname } from "next/navigation";
 import { isSuperAdminRole } from "../lib/roles";
+import { BASE_PATH } from "../lib/basePath";
 
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -36,7 +37,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
     <aside className={`${styles.sidebar} ${isOpen ? styles.sidebarOpen : ''}`}>
       <div className={styles.logo}>
-        <img src="/logo.png" alt="EASY Crispy Pork" className={styles.logoIcon} />
+        <img src={`${BASE_PATH}/logo.png`} alt="EASY Crispy Pork" className={styles.logoIcon} />
         <h2>AdminSpace</h2>
         <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="ปิดเมนู">✕</button>
       </div>

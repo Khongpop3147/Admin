@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect } from "react";
+import { BASE_PATH } from "../lib/basePath";
 
 export interface User {
   id: string;
@@ -42,7 +43,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch("/api/users");
+      const res = await fetch(`${BASE_PATH}/api/users`);
       if (!res.ok) return;
       const data = await res.json();
       if (data.users) setUsers(data.users);
@@ -53,7 +54,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const fetchSession = async () => {
     try {
-      const res = await fetch("/api/auth/me");
+      const res = await fetch(`${BASE_PATH}/api/auth/me`);
       if (res.ok) {
         const data = await res.json();
         setSessionUserRaw(data.user);
@@ -94,10 +95,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch(`${BASE_PATH}/api/auth/logout`, { method: "POST" });
     setSessionUserRaw(null);
     setOverrideUserId(null);
-    window.location.href = "/login";
+    window.location.href = `${BASE_PATH}/login`;
   };
 
   return (

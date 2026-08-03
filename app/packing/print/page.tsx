@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { BASE_PATH } from "../../../lib/basePath";
 
 interface Order {
   id: string;
@@ -53,8 +54,8 @@ function PrintSlipContent() {
   const fetchOrders = async (date: string) => {
     try {
       const [ordersRes, usersRes] = await Promise.all([
-        fetch(`/api/orders?date=${date}`),
-        fetch(`/api/users`),
+        fetch(`${BASE_PATH}/api/orders?date=${date}`),
+        fetch(`${BASE_PATH}/api/users`),
       ]);
       const ordersData = await ordersRes.json();
       const usersData = await usersRes.json();

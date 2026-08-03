@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "../../components/UserProvider";
 import { useSettings, AppSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
+import { BASE_PATH } from "../../lib/basePath";
 import styles from "../page.module.css";
 
 interface Order {
@@ -392,8 +393,8 @@ export default function DashboardPage() {
                 ? `dateFrom=${monthRange.from}&dateTo=${monthRange.to}`
                 : `dateFrom=${yearRange.from}&dateTo=${yearRange.to}`;
         const url = sellerName
-          ? `/api/orders?${range}&sellerName=${encodeURIComponent(sellerName)}`
-          : `/api/orders?${range}`;
+          ? `${BASE_PATH}/api/orders?${range}&sellerName=${encodeURIComponent(sellerName)}`
+          : `${BASE_PATH}/api/orders?${range}`;
         const res = await fetch(url);
         const data = await res.json();
         setOrders(data.orders || []);
@@ -426,8 +427,8 @@ export default function DashboardPage() {
               const to = ym === yearRange.to.slice(0, 7) ? yearRange.to : lastDayOfMonthStr(ym);
               const dateParams = `dateFrom=${from}&dateTo=${to}`;
               const url = sellerName
-                ? `/api/orders?${dateParams}&sellerName=${encodeURIComponent(sellerName)}`
-                : `/api/orders?${dateParams}`;
+                ? `${BASE_PATH}/api/orders?${dateParams}&sellerName=${encodeURIComponent(sellerName)}`
+                : `${BASE_PATH}/api/orders?${dateParams}`;
               const res = await fetch(url);
               const data = await res.json();
               const monthOrders: Order[] = data.orders || [];
@@ -450,8 +451,8 @@ export default function DashboardPage() {
         const results = await Promise.all(
           dates.map(async (d) => {
             const url = sellerName
-              ? `/api/orders?date=${d}&sellerName=${encodeURIComponent(sellerName)}`
-              : `/api/orders?date=${d}`;
+              ? `${BASE_PATH}/api/orders?date=${d}&sellerName=${encodeURIComponent(sellerName)}`
+              : `${BASE_PATH}/api/orders?date=${d}`;
             const res = await fetch(url);
             const data = await res.json();
             const dayOrders: Order[] = data.orders || [];

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
+import { BASE_PATH } from "../../lib/basePath";
 import styles from "../page.module.css";
 
 interface DraftRack {
@@ -156,7 +157,7 @@ export default function RacksPage() {
 
   const fetchDeletedLogs = async () => {
     try {
-      const res = await fetch("/api/racks/deleted");
+      const res = await fetch(`${BASE_PATH}/api/racks/deleted`);
       const data = await res.json();
       if (data.success) {
         setDeletedLogs(data.logs);
@@ -660,7 +661,7 @@ export default function RacksPage() {
 
     setIsLoading(true);
     try {
-      const res = await fetch("/api/users/racks/batch", {
+      const res = await fetch(`${BASE_PATH}/api/users/racks/batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: selectedUserId, racks: racksToAssign }),
@@ -686,7 +687,7 @@ export default function RacksPage() {
     if (!confirm("ต้องการเพิกถอนถาดนี้ใช่ไหมครับ?")) return;
 
     try {
-      const res = await fetch(`/api/users/racks?id=${assignmentId}`, { method: "DELETE" });
+      const res = await fetch(`${BASE_PATH}/api/users/racks?id=${assignmentId}`, { method: "DELETE" });
       if (res.ok) {
         await fetchUsers();
         fetchDeletedLogs();
@@ -701,7 +702,7 @@ export default function RacksPage() {
     if (!distributeTargetUserId || selectedCentralRacks.size === 0) return;
     setIsDistributing(true);
     try {
-      const res = await fetch("/api/users/racks/reassign", {
+      const res = await fetch(`${BASE_PATH}/api/users/racks/reassign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -729,7 +730,7 @@ export default function RacksPage() {
   const handleSaveRackName = async (id: string) => {
     if (!editingRackNo.trim()) return;
     try {
-      const res = await fetch("/api/users/racks", {
+      const res = await fetch(`${BASE_PATH}/api/users/racks`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, rackNo: editingRackNo, weight: editingWeight }),
@@ -751,7 +752,7 @@ export default function RacksPage() {
 
     setIsShifting(true);
     try {
-      const res = await fetch("/api/users/racks/shift", {
+      const res = await fetch(`${BASE_PATH}/api/users/racks/shift`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ startRackNo: bulkShiftTarget.trim(), direction }),
@@ -786,7 +787,7 @@ export default function RacksPage() {
         payload.weight = Number(manualAddWeight);
       }
 
-      const res = await fetch("/api/users/racks", {
+      const res = await fetch(`${BASE_PATH}/api/users/racks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

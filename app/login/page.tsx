@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import PasswordField from "../../components/PasswordField";
+import { BASE_PATH } from "../../lib/basePath";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,7 +21,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(`${BASE_PATH}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), password }),
@@ -30,7 +31,7 @@ export default function LoginPage() {
         setError(data.error || "เข้าสู่ระบบไม่สำเร็จ");
         return;
       }
-      window.location.href = "/";
+      window.location.href = `${BASE_PATH}/`;
     } catch (e) {
       setError("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
     } finally {

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useUser } from "../../components/UserProvider";
 import { useSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
+import { BASE_PATH } from "../../lib/basePath";
 import styles from "../page.module.css";
 
 interface Order {
@@ -100,7 +101,7 @@ export default function StorefrontPage() {
     setIsSubmittingSale(true);
     setSaleMsg("");
     try {
-      const res = await fetch("/api/orders", {
+      const res = await fetch(`${BASE_PATH}/api/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -151,7 +152,7 @@ export default function StorefrontPage() {
   const fetchOrders = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/orders?platform=Storefront");
+      const res = await fetch(`${BASE_PATH}/api/orders?platform=Storefront`);
       const data = await res.json();
       if (res.ok) setOrders(data.orders);
     } catch (e) {
@@ -168,7 +169,7 @@ export default function StorefrontPage() {
 
   const updateOrderStatus = async (id: string, newStatus: string) => {
     try {
-      const res = await fetch(`/api/orders/${id}`, {
+      const res = await fetch(`${BASE_PATH}/api/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderStatus: newStatus, editedBy: currentUser?.name }),
@@ -186,7 +187,7 @@ export default function StorefrontPage() {
     if (!editingOrder) return;
 
     try {
-      const res = await fetch(`/api/orders/${editingOrder.id}`, {
+      const res = await fetch(`${BASE_PATH}/api/orders/${editingOrder.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

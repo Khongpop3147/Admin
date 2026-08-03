@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { writeFile } from "fs/promises";
 import path from "path";
 import sharp from "sharp";
+import { BASE_PATH } from "../../../lib/basePath";
 
 // Slip photos come straight off a phone camera (or an unsent WhatsApp/LINE
 // forward) with zero compression — a single upload can be 3-8MB despite the
@@ -51,7 +52,10 @@ export async function POST(req: Request) {
     // Next.js's static public/ handler only reliably serves files that
     // existed when the server process started, so a file uploaded seconds
     // ago while the server is already running can silently 404 there.
-    const fileUrl = `/api/uploads/${filename}`;
+    // Includes BASE_PATH since this exact string gets stored as-is in
+    // Order.transferSlip and used directly as a link/fetch target by
+    // whatever reads it back later — nothing downstream re-prefixes it.
+    const fileUrl = `${BASE_PATH}/api/uploads/${filename}`;
 
     return NextResponse.json({ success: true, url: fileUrl }, { status: 201 });
   } catch (error) {

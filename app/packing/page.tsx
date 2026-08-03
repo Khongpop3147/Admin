@@ -8,6 +8,7 @@ import * as XLSX from "xlsx";
 import { useRef } from "react";
 import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
+import { BASE_PATH } from "../../lib/basePath";
 import styles from "../page.module.css";
 
 function formatMoney(value: unknown): string {
@@ -89,7 +90,7 @@ export default function PackingPage() {
     latestRequestedDateRef.current = requestedDate;
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/orders?date=${requestedDate}`);
+      const res = await fetch(`${BASE_PATH}/api/orders?date=${requestedDate}`);
       const data = await res.json();
       // A newer request may have fired (and already resolved) while this one
       // was in flight — if so, drop this response instead of overwriting the
@@ -114,7 +115,7 @@ export default function PackingPage() {
 
   const updateOrderStatus = async (id: string, newStatus: string) => {
     try {
-      const res = await fetch(`/api/orders/${id}`, {
+      const res = await fetch(`${BASE_PATH}/api/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderStatus: newStatus, editedBy: currentUser?.name })
@@ -129,7 +130,7 @@ export default function PackingPage() {
 
   const updateTracking = async (id: string, tracking: string) => {
     try {
-      const res = await fetch(`/api/orders/${id}`, {
+      const res = await fetch(`${BASE_PATH}/api/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trackingNumber: tracking, editedBy: currentUser?.name })
@@ -147,7 +148,7 @@ export default function PackingPage() {
     if (!editingOrder) return;
     
     try {
-      const res = await fetch(`/api/orders/${editingOrder.id}`, {
+      const res = await fetch(`${BASE_PATH}/api/orders/${editingOrder.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -286,7 +287,7 @@ export default function PackingPage() {
       // print area, different cell styles) that made their importer silently
       // reject every row. Loading their real template and only overwriting
       // the data cells guarantees the file stays byte-for-byte compatible.
-      const templateRes = await fetch('/Postone_Template.xlsx');
+      const templateRes = await fetch(`${BASE_PATH}/Postone_Template.xlsx`);
       if (!templateRes.ok) throw new Error('โหลดไฟล์ template ไม่สำเร็จ');
       const templateBuffer = await templateRes.arrayBuffer();
 
@@ -354,7 +355,7 @@ export default function PackingPage() {
         return;
       }
 
-      const res = await fetch("/api/orders/bulk-tracking", {
+      const res = await fetch(`${BASE_PATH}/api/orders/bulk-tracking`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ updates })
@@ -405,7 +406,7 @@ export default function PackingPage() {
         return;
       }
 
-      const res = await fetch("/api/orders/confirm-cod", {
+      const res = await fetch(`${BASE_PATH}/api/orders/confirm-cod`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trackingNumbers: Array.from(candidates) }),
@@ -437,7 +438,7 @@ export default function PackingPage() {
       return;
     }
     try {
-      const res = await fetch(`/api/orders/${order.id}`, {
+      const res = await fetch(`${BASE_PATH}/api/orders/${order.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isReturned: nextValue, editedBy: currentUser?.name }),
@@ -458,7 +459,7 @@ export default function PackingPage() {
       return;
     }
     try {
-      const res = await fetch(`/api/orders/${order.id}`, { method: "DELETE" });
+      const res = await fetch(`${BASE_PATH}/api/orders/${order.id}`, { method: "DELETE" });
       const data = await res.json();
       if (res.ok) {
         setOrders(orders.filter(o => o.id !== order.id));
@@ -529,7 +530,7 @@ export default function PackingPage() {
           </button>
 
           <button
-            onClick={() => window.open(`/packing/print?date=${selectedDate}`, '_blank')}
+            onClick={() => window.open(`${BASE_PATH}/packing/print?date=${selectedDate}`, '_blank')}
             className={styles.toolbarBtn}
             style={{ background: 'var(--accent-blue, #4a90e2)', color: '#fff' }}
           >
@@ -581,7 +582,7 @@ export default function PackingPage() {
                 if (confirm("ต้องการเปลี่ยนสถานะออเดอร์ของวันนี้ทั้งหมดเป็น 'จัดส่งแล้ว' และเริ่มหน้าจอวันใหม่ใช่หรือไม่?")) {
                   setIsLoading(true);
                   try {
-                    const res = await fetch('/api/orders/bulk', {
+                    const res = await fetch(`${BASE_PATH}/api/orders/bulk`, {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ date: selectedDate, status: 'Shipped' })
