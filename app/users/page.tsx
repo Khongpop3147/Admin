@@ -56,12 +56,14 @@ export default function UsersPage() {
   // --- User management state ---
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newNickname, setNewNickname] = useState("");
   const [newRole, setNewRole] = useState("ADMIN");
   const [newPassword, setNewPassword] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [editNickname, setEditNickname] = useState("");
   const [editRole, setEditRole] = useState("ADMIN");
   const [editPassword, setEditPassword] = useState("");
 
@@ -126,7 +128,7 @@ export default function UsersPage() {
       const res = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, role: newRole, password: newPassword }),
+        body: JSON.stringify({ name, nickname: newNickname.trim(), role: newRole, password: newPassword }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -135,6 +137,7 @@ export default function UsersPage() {
       }
       await fetchUsers();
       setNewName("");
+      setNewNickname("");
       setNewRole("ADMIN");
       setNewPassword("");
       setIsAddOpen(false);
@@ -148,6 +151,7 @@ export default function UsersPage() {
   const startEdit = (u: (typeof users)[number]) => {
     setEditingId(u.id);
     setEditName(u.name);
+    setEditNickname((u as any).nickname || "");
     setEditRole(u.role);
     setEditPassword("");
     setErrorMsg("");
@@ -171,7 +175,7 @@ export default function UsersPage() {
     setIsSaving(true);
     setErrorMsg("");
     try {
-      const body: any = { name, role: editRole };
+      const body: any = { name, role: editRole, nickname: editNickname.trim() };
       if (editPassword) body.password = editPassword;
       const res = await fetch(`/api/users/${id}`, {
         method: "PATCH",
@@ -407,6 +411,13 @@ export default function UsersPage() {
                       onChange={(e) => setEditName(e.target.value)}
                       placeholder="ชื่อ"
                     />
+                    <input
+                      className={styles.input}
+                      style={{ flex: "1 1 160px", padding: "8px 12px", fontSize: "14px" }}
+                      value={editNickname}
+                      onChange={(e) => setEditNickname(e.target.value)}
+                      placeholder="ชื่อเล่น (แสดงในใบเบิกหมู)"
+                    />
                     <select
                       className={styles.input}
                       style={{ padding: "8px 12px", fontSize: "14px" }}
@@ -457,6 +468,7 @@ export default function UsersPage() {
                     </div>
                     <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                       {ROLE_LABELS[u.role] || u.role}
+                      {(u as any).nickname && ` · ชื่อเล่น: ${(u as any).nickname}`}
                       {u.role !== "SUPER_ADMIN" && u.racks && u.racks.length > 0 && ` · ชิ้นหมู ${u.racks.length} รายการ`}
                     </div>
                   </div>
@@ -697,6 +709,16 @@ export default function UsersPage() {
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="ชื่อพนักงาน"
                 autoFocus
+              />
+            </div>
+
+            <div className={styles.formGroup} style={{ marginBottom: "16px" }}>
+              <label className={styles.label}>ชื่อเล่น (แสดงในใบเบิกหมู)</label>
+              <input
+                className={styles.input}
+                value={newNickname}
+                onChange={(e) => setNewNickname(e.target.value)}
+                placeholder="ไม่บังคับ — ถ้าไม่ใส่จะใช้ชื่อด้านบนแทน"
               />
             </div>
 

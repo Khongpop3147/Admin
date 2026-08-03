@@ -407,7 +407,7 @@ export default function RacksPage() {
         const racks = u.racks || [];
         const pieces = racks.filter((r) => !r.isUsedUp).length;
         const weight = racks.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0);
-        return { name: u.name, pieces, weight };
+        return { name: u.nickname || u.name, pieces, weight };
       })
       .sort((a, b) => b.weight - a.weight);
 
@@ -807,6 +807,7 @@ export default function RacksPage() {
   };
 
   const selectedUser = users.find(u => u.id === selectedUserId);
+  const displayName = (u: any) => u?.nickname || u?.name;
 
   return (
     <div className={styles.container}>
@@ -1009,7 +1010,7 @@ export default function RacksPage() {
                             )}
                             {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
                               <option key={u.id} value={u.id}>
-                                {u.name} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} กก.)
+                                {displayName(u)} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} กก.)
                               </option>
                             ))}
                           </select>
@@ -1022,7 +1023,7 @@ export default function RacksPage() {
                         disabled={isLoading || !selectedUserId}
                         style={{ width: '100%', background: 'var(--accent-blue)', color: 'white' }}
                       >
-                        {isLoading ? "กำลังมอบหมาย..." : `มอบให้ ${selectedUserId === currentUser.id ? "คลังกลาง" : (selectedUser?.name || "แอดมิน")}`}
+                        {isLoading ? "กำลังมอบหมาย..." : `มอบให้ ${selectedUserId === currentUser.id ? "คลังกลาง" : (displayName(selectedUser) || "แอดมิน")}`}
                       </button>
                     </div>
                   </div>
@@ -1064,7 +1065,7 @@ export default function RacksPage() {
                           )}
                           {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
                             <option key={u.id} value={u.id}>
-                              {u.name}
+                              {displayName(u)}
                             </option>
                           ))}
                         </select>
@@ -1351,7 +1352,7 @@ export default function RacksPage() {
                   <option value="">-- เลือกแอดมินปลายทาง --</option>
                   {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
                     <option key={u.id} value={u.id}>
-                      {u.name}
+                      {displayName(u)}
                     </option>
                   ))}
                 </select>
@@ -1400,7 +1401,7 @@ export default function RacksPage() {
                   )}
                   {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
                     <option key={u.id} value={u.id}>
-                      {u.name}
+                      {displayName(u)}
                     </option>
                   ))}
                 </select>

@@ -69,6 +69,7 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const name = (body.name || "").trim();
+    const nickname = (body.nickname || "").trim();
     const role = body.role;
     const password = body.password || "";
 
@@ -84,7 +85,7 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
-      data: { name, role, password: hashedPassword },
+      data: { name, nickname: nickname || null, role, password: hashedPassword },
       include: { racks: true },
     });
     return NextResponse.json({ user: stripPassword(user) }, { status: 201 });

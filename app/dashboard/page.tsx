@@ -498,11 +498,15 @@ export default function DashboardPage() {
 
   const perAdminBreakdown = useMemo(() => {
     if (!isSuperAdmin || viewTarget !== "") return [];
+    // Keyed by the real sellerName (what orders actually store), but the
+    // `name` field itself is the nickname-if-set display value — nothing
+    // downstream of this breakdown looks the key back up by name.
     const map = new Map<string, { name: string; orderCount: number; weight: number; sales: number; commission: number; returnedCount: number }>();
     orders.forEach((o) => {
-      const name = o.sellerName || "ไม่ระบุ";
-      if (!map.has(name)) map.set(name, { name, orderCount: 0, weight: 0, sales: 0, commission: 0, returnedCount: 0 });
-      const entry = map.get(name)!;
+      const sellerName = o.sellerName || "ไม่ระบุ";
+      const displayName = users.find((u) => u.name === sellerName)?.nickname || sellerName;
+      if (!map.has(sellerName)) map.set(sellerName, { name: displayName, orderCount: 0, weight: 0, sales: 0, commission: 0, returnedCount: 0 });
+      const entry = map.get(sellerName)!;
       entry.orderCount++;
       entry.weight += parseFloat(o.crispyPorkWeight || "0") || 0;
       entry.sales += isExcludedFromRevenue(o) ? 0 : Number(o.price) || 0;
@@ -510,7 +514,7 @@ export default function DashboardPage() {
       if (o.isReturned) entry.returnedCount++;
     });
     return Array.from(map.values()).sort((a, b) => b.sales - a.sales);
-  }, [orders, isSuperAdmin, viewTarget, settings]);
+  }, [orders, isSuperAdmin, viewTarget, settings, users]);
 
   const inventoryTargetUser = useMemo(() => {
     if (!isSuperAdmin) return currentUser;
@@ -678,9 +682,9 @@ export default function DashboardPage() {
               style={{ padding: "10px 16px", minWidth: "220px" }}
             >
               <option value="">🏢 ทั้งบริษัท</option>
-              <option value={currentUser.name}>👤 ตัวเอง ({currentUser.name})</option>
+              <option value={currentUser.name}>👤 ตัวเอง ({currentUser.nickname || currentUser.name})</option>
               {adminOptions.map((u) => (
-                <option key={u.id} value={u.name}>👤 {u.name}</option>
+                <option key={u.id} value={u.name}>👤 {u.nickname || u.name}</option>
               ))}
             </select>
           </div>
@@ -883,7 +887,7 @@ export default function DashboardPage() {
 
           {inventoryTargetUser && (
             <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px" }}>
-              <h3 style={{ fontSize: "15px", marginBottom: "16px", color: "var(--text-secondary)" }}>📦 คลังหมูคงเหลือของ {inventoryTargetUser.name}</h3>
+              <h3 style={{ fontSize: "15px", marginBottom: "16px", color: "var(--text-secondary)" }}>📦 คลังหมูคงเหลือของ {inventoryTargetUser.nickname || inventoryTargetUser.name}</h3>
               <div style={{ display: "flex", gap: "16px", justifyContent: "space-around", textAlign: "center" }}>
                 <div>
                   <div style={{ fontSize: "28px", fontWeight: "bold", color: "var(--accent-blue)" }}>

@@ -42,6 +42,7 @@ model Order {
 model User {
   id             String  @id @default(uuid())
   name           String
+  nickname       String? // shown instead of `name` on the per-admin pork slip sections
   role           String  @default("ADMIN") // "SUPER_ADMIN" | "ADMIN" | "PACKING" | "CENTRAL_INVENTORY" | "DEV"
   password       String? // bcrypt hash; null = login not set up yet for this account
   sessionVersion Int     @default(0) // bumped to force-invalidate every existing login for this user

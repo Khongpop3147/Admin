@@ -75,6 +75,10 @@ export async function PATCH(
       }
       updateData.password = await bcrypt.hash(String(body.password), 10);
     }
+    if (body.nickname !== undefined) {
+      const nickname = String(body.nickname).trim();
+      updateData.nickname = nickname || null;
+    }
 
     const user = await prisma.$transaction(async (tx) => {
       if (mustKeepOneSuperAdmin) {
