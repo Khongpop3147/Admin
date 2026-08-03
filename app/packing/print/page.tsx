@@ -30,13 +30,13 @@ function PrintSlipContent() {
     }
   }, [dateStr]);
 
-  // Report grouping order: NIM Express, then EMS, then EMS (COD) last.
+  // Report grouping order: NIM Express, then EMS, then COD (either method) last.
   const getShippingRank = (order: Order) => {
     const method = order.shippingMethod || "";
     const hasCod = !!order.codAmount;
+    if (hasCod) return 2;
     if (method === "NIM Express") return 0;
-    if (method === "EMS" && !hasCod) return 1;
-    if (method === "EMS" && hasCod) return 2;
+    if (method === "EMS") return 1;
     return 3;
   };
 
