@@ -46,7 +46,11 @@ function SectionCard({ title, subtitle, children }: { title: string; subtitle?: 
 }
 
 export default function UsersPage() {
-  const { currentUser, users, fetchUsers } = useUser();
+  const { currentUser, sessionUser, users, fetchUsers } = useUser();
+  // Real session role, not the DEV "view as" override — a DEV browsing as
+  // someone else shouldn't lose access to this DEV-only button, and no
+  // other role should ever see it regardless of what they're viewing as.
+  const isRealDev = sessionUser?.role === "DEV";
   const { settings, fetchSettings } = useSettings();
 
   // --- User management state ---
@@ -203,6 +207,23 @@ export default function UsersPage() {
         return;
       }
       await fetchUsers();
+    } catch (e) {
+      alert("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
+    }
+  };
+
+  const handleKick = async (u: (typeof users)[number]) => {
+    const confirmed = confirm(`บังคับให้ "${u.name}" ออกจากระบบทุกอุปกรณ์ที่ล็อกอินอยู่?\n\nต้องล็อกอินใหม่ถึงจะใช้งานได้อีกครั้ง`);
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/users/${u.id}/kick`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "เกิดข้อผิดพลาดในการบังคับออกจากระบบ");
+        return;
+      }
+      alert(`บังคับ "${u.name}" ออกจากระบบเรียบร้อย`);
     } catch (e) {
       alert("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
     }
@@ -445,6 +466,15 @@ export default function UsersPage() {
                   >
                     ✏️ แก้ไข
                   </button>
+                  {isRealDev && u.hasPassword && (
+                    <button
+                      onClick={() => handleKick(u)}
+                      title="บังคับออกจากระบบทุกอุปกรณ์ที่ล็อกอินอยู่"
+                      style={{ background: "rgba(255,172,51,0.15)", color: "#ffac33", border: "1px solid rgba(255,172,51,0.3)", borderRadius: "6px", padding: "8px 14px", cursor: "pointer", fontSize: "13px" }}
+                    >
+                      🥾 เตะออก
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDelete(u)}
                     style={{ background: "rgba(255,107,107,0.15)", color: "#ff6b6b", border: "1px solid rgba(255,107,107,0.3)", borderRadius: "6px", padding: "8px 14px", cursor: "pointer", fontSize: "13px" }}

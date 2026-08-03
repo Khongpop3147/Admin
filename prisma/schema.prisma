@@ -40,11 +40,12 @@ model Order {
 }
 
 model User {
-  id       String  @id @default(uuid())
-  name     String
-  role     String  @default("ADMIN") // "SUPER_ADMIN" | "ADMIN" | "PACKING" | "CENTRAL_INVENTORY" | "DEV"
-  password String? // bcrypt hash; null = login not set up yet for this account
-  racks    RackAssignment[]
+  id             String  @id @default(uuid())
+  name           String
+  role           String  @default("ADMIN") // "SUPER_ADMIN" | "ADMIN" | "PACKING" | "CENTRAL_INVENTORY" | "DEV"
+  password       String? // bcrypt hash; null = login not set up yet for this account
+  sessionVersion Int     @default(0) // bumped to force-invalidate every existing login for this user
+  racks          RackAssignment[]
 }
 
 model DailyCounter {

@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" }, { status: 401 });
     }
 
-    await createSessionCookie({ userId: user.id, name: user.name, role: user.role });
+    await createSessionCookie({ userId: user.id, name: user.name, role: user.role, sessionVersion: user.sessionVersion });
 
     return NextResponse.json({ success: true, user: { id: user.id, name: user.name, role: user.role } }, { status: 200 });
   } catch (error) {
