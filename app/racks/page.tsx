@@ -383,22 +383,27 @@ export default function RacksPage() {
       for (let i = 0; i < sorted.length - 1; i++) {
         const a = sorted[i];
         const b = sorted[i+1];
-        if (!a.isUsedUp && !b.isUsedUp) {
-          const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-          const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-          if (aM && bM && aM[1] === bM[1]) {
-            const p = aM[1];
-            const anum = parseInt(aM[2], 10) * 5 + parseInt(aM[3], 10);
-            const bnum = parseInt(bM[2], 10) * 5 + parseInt(bM[3], 10);
-            if (bnum - anum > 1 && bnum - anum < 10) {
-              for (let n = anum + 1; n < bnum; n++) {
-                let pNum = n % 5;
-                let rNum = Math.floor(n / 5);
-                if (pNum === 0) { pNum = 5; rNum--; }
-                const missingName = `${p}${String(rNum).padStart(aM[2].length, '0')}-${pNum}`;
-                if (!allRackNos.includes(missingName)) {
-                  missing.add(missingName);
-                }
+        // Whether a piece has already sold out (isUsedUp) says nothing
+        // about whether the code between it and its neighbor was ever
+        // created — checking that condition here was hiding real gaps
+        // (confirmed against production: L112-1 sits right after L111-5,
+        // but L112-2 is already isUsedUp, so this used to skip the pair
+        // entirely). The only thing that matters is whether the candidate
+        // code exists anywhere at all, checked below via allRackNos.
+        const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+        const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+        if (aM && bM && aM[1] === bM[1]) {
+          const p = aM[1];
+          const anum = parseInt(aM[2], 10) * 5 + parseInt(aM[3], 10);
+          const bnum = parseInt(bM[2], 10) * 5 + parseInt(bM[3], 10);
+          if (bnum - anum > 1 && bnum - anum < 10) {
+            for (let n = anum + 1; n < bnum; n++) {
+              let pNum = n % 5;
+              let rNum = Math.floor(n / 5);
+              if (pNum === 0) { pNum = 5; rNum--; }
+              const missingName = `${p}${String(rNum).padStart(aM[2].length, '0')}-${pNum}`;
+              if (!allRackNos.includes(missingName)) {
+                missing.add(missingName);
               }
             }
           }
