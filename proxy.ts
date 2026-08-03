@@ -16,14 +16,6 @@ const PUBLIC_PATH_PREFIXES = ["/uploads/", "/api/uploads/"];
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // "/admin" is the entry point people are told to visit — bounce to the
-  // real root, which already sends an unauthenticated visitor to /login
-  // (via the check below) or a logged-in one straight to their role's
-  // landing page, so this never double-prompts someone already signed in.
-  if (pathname === "/admin" || pathname === "/admin/") {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
-
   if (
     PUBLIC_PATHS.includes(pathname) ||
     PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p)) ||
@@ -39,8 +31,24 @@ export default async function proxy(request: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
     }
+    // The bare domain is meant to visibly bounce through /admin (the
+    // memorable entry point) on its way to the actual login page — only
+    // for a fresh, unauthenticated visit; an already-signed-in visit to
+    // "/" below falls through untouched, which is what keeps this from
+    // looping with the "/admin" handling right after.
+    if (pathname === "/") {
+      return NextResponse.redirect(new URL("/admin", request.url));
+    }
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // "/admin" has no page of its own — it's just the memorable entry point —
+  // so once authenticated (or once the /login redirect above has done its
+  // job and the user logs in), bounce it into the app's real role-based
+  // router at "/".
+  if (pathname === "/admin" || pathname === "/admin/") {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();
