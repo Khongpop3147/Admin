@@ -362,7 +362,7 @@ export default function PackingPage() {
 
       const result = await res.json();
       if (res.ok) {
-        alert(`อัปเดต Tracking สำเร็จ ${result.successCount} รายการ\\nหาชื่อไม่เจอหรืออัปเดตไม่ได้ ${result.notFoundCount} รายการ\\n\\nรายชื่อที่ไม่พบ:\\n${result.notFoundNames.join(', ')}`);
+        alert(`อัปเดต Tracking สำเร็จ ${result.successCount} รายการ`);
         fetchOrders();
       } else {
         alert("เกิดข้อผิดพลาดในการอัปเดต Tracking");
