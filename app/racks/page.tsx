@@ -149,6 +149,9 @@ export default function RacksPage() {
   const [showAdvancedTools, setShowAdvancedTools] = useState(false);
   const [isDeletedLogModalOpen, setIsDeletedLogModalOpen] = useState(false);
   const [assignmentsSearch, setAssignmentsSearch] = useState("");
+  const [selectedAssignmentRacks, setSelectedAssignmentRacks] = useState<Set<string>>(new Set());
+  const [moveTargetUserId, setMoveTargetUserId] = useState("");
+  const [isMoving, setIsMoving] = useState(false);
   const [manualAddRackNo, setManualAddRackNo] = useState("");
   const [manualAddWeight, setManualAddWeight] = useState<number | "">("");
   const [isAddingManual, setIsAddingManual] = useState(false);
@@ -724,6 +727,40 @@ export default function RacksPage() {
       alert("เกิดข้อผิดพลาดขณะแจกจ่าย");
     } finally {
       setIsDistributing(false);
+    }
+  };
+
+  // Reuses the same reassign endpoint the "แจกจ่ายจากคลังกลาง" flow already
+  // uses — that one only ever moves FROM central; this lets Super Admin move
+  // selected pieces from whichever admin is currently being viewed in the
+  // "รายการที่มอบหมายไปแล้ว" modal to anyone else, including back to central.
+  const handleMoveSelected = async () => {
+    if (!moveTargetUserId || selectedAssignmentRacks.size === 0) return;
+    setIsMoving(true);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/users/racks/reassign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rackIds: Array.from(selectedAssignmentRacks),
+          newUserId: moveTargetUserId,
+        }),
+      });
+      if (res.ok) {
+        const movedCount = selectedAssignmentRacks.size;
+        setSelectedAssignmentRacks(new Set());
+        setMoveTargetUserId("");
+        await fetchUsers();
+        alert(`ย้ายสำเร็จ ${movedCount} ชิ้น!`);
+      } else {
+        const err = await res.json();
+        alert(err.error || "ย้ายไม่สำเร็จ");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะย้าย");
+    } finally {
+      setIsMoving(false);
     }
   };
 
@@ -1381,7 +1418,7 @@ export default function RacksPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>รายการที่มอบหมายไปแล้ว</h2>
               <button
-                onClick={() => setIsAssignmentsModalOpen(false)}
+                onClick={() => { setIsAssignmentsModalOpen(false); setSelectedAssignmentRacks(new Set()); setMoveTargetUserId(""); }}
                 style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
               >✕</button>
             </div>
@@ -1391,7 +1428,7 @@ export default function RacksPage() {
                 <select
                   className={styles.input}
                   value={selectedUserId}
-                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  onChange={(e) => { setSelectedUserId(e.target.value); setSelectedAssignmentRacks(new Set()); setMoveTargetUserId(""); }}
                   style={{ width: '300px' }}
                 >
                   <option value="">-- เลือก --</option>
@@ -1416,6 +1453,35 @@ export default function RacksPage() {
                   style={{ padding: '8px 12px', width: '250px', fontSize: '14px', marginLeft: 'auto' }}
                 />
             </div>
+
+            {selectedUserId && (
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', background: 'rgba(88,166,255,0.06)', border: '1px solid rgba(88,166,255,0.2)', borderRadius: '8px', padding: '12px 16px' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  เลือกแล้ว {selectedAssignmentRacks.size} ชิ้น
+                </span>
+                <select
+                  className={styles.input}
+                  value={moveTargetUserId}
+                  onChange={(e) => setMoveTargetUserId(e.target.value)}
+                  style={{ width: '260px', padding: '8px 12px', fontSize: '14px' }}
+                >
+                  <option value="">-- ย้ายไปให้ --</option>
+                  {centralUser && centralUser.id !== selectedUserId && (
+                    <option value={centralUser.id}>คลังกลาง</option>
+                  )}
+                  {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING" && u.id !== selectedUserId).map(u => (
+                    <option key={u.id} value={u.id}>{displayName(u)}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleMoveSelected}
+                  disabled={isMoving || !moveTargetUserId || selectedAssignmentRacks.size === 0}
+                  style={{ background: 'var(--accent-blue)', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', opacity: (!moveTargetUserId || selectedAssignmentRacks.size === 0) ? 0.5 : 1 }}
+                >
+                  {isMoving ? "กำลังย้าย..." : "ย้ายที่เลือก"}
+                </button>
+              </div>
+            )}
 
             <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignContent: 'start', background: 'rgba(0,0,0,0.2)' }}>
               {!users.find(u => u.id === selectedUserId) && selectedUserId !== currentUser.id ? (
@@ -1469,6 +1535,18 @@ export default function RacksPage() {
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div>
                               <div className={styles.itemName} style={{ textDecoration: rack.isUsedUp ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
+                                {!rack.isUsedUp && (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedAssignmentRacks.has(rack.id)}
+                                    onChange={(e) => {
+                                      const newSet = new Set(selectedAssignmentRacks);
+                                      if (e.target.checked) newSet.add(rack.id); else newSet.delete(rack.id);
+                                      setSelectedAssignmentRacks(newSet);
+                                    }}
+                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                  />
+                                )}
                                 {rack.rackNo}
                                 <button
                                   onClick={() => {
