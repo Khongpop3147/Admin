@@ -823,7 +823,8 @@ export default function RacksPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        alert(`เลื่อนสำเร็จ ${data.count} ชิ้น`);
+        const orderNote = data.ordersUpdated > 0 ? ` (อัปเดตรหัสถาดใน order เก่าไปด้วย ${data.ordersUpdated} ใบ)` : "";
+        alert(`เลื่อนสำเร็จ ${data.count} ชิ้น${orderNote}`);
         setBulkShiftTarget("");
         await fetchUsers();
       } else {

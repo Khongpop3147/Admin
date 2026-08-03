@@ -115,10 +115,46 @@ export async function POST(req: Request) {
         await tx.rackAssignment.update({ where: { id: t.id }, data: { rackNo: t.newName } });
       }
 
-      return targets.length;
+      // A piece's rackNo is also snapshotted into every order that ever drew
+      // from it (Order.rackDetails, keyed by assignmentId) — without this,
+      // an already-confirmed order's printed slip / detail view would keep
+      // showing the pre-shift code forever, no longer matching what's
+      // actually on the shelf. Only the rackNo inside each matching entry
+      // changes; weight and assignmentId are untouched.
+      const targetMap = new Map(targets.map((t) => [t.id, t.newName]));
+      const ordersWithRacks = await tx.order.findMany({
+        where: { rackDetails: { not: null } },
+        select: { id: true, rackDetails: true },
+      });
+
+      let ordersUpdated = 0;
+      for (const order of ordersWithRacks) {
+        if (!order.rackDetails) continue;
+        let details: any[];
+        try {
+          details = JSON.parse(order.rackDetails);
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(details)) continue;
+
+        let changed = false;
+        for (const d of details) {
+          if (d && d.assignmentId && targetMap.has(d.assignmentId)) {
+            d.rackNo = targetMap.get(d.assignmentId);
+            changed = true;
+          }
+        }
+        if (changed) {
+          await tx.order.update({ where: { id: order.id }, data: { rackDetails: JSON.stringify(details) } });
+          ordersUpdated++;
+        }
+      }
+
+      return { count: targets.length, ordersUpdated };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
-    return NextResponse.json({ success: true, count }, { status: 200 });
+    return NextResponse.json({ success: true, count: count.count, ordersUpdated: count.ordersUpdated }, { status: 200 });
 
   } catch (error: any) {
     console.error("Bulk shift error:", error);
