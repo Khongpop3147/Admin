@@ -152,6 +152,7 @@ export default function RacksPage() {
   const [selectedAssignmentRacks, setSelectedAssignmentRacks] = useState<Set<string>>(new Set());
   const [moveTargetUserId, setMoveTargetUserId] = useState("");
   const [isMoving, setIsMoving] = useState(false);
+  const [autoSelectMoveCount, setAutoSelectMoveCount] = useState("");
   const [manualAddRackNo, setManualAddRackNo] = useState("");
   const [manualAddWeight, setManualAddWeight] = useState<number | "">("");
   const [isAddingManual, setIsAddingManual] = useState(false);
@@ -730,6 +731,31 @@ export default function RacksPage() {
     }
   };
 
+  // Same "type a count, pick the N lowest racks" shortcut already used for
+  // distributing from central — grouped by base rack code (e.g. all of
+  // A005-1..5 count as one "rack"), not by individual piece.
+  const handleAutoSelectMoveRacks = () => {
+    const count = parseInt(autoSelectMoveCount, 10);
+    if (isNaN(count) || count <= 0) return;
+
+    const available = currentAdminPiecesWithGaps.filter((r: any) => !r.isMissingPlaceholder && !r.isUsedUp);
+    const grouped: Record<string, string[]> = {};
+    for (const r of available) {
+      const baseRack = r.rackNo.split('-')[0];
+      if (!grouped[baseRack]) grouped[baseRack] = [];
+      grouped[baseRack].push(r.id);
+    }
+
+    const sortedBaseRacks = Object.keys(grouped).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const selectedBaseRacks = sortedBaseRacks.slice(0, count);
+
+    const newSet = new Set<string>();
+    selectedBaseRacks.forEach((baseRack) => {
+      grouped[baseRack].forEach((id) => newSet.add(id));
+    });
+    setSelectedAssignmentRacks(newSet);
+  };
+
   // Reuses the same reassign endpoint the "แจกจ่ายจากคลังกลาง" flow already
   // uses — that one only ever moves FROM central; this lets Super Admin move
   // selected pieces from whichever admin is currently being viewed in the
@@ -750,6 +776,7 @@ export default function RacksPage() {
         const movedCount = selectedAssignmentRacks.size;
         setSelectedAssignmentRacks(new Set());
         setMoveTargetUserId("");
+        setAutoSelectMoveCount("");
         await fetchUsers();
         alert(`ย้ายสำเร็จ ${movedCount} ชิ้น!`);
       } else {
@@ -1418,7 +1445,7 @@ export default function RacksPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>รายการที่มอบหมายไปแล้ว</h2>
               <button
-                onClick={() => { setIsAssignmentsModalOpen(false); setSelectedAssignmentRacks(new Set()); setMoveTargetUserId(""); }}
+                onClick={() => { setIsAssignmentsModalOpen(false); setSelectedAssignmentRacks(new Set()); setMoveTargetUserId(""); setAutoSelectMoveCount(""); }}
                 style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
               >✕</button>
             </div>
@@ -1428,7 +1455,7 @@ export default function RacksPage() {
                 <select
                   className={styles.input}
                   value={selectedUserId}
-                  onChange={(e) => { setSelectedUserId(e.target.value); setSelectedAssignmentRacks(new Set()); setMoveTargetUserId(""); }}
+                  onChange={(e) => { setSelectedUserId(e.target.value); setSelectedAssignmentRacks(new Set()); setMoveTargetUserId(""); setAutoSelectMoveCount(""); }}
                   style={{ width: '300px' }}
                 >
                   <option value="">-- เลือก --</option>
@@ -1456,6 +1483,20 @@ export default function RacksPage() {
 
             {selectedUserId && (
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', background: 'rgba(88,166,255,0.06)', border: '1px solid rgba(88,166,255,0.2)', borderRadius: '8px', padding: '12px 16px' }}>
+                <input
+                  type="number"
+                  placeholder="จำนวน rack"
+                  value={autoSelectMoveCount}
+                  onChange={(e) => setAutoSelectMoveCount(e.target.value)}
+                  className={styles.input}
+                  style={{ width: '110px', padding: '8px 12px', fontSize: '14px' }}
+                />
+                <button
+                  onClick={handleAutoSelectMoveRacks}
+                  style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 14px', cursor: 'pointer', fontSize: '13px' }}
+                >
+                  เลือก rack น้อยไปมาก
+                </button>
                 <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                   เลือกแล้ว {selectedAssignmentRacks.size} ชิ้น
                 </span>
