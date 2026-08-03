@@ -311,7 +311,7 @@ export default function Home() {
   const flashSaveToast = () => {
     if (saveToastTimer.current) clearTimeout(saveToastTimer.current);
     setShowSaveToast(true);
-    saveToastTimer.current = setTimeout(() => setShowSaveToast(false), 1800);
+    saveToastTimer.current = setTimeout(() => setShowSaveToast(false), 1200);
   };
 
   useEffect(() => {
@@ -1730,21 +1730,21 @@ export default function Home() {
         <div
           style={{
             position: 'fixed',
-            bottom: '24px',
+            top: '50%',
             left: '50%',
-            transform: 'translateX(-50%)',
+            transform: 'translate(-50%, -50%)',
             background: 'var(--success-color)',
             color: '#fff',
-            padding: '12px 22px',
-            borderRadius: '10px',
-            fontSize: '14px',
-            fontWeight: 600,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+            padding: '22px 40px',
+            borderRadius: '16px',
+            fontSize: '22px',
+            fontWeight: 700,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
             zIndex: 200,
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            animation: 'toastSlideUp 0.25s ease-out',
+            gap: '12px',
+            animation: 'toastPop 0.2s ease-out',
             pointerEvents: 'none',
           }}
         >
