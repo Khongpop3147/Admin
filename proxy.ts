@@ -16,6 +16,14 @@ const PUBLIC_PATH_PREFIXES = ["/uploads/", "/api/uploads/"];
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // "/admin" is the entry point people are told to visit — bounce to the
+  // real root, which already sends an unauthenticated visitor to /login
+  // (via the check below) or a logged-in one straight to their role's
+  // landing page, so this never double-prompts someone already signed in.
+  if (pathname === "/admin" || pathname === "/admin/") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
   if (
     PUBLIC_PATHS.includes(pathname) ||
     PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p)) ||
