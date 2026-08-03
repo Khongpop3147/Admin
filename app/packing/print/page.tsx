@@ -13,6 +13,7 @@ interface Order {
   shippingMethod: string;
   orderStatus: string;
   codAmount?: number | null;
+  paymentStatus?: string;
 }
 
 function PrintSlipContent() {
@@ -80,14 +81,16 @@ function PrintSlipContent() {
   }, [isLoading, orders]);
 
   const getRackDisplay = (rackDetailsStr: string) => {
-    if (!rackDetailsStr || rackDetailsStr === '[]') return { details: "-", totalWeight: 0 };
+    if (!rackDetailsStr || rackDetailsStr === '[]') return { details: "-", totalWeight: 0, pieceCount: 0 };
     try {
       const racks = JSON.parse(rackDetailsStr);
       const groups: Record<string, number[]> = {};
       let totalWeight = 0;
-      
+      let pieceCount = 0;
+
       racks.forEach((r: any) => {
         if (!r.rackNo) return;
+        pieceCount += 1;
         const base = r.rackNo.split('-')[0];
         if (!groups[base]) groups[base] = [];
         const w = parseFloat(r.weight) || 0;
@@ -98,11 +101,21 @@ function PrintSlipContent() {
       const detailsArray = Object.entries(groups).map(([base, weights]) => {
         return `${base} = ${weights.join(' / ')} kg`;
       });
-      
-      return { detailsArray, totalWeight };
+
+      return { detailsArray, totalWeight, pieceCount };
     } catch(e) {
-      return { detailsArray: ["-"], totalWeight: 0 };
+      return { detailsArray: ["-"], totalWeight: 0, pieceCount: 0 };
     }
+  };
+
+  // Displayed shipping-method text: EMS that's already fully paid ships
+  // free (a standing promotion), and any COD order is flagged so the
+  // packer knows cash is collected on delivery instead of prepaid.
+  const getShippingLabel = (order: Order) => {
+    const method = order.shippingMethod || "-";
+    if (order.codAmount) return `${method} -ปลายทาง`;
+    if (method === "EMS" && order.paymentStatus === "Paid") return `${method} -ส่งฟรี`;
+    return method;
   };
 
   if (isLoading) return <div style={{ padding: 20 }}>Loading...</div>;
@@ -118,11 +131,12 @@ function PrintSlipContent() {
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
         <thead>
           <tr>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '7%' }}>Order #</th>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '28%' }}>ชื่อลูกค้า / ที่อยู่</th>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '30%' }}>รหัสถาด (Rack)</th>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '20%' }}>วิธีจัดส่ง</th>
-            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '15%' }}>น้ำหนักรวม</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '6%' }}>Order #</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '26%' }}>ชื่อลูกค้า / ที่อยู่</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '17%' }}>วิธีจัดส่ง</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '24%' }}>รหัสถาด (Rack)</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '10%' }}>จำนวนแผ่น</th>
+            <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '17%' }}>น้ำหนักรวม</th>
           </tr>
         </thead>
         <tbody>
@@ -138,12 +152,15 @@ function PrintSlipContent() {
                   )}
                 </td>
                 <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>
+                  {getShippingLabel(order)}
+                </td>
+                <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>
                   {rackData.detailsArray?.map((line, idx) => (
                     <div key={idx}>{line}</div>
                   ))}
                 </td>
-                <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>
-                  {order.shippingMethod || "-"}{order.codAmount ? " (COD)" : ""}
+                <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' }}>
+                  {rackData.pieceCount > 0 ? rackData.pieceCount : "-"}
                 </td>
                 <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' }}>
                   {rackData.totalWeight > 0 ? `${rackData.totalWeight.toFixed(2)} kg` : "-"}
