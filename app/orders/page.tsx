@@ -305,6 +305,20 @@ export default function Home() {
     message: "",
     customerName: "",
   });
+  const [showSaveToast, setShowSaveToast] = useState(false);
+  const saveToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flashSaveToast = () => {
+    if (saveToastTimer.current) clearTimeout(saveToastTimer.current);
+    setShowSaveToast(true);
+    saveToastTimer.current = setTimeout(() => setShowSaveToast(false), 1800);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (saveToastTimer.current) clearTimeout(saveToastTimer.current);
+    };
+  }, []);
 
   const [filterAdminName, setFilterAdminName] = useState("");
   const [filterDate, setFilterDate] = useState(() => {
@@ -953,6 +967,7 @@ export default function Home() {
           fetchOrders(currentUser?.name, customerSearch ? undefined : filterDate, customerSearch);
         }
         await fetchUsers(); // Refresh inventory
+        flashSaveToast();
       } else {
         alert(data.error || "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง");
       }
@@ -1708,6 +1723,32 @@ export default function Home() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {showSaveToast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'var(--success-color)',
+            color: '#fff',
+            padding: '12px 22px',
+            borderRadius: '10px',
+            fontSize: '14px',
+            fontWeight: 600,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+            zIndex: 200,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            animation: 'toastSlideUp 0.25s ease-out',
+            pointerEvents: 'none',
+          }}
+        >
+          ✓ ยืนยันออเดอร์แล้ว
         </div>
       )}
 
