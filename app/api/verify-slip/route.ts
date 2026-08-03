@@ -55,8 +55,11 @@ export async function POST(req: Request) {
     const slipAmount = rawSlip?.amount?.amount ?? null;
     // Compute our own match verdict independent of whatever Thunder's own
     // matchAmount flag returns, so this stays reliable across their API versions.
+    // ±2 baht tolerance — a slip landing a couple baht off the expected total
+    // (bank rounding, a customer paying slightly over/under) still counts as
+    // a clean match and doesn't force the admin to pick a slip-issue reason.
     const amountMatched = expectedAmount !== null && slipAmount !== null
-      ? Math.abs(Number(slipAmount) - expectedAmount) < 0.5
+      ? Math.abs(Number(slipAmount) - expectedAmount) <= 2
       : null;
 
     const matchedAccount = thunderData.data?.matchedAccount ?? null;
