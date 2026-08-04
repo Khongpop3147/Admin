@@ -297,7 +297,15 @@ export default function StorefrontPage() {
             <h2 style={{ fontSize: "1.1rem", marginBottom: 0 }}>📦 คลังหมูของฉัน</h2>
             <button
               type="button"
-              onClick={() => window.open(`${BASE_PATH}/storefront/print-inventory`, '_blank')}
+              onClick={() => {
+                // Pass the exact list already shown in this panel — a fresh
+                // /api/auth/me fetch in the new tab would resolve to the real
+                // logged-in session, not whichever user a DEV is currently
+                // impersonating via the sidebar switcher, and would show the
+                // wrong (often empty) inventory.
+                sessionStorage.setItem("storefront-print-inventory", JSON.stringify(pieces));
+                window.open(`${BASE_PATH}/storefront/print-inventory`, '_blank');
+              }}
               style={{ background: 'rgba(63,185,80,0.2)', color: 'var(--accent-green)', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
             >
               🖨️ ปริ้นหมูคงเหลือ

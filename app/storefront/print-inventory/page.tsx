@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BASE_PATH } from "../../../lib/basePath";
 
 interface Piece {
   rackNo: string;
@@ -17,21 +16,28 @@ export default function PrintInventoryPage() {
   const [rackCounts, setRackCounts] = useState<RackCount[] | null>(null);
 
   useEffect(() => {
-    fetch(`${BASE_PATH}/api/auth/me`)
-      .then((res) => res.json())
-      .then((data) => {
-        const pieces: Piece[] = (data.user?.racks || []).filter((r: Piece) => !r.isUsedUp);
-        const grouped = pieces.reduce((acc: Record<string, number>, p) => {
-          const baseRack = (p.rackNo || "ไม่ทราบถาด").split("-")[0];
-          acc[baseRack] = (acc[baseRack] || 0) + 1;
-          return acc;
-        }, {});
-        const counts = Object.entries(grouped)
-          .map(([baseRack, count]) => ({ baseRack, count }))
-          .sort((a, b) => a.baseRack.localeCompare(b.baseRack, undefined, { numeric: true }));
-        setRackCounts(counts);
-      })
-      .catch((err) => console.error("Failed to fetch inventory for print", err));
+    // Read the exact piece list the opener page already had on screen,
+    // handed off via sessionStorage right before window.open — a fresh
+    // server fetch here would resolve to the real logged-in session, not
+    // whichever user a DEV is currently impersonating via the sidebar
+    // switcher, and would show the wrong (often empty) inventory.
+    let pieces: Piece[] = [];
+    try {
+      const raw = sessionStorage.getItem("storefront-print-inventory");
+      pieces = raw ? JSON.parse(raw) : [];
+    } catch (err) {
+      console.error("Failed to read inventory for print", err);
+    }
+    pieces = pieces.filter((r) => !r.isUsedUp);
+    const grouped = pieces.reduce((acc: Record<string, number>, p) => {
+      const baseRack = (p.rackNo || "ไม่ทราบถาด").split("-")[0];
+      acc[baseRack] = (acc[baseRack] || 0) + 1;
+      return acc;
+    }, {});
+    const counts = Object.entries(grouped)
+      .map(([baseRack, count]) => ({ baseRack, count }))
+      .sort((a, b) => a.baseRack.localeCompare(b.baseRack, undefined, { numeric: true }));
+    setRackCounts(counts);
   }, []);
 
   useEffect(() => {
