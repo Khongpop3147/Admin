@@ -53,7 +53,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </Link>
           </>
         )}
-        {isSuperAdminRole(currentUser?.role) && (
+        {currentUser?.role === "DEV" && (
           <Link href="/private-clients" className={`${styles.navItem} ${pathname === '/private-clients' ? styles.active : ''}`}>
             Private clients
           </Link>

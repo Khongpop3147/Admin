@@ -876,12 +876,12 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
   if (currentUser?.role === "PACKING" || currentUser?.role === "STOREFRONT") return null;
 
-  if (mode === "walkin" && currentUser && !isSuperAdminRole(currentUser.role)) {
+  if (mode === "walkin" && currentUser && currentUser.role !== "DEV") {
     return (
       <div className={styles.container}>
         <div className={styles.header}>
           <h1 className={styles.title}>ไม่มีสิทธิ์เข้าถึง</h1>
-          <p className={styles.subtitle}>เฉพาะ Super Admin เท่านั้นที่เข้าหน้านี้ได้</p>
+          <p className={styles.subtitle}>เฉพาะ Dev เท่านั้นที่เข้าหน้านี้ได้</p>
         </div>
       </div>
     );
