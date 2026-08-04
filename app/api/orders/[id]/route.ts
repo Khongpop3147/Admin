@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { getSessionUser } from "../../../../lib/session";
 import { isSuperAdminRole } from "../../../../lib/roles";
+import { computeActualReceivedAmount } from "../../../../lib/money";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 let prisma: PrismaClient;
@@ -91,8 +92,7 @@ export async function PATCH(
       const finalPrice = updateData.price !== undefined ? updateData.price : (Number(existingOrder.price) || 0);
       const finalCod = updateData.codAmount !== undefined ? updateData.codAmount : (Number(existingOrder.codAmount) || 0);
       const finalShipping = Number(existingOrder.additionalShippingCost) || 0;
-      const vat = (finalPrice + finalShipping) * 0.07;
-      updateData.actualReceivedAmount = Math.round(finalPrice + finalShipping + vat + finalCod);
+      updateData.actualReceivedAmount = computeActualReceivedAmount(finalPrice, finalShipping, finalCod);
     }
 
     const updatedOrder = await prisma.order.update({

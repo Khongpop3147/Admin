@@ -3,6 +3,8 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { getSessionUser } from "../../../lib/session";
+import { findDuplicateOrder } from "../../../lib/orderDuplicate";
+import { isShelfSale } from "../../../lib/money";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 
@@ -17,17 +19,6 @@ if (globalForPrisma.prisma2) {
 }
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma2 = prisma;
-
-// Strips common Thai honorific prefixes and whitespace so "คุณเมธานันท์" and
-// "เมธานันท์" (same person, typed differently by different admins) are
-// recognized as the same customer for duplicate-order detection.
-function normalizeCustomerName(name: string): string {
-  return name
-    .trim()
-    .replace(/^(คุณ|นางสาว|นาย|นาง|น\.ส\.|ด\.ช\.|ด\.ญ\.)\s*/, "")
-    .replace(/\s+/g, "")
-    .toLowerCase();
-}
 
 export async function POST(req: Request) {
   try {
@@ -67,18 +58,7 @@ export async function POST(req: Request) {
         },
       });
 
-      const normalizedNewName = normalizeCustomerName(customerName);
-      const currentWeight = parseFloat(crispyPorkWeight);
-      const matchingOrder = !isNaN(currentWeight)
-        ? recentOrders.find((o) => {
-            const w = parseFloat(o.crispyPorkWeight || "");
-            return (
-              !isNaN(w) &&
-              Math.abs(w - currentWeight) < 0.001 &&
-              normalizeCustomerName(o.customerName) === normalizedNewName
-            );
-          })
-        : undefined;
+      const matchingOrder = findDuplicateOrder(customerName, crispyPorkWeight, recentOrders);
 
       if (matchingOrder) {
         return NextResponse.json(
@@ -109,8 +89,7 @@ export async function POST(req: Request) {
       // a trackable sale. A storefront order with a real customer name still
       // gets a real sequential number, same as any other channel.
       let currentOrderNo = 0;
-      const isShelfSale = platform === 'Storefront' && customerName === 'วางขายหน้าร้าน';
-      if (!isShelfSale) {
+      if (!isShelfSale({ platform, customerName })) {
         const counter = await tx.dailyCounter.upsert({
           where: { date: dateKey },
           update: { lastOrder: { increment: 1 } },

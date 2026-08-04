@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
+import { findMissingRackCodes } from "../../lib/rackGaps";
 import styles from "../page.module.css";
 
 interface DraftRack {
@@ -359,66 +360,12 @@ export default function RacksPage() {
   }, [centralRacks, distributeSearch, allRackNos]);
 
   const globalMissingPieces = useMemo(() => {
-    const missing = new Set<string>();
-
-    // Rack numbering runs sequentially across the whole business, not per
-    // admin — whoever happened to receive the next batch just continues the
-    // count. Scanning each admin's list separately (the old approach) misses
-    // exactly the gaps that matter most: a piece missing right at the
-    // boundary between two admins, where neither admin's own list has a
-    // neighboring entry to compare against. Building one combined list
-    // across everyone (+ central) first is what actually catches those.
-    const findGaps = (rackList: any[]) => {
-      const sorted = [...rackList].sort((a: any, b: any) => {
-        const matchA = a.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
-        const matchB = b.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
-        if (matchA && matchB) {
-          if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
-          if (parseInt(matchA[2]) !== parseInt(matchB[2])) return parseInt(matchA[2]) - parseInt(matchB[2]);
-          if (matchA[3] && matchB[3]) return parseInt(matchA[3]) - parseInt(matchB[3]);
-        }
-        return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
-      });
-
-      for (let i = 0; i < sorted.length - 1; i++) {
-        const a = sorted[i];
-        const b = sorted[i+1];
-        // Whether a piece has already sold out (isUsedUp) says nothing
-        // about whether the code between it and its neighbor was ever
-        // created — checking that condition here was hiding real gaps
-        // (confirmed against production: L112-1 sits right after L111-5,
-        // but L112-2 is already isUsedUp, so this used to skip the pair
-        // entirely). The only thing that matters is whether the candidate
-        // code exists anywhere at all, checked below via allRackNos.
-        const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-        const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-        if (aM && bM && aM[1] === bM[1]) {
-          const p = aM[1];
-          const anum = parseInt(aM[2], 10) * 5 + parseInt(aM[3], 10);
-          const bnum = parseInt(bM[2], 10) * 5 + parseInt(bM[3], 10);
-          if (bnum - anum > 1 && bnum - anum < 10) {
-            for (let n = anum + 1; n < bnum; n++) {
-              let pNum = n % 5;
-              let rNum = Math.floor(n / 5);
-              if (pNum === 0) { pNum = 5; rNum--; }
-              const missingName = `${p}${String(rNum).padStart(aM[2].length, '0')}-${pNum}`;
-              if (!allRackNos.includes(missingName)) {
-                missing.add(missingName);
-              }
-            }
-          }
-        }
-      }
-    };
-
     const combined = [
       ...users.flatMap(u => u.racks || []),
       ...centralRacks,
     ];
-    findGaps(combined);
-
-    return Array.from(missing).sort();
-  }, [users, centralRacks, allRackNos]);
+    return findMissingRackCodes(combined);
+  }, [users, centralRacks]);
 
   const inventorySummary = useMemo(() => {
     const perAdmin = users

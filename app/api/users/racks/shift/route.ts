@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { getSessionUser } from "../../../../../lib/session";
 import { isSuperAdminRole } from "../../../../../lib/roles";
+import { sortRackAssignments, computeShiftTargets, syncOrderRackDetails } from "../../../../../lib/rackShift";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 let prisma: PrismaClient;
@@ -51,65 +52,8 @@ export async function POST(req: Request) {
         where: { rackNo: { startsWith: prefix } },
       });
 
-      // Sort manually to be perfectly safe with our format
-      allAssignments.sort((a, b) => {
-        const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-        const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-        if (aM && bM) {
-          const aNum = parseInt(aM[2], 10) * 10 + parseInt(aM[3], 10);
-          const bNum = parseInt(bM[2], 10) * 10 + parseInt(bM[3], 10);
-          return aNum - bNum;
-        }
-        return a.rackNo.localeCompare(b.rackNo);
-      });
-
-      const startIndex = allAssignments.findIndex(a => a.rackNo === startRackNo);
-      if (startIndex === -1) {
-        throw new Error(`NOT_FOUND:${startRackNo}`);
-      }
-
-      const targets: { id: string; newName: string }[] = [];
-      const unshiftedNames = new Set(allAssignments.slice(0, startIndex).map(a => a.rackNo));
-
-      if (direction === 'down') {
-        for (let i = allAssignments.length - 1; i >= startIndex; i--) {
-          const item = allAssignments[i];
-          const m = item.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-          if (m) {
-            const p = m[1];
-            let rNum = parseInt(m[2], 10);
-            let pNum = parseInt(m[3], 10);
-            pNum++;
-            if (pNum > 5) { pNum = 1; rNum++; }
-            const newName = `${p}${String(rNum).padStart(m[2].length, '0')}-${pNum}`;
-
-            if (unshiftedNames.has(newName)) {
-              throw new Error(`COLLISION_DOWN:${newName}`);
-            }
-
-            targets.push({ id: item.id, newName });
-          }
-        }
-      } else if (direction === 'up') {
-        for (let i = startIndex; i < allAssignments.length; i++) {
-          const item = allAssignments[i];
-          const m = item.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-          if (m) {
-            const p = m[1];
-            let rNum = parseInt(m[2], 10);
-            let pNum = parseInt(m[3], 10);
-            pNum--;
-            if (pNum < 1) { pNum = 5; rNum--; }
-            const newName = `${p}${String(rNum).padStart(m[2].length, '0')}-${pNum}`;
-
-            if (unshiftedNames.has(newName)) {
-              throw new Error(`COLLISION_UP:${newName}`);
-            }
-
-            targets.push({ id: item.id, newName });
-          }
-        }
-      }
+      const sortedAssignments = sortRackAssignments(allAssignments);
+      const targets = computeShiftTargets(sortedAssignments, startRackNo, direction);
 
       for (const t of targets) {
         await tx.rackAssignment.update({ where: { id: t.id }, data: { rackNo: t.newName } });
@@ -127,31 +71,12 @@ export async function POST(req: Request) {
         select: { id: true, rackDetails: true },
       });
 
-      let ordersUpdated = 0;
-      for (const order of ordersWithRacks) {
-        if (!order.rackDetails) continue;
-        let details: any[];
-        try {
-          details = JSON.parse(order.rackDetails);
-        } catch {
-          continue;
-        }
-        if (!Array.isArray(details)) continue;
-
-        let changed = false;
-        for (const d of details) {
-          if (d && d.assignmentId && targetMap.has(d.assignmentId)) {
-            d.rackNo = targetMap.get(d.assignmentId);
-            changed = true;
-          }
-        }
-        if (changed) {
-          await tx.order.update({ where: { id: order.id }, data: { rackDetails: JSON.stringify(details) } });
-          ordersUpdated++;
-        }
+      const orderUpdates = syncOrderRackDetails(ordersWithRacks, targetMap);
+      for (const u of orderUpdates) {
+        await tx.order.update({ where: { id: u.id }, data: { rackDetails: u.newRackDetails } });
       }
 
-      return { count: targets.length, ordersUpdated };
+      return { count: targets.length, ordersUpdated: orderUpdates.length };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     return NextResponse.json({ success: true, count: count.count, ordersUpdated: count.ordersUpdated }, { status: 200 });

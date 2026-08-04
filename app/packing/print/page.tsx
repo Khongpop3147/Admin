@@ -3,26 +3,18 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { BASE_PATH } from "../../../lib/basePath";
+import { groupOrdersForPrint, getShippingLabel, getRackDisplay, AdminGroup as AdminGroupType, PrintableOrder } from "../../../lib/porkSlip";
 
-interface Order {
+interface Order extends PrintableOrder {
   id: string;
-  orderNo: number;
   customerName: string;
   customerAddress?: string;
   rackDetails: string;
-  platform: string;
-  shippingMethod: string;
   orderStatus: string;
-  codAmount?: number | null;
   paymentStatus?: string;
-  sellerName?: string;
 }
 
-interface AdminGroup {
-  sellerName: string;
-  displayName: string;
-  orders: Order[];
-}
+type AdminGroup = AdminGroupType<Order>;
 
 function PrintSlipContent() {
   const searchParams = useSearchParams();
@@ -37,19 +29,6 @@ function PrintSlipContent() {
       setIsLoading(false);
     }
   }, [dateStr]);
-
-  // Report grouping order within each admin's own section: NIM -ปลายทาง,
-  // NIM -ส่งฟรี, EMS -ปลายทาง, EMS -ส่งฟรี — COD comes first within each
-  // shipping method.
-  const getShippingRank = (order: Order) => {
-    const method = order.shippingMethod || "";
-    const hasCod = !!order.codAmount;
-    if (method === "NIM Express" && hasCod) return 0;
-    if (method === "NIM Express") return 1;
-    if (method === "EMS" && hasCod) return 2;
-    if (method === "EMS") return 3;
-    return 4;
-  };
 
   const fetchOrders = async (date: string) => {
     try {
@@ -66,38 +45,7 @@ function PrintSlipContent() {
       });
 
       if (ordersData.orders) {
-        // Filter out storefront (walk-in) orders — by platform AND by shipping
-        // method, so a storefront-style order never sneaks into the report even
-        // if its platform field wasn't tagged "Storefront".
-        const filtered = ordersData.orders.filter((o: Order) =>
-          o.platform !== 'Storefront' &&
-          o.shippingMethod !== 'รับหน้าร้าน' &&
-          o.shippingMethod !== 'ส่งเอง'
-        );
-
-        const bySeller: Record<string, Order[]> = {};
-        filtered.forEach((o: Order) => {
-          const key = o.sellerName || "ไม่ระบุแอดมิน";
-          if (!bySeller[key]) bySeller[key] = [];
-          bySeller[key].push(o);
-        });
-
-        const groups: AdminGroup[] = Object.entries(bySeller).map(([sellerName, groupOrders]) => {
-          groupOrders.sort((a, b) => {
-            const rankDiff = getShippingRank(a) - getShippingRank(b);
-            if (rankDiff !== 0) return rankDiff;
-            return (a.orderNo || 0) - (b.orderNo || 0);
-          });
-          return {
-            sellerName,
-            displayName: nicknameByName[sellerName] || sellerName,
-            orders: groupOrders,
-          };
-        });
-
-        groups.sort((a, b) => a.displayName.localeCompare(b.displayName, "th"));
-
-        setAdminGroups(groups);
+        setAdminGroups(groupOrdersForPrint<Order>(ordersData.orders, nicknameByName));
       }
     } catch (error) {
       console.error("Failed to fetch orders for print", error);
@@ -114,41 +62,6 @@ function PrintSlipContent() {
       }, 500);
     }
   }, [isLoading, adminGroups]);
-
-  const getRackDisplay = (rackDetailsStr: string) => {
-    if (!rackDetailsStr || rackDetailsStr === '[]') return { details: "-", totalWeight: 0, pieceCount: 0 };
-    try {
-      const racks = JSON.parse(rackDetailsStr);
-      const groups: Record<string, number[]> = {};
-      let totalWeight = 0;
-      let pieceCount = 0;
-
-      racks.forEach((r: any) => {
-        if (!r.rackNo) return;
-        pieceCount += 1;
-        const base = r.rackNo.split('-')[0];
-        if (!groups[base]) groups[base] = [];
-        const w = parseFloat(r.weight) || 0;
-        groups[base].push(w);
-        totalWeight += w;
-      });
-
-      const detailsArray = Object.entries(groups).map(([base, weights]) => {
-        return `${base} = ${weights.join(' / ')} kg`;
-      });
-
-      return { detailsArray, totalWeight, pieceCount };
-    } catch(e) {
-      return { detailsArray: ["-"], totalWeight: 0, pieceCount: 0 };
-    }
-  };
-
-  // Every order ships either COD or prepaid — there's no bare "NIM Express"/
-  // "EMS" label, always one of these two suffixes, for either method.
-  const getShippingLabel = (order: Order) => {
-    const method = order.shippingMethod || "-";
-    return order.codAmount ? `${method} -ปลายทาง` : `${method} -ส่งฟรี`;
-  };
 
   if (isLoading) return <div style={{ padding: 20 }}>Loading...</div>;
   if (!dateStr) return <div style={{ padding: 20 }}>No date specified.</div>;

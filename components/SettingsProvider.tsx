@@ -2,26 +2,9 @@
 
 import { createContext, useContext, useState, useEffect } from "react";
 import { BASE_PATH } from "../lib/basePath";
+import { AppSettings, DEFAULT_SETTINGS } from "../lib/money";
 
-export interface AppSettings {
-  commissionRate: number;
-  returnPenalty: number;
-  codFlatFeeThreshold: number;
-  codFlatFee: number;
-  codDivisor: number;
-  codMultiplier: number;
-  porkPricePerKg: number;
-}
-
-const DEFAULT_SETTINGS: AppSettings = {
-  commissionRate: 0.2,
-  returnPenalty: 50,
-  codFlatFeeThreshold: 2.29,
-  codFlatFee: 50,
-  codDivisor: 1.5,
-  codMultiplier: 20,
-  porkPricePerKg: 250,
-};
+export type { AppSettings };
 
 interface SettingsContextType {
   settings: AppSettings;
@@ -29,11 +12,6 @@ interface SettingsContextType {
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
-
-export function calculateCodAmount(weight: number, settings: AppSettings): number {
-  if (weight <= settings.codFlatFeeThreshold) return settings.codFlatFee;
-  return (weight / settings.codDivisor) * settings.codMultiplier;
-}
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
