@@ -187,11 +187,17 @@ export async function GET(req: Request) {
     const dateFrom = searchParams.get("dateFrom"); // format: YYYY-MM-DD
     const dateTo = searchParams.get("dateTo"); // format: YYYY-MM-DD
     const platform = searchParams.get("platform");
+    const excludePlatform = searchParams.get("excludePlatform");
     const customerName = searchParams.get("customerName");
 
     let whereClause: any = sellerName ? { sellerName } : {};
     if (platform) {
       whereClause.platform = platform;
+    } else if (excludePlatform) {
+      // Lets Order Details hide Private-Clients (Storefront-platform) walk-in
+      // sales from its own order list, the mirror of the platform filter
+      // above — each page shows only the orders it's responsible for.
+      whereClause.platform = { not: excludePlatform };
     }
     // STOREFRONT's own page only ever asks for platform=Storefront — force
     // it server-side too, so that role can't be used to pull every other
@@ -222,7 +228,7 @@ export async function GET(req: Request) {
     // Any explicit, scoped filter (date, platform, or a name search) means the
     // caller wants everything matching, not a "give me something recent"
     // sample — only cap the truly unscoped call.
-    const isScoped = Boolean(dateStr || dateFrom || dateTo || platform || customerName);
+    const isScoped = Boolean(dateStr || dateFrom || dateTo || platform || excludePlatform || customerName);
 
     const orders = await prisma.order.findMany({
       where: whereClause,

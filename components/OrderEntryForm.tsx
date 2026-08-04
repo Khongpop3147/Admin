@@ -399,6 +399,11 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
       if (adminName) params.set("sellerName", adminName);
       if (date) params.set("date", date);
       if (customerNameSearch) params.set("customerName", customerNameSearch);
+      // Each page's own order list only shows what it's responsible for —
+      // Private Clients sees only its Storefront-platform walk-in sales,
+      // Order Details sees everything else.
+      if (mode === "walkin") params.set("platform", "Storefront");
+      else params.set("excludePlatform", "Storefront");
       const qs = params.toString();
       const url = qs ? `${BASE_PATH}/api/orders?${qs}` : `${BASE_PATH}/api/orders`;
       const res = await fetch(url);
