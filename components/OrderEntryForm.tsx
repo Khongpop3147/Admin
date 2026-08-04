@@ -9,6 +9,7 @@ import { isSuperAdminRole } from "../lib/roles";
 import { BASE_PATH } from "../lib/basePath";
 import { calculateCodAmount, AppSettings, computeVatAmount, computeActualReceivedAmount } from "../lib/money";
 import { calculateShippingCost } from "../lib/shipping";
+import { computeRackAllocation } from "../lib/rackAllocate";
 
 interface Order {
   id: string;
@@ -418,98 +419,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
   const autoAllocateRacks = (targetWeight: number) => {
     if (!currentUser || !currentUser.racks) return;
-
-    // Filter available pieces and sort by creation (FIFO)
-    const availableRacks = currentUser.racks
-      .filter((r: any) => !r.isUsedUp && r.remainingWeight > 0)
-      .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    const targetInt = Math.round(targetWeight * 100);
-    const racksWithInt = availableRacks.map((r: any) => ({
-      ...r,
-      intWeight: Math.round(r.remainingWeight * 100)
-    }));
-
-    // Suffix sums: the most weight still reachable from index i onward.
-    const suffixSum: number[] = new Array(racksWithInt.length + 1).fill(0);
-    for (let i = racksWithInt.length - 1; i >= 0; i--) {
-      suffixSum[i] = suffixSum[i + 1] + racksWithInt[i].intWeight;
-    }
-
-    let bestSubset: any[] | null = null;
-    let closestSubset: any[] = [];
-    let minDiff = Infinity;
-    let closestSum = 0;
-    let callBudget = 200000; // hard cap so a large/unreachable inventory can never hang the tab
-
-    const considerCandidate = (subset: any[], sum: number) => {
-      if (sum <= 0) return;
-      const diff = Math.abs(sum - targetInt);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closestSum = sum;
-        closestSubset = subset;
-      }
-    };
-
-    const findSubset = (index: number, currentSubset: any[], currentSum: number): boolean => {
-      if (callBudget-- <= 0) return false;
-
-      if (currentSum > 0) {
-        const diff = Math.abs(currentSum - targetInt);
-        if (diff === 0) {
-          bestSubset = [...currentSubset];
-          return true;
-        }
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestSum = currentSum;
-          closestSubset = [...currentSubset];
-        }
-      }
-
-      if (index >= racksWithInt.length || currentSum > targetInt + 200) {
-        return false;
-      }
-
-      // Even taking every remaining piece can't reach the target: the gap only
-      // shrinks as the sum grows, so "take everything left" is provably the
-      // closest this branch can get — no need to explore its 2^k sub-combinations.
-      if (currentSum + suffixSum[index] < targetInt) {
-        considerCandidate([...currentSubset, ...racksWithInt.slice(index)], currentSum + suffixSum[index]);
-        return false;
-      }
-
-      currentSubset.push(racksWithInt[index]);
-      if (findSubset(index + 1, currentSubset, currentSum + racksWithInt[index].intWeight)) {
-        return true;
-      }
-      currentSubset.pop();
-
-      if (findSubset(index + 1, currentSubset, currentSum)) {
-        return true;
-      }
-
-      return false;
-    };
-
-    findSubset(0, [], 0);
-
-    if (bestSubset) {
-      const newAllocation: RackDetail[] = (bestSubset as any[]).map((rack: any) => ({
-        assignmentId: rack.id,
-        rackNo: rack.rackNo,
-        weight: rack.remainingWeight
-      }));
-      setRackDetails(newAllocation);
-    } else {
-      const newAllocation: RackDetail[] = (closestSubset as any[]).map((rack: any) => ({
-        assignmentId: rack.id,
-        rackNo: rack.rackNo,
-        weight: rack.remainingWeight
-      }));
-      setRackDetails(newAllocation);
-    }
+    setRackDetails(computeRackAllocation(currentUser.racks as any, targetWeight));
   };
 
   // Alternative to picking by weight: grab the N lightest or N heaviest
