@@ -293,7 +293,16 @@ export default function StorefrontPage() {
         </form>
 
         <div className={`glass-panel ${styles.sfPanel}`} style={{ flex: "1 1 280px", borderRadius: "16px" }}>
-          <h2 style={{ fontSize: "1.1rem", marginBottom: "16px" }}>📦 คลังหมูของฉัน</h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <h2 style={{ fontSize: "1.1rem", marginBottom: 0 }}>📦 คลังหมูของฉัน</h2>
+            <button
+              type="button"
+              onClick={() => window.open(`${BASE_PATH}/storefront/print-inventory`, '_blank')}
+              style={{ background: 'rgba(63,185,80,0.2)', color: 'var(--accent-green)', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+            >
+              🖨️ ปริ้นหมูคงเหลือ
+            </button>
+          </div>
           <div style={{ marginBottom: "16px", padding: "14px", background: "rgba(255,255,255,0.05)", borderRadius: "8px", display: "flex", justifyContent: "space-around", textAlign: "center" }}>
             <div>
               <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--accent-blue)" }}>{pieces.length}</div>
