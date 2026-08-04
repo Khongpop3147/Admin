@@ -1113,8 +1113,26 @@ export default function Home() {
               {useSimplifiedPicker ? (
                 <div className={styles.formGroup} style={{ gridColumn: '1 / -1', background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px' }}>
                   <label className={styles.label}>หมูที่ขาย</label>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label className={styles.label} style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>หรือพิมพ์น้ำหนักเอง (กก.) — ระบบจะตัดสต็อกให้อัตโนมัติ</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      name="crispyPorkWeight"
+                      value={formData.crispyPorkWeight}
+                      onChange={handleChange}
+                      className={styles.input}
+                      placeholder="เช่น 1.5"
+                    />
+                  </div>
+                  {derivedWarning && (
+                    <div style={{ color: '#ffac33', fontSize: '12px', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '14px' }}>⚠️</span> {derivedWarning}
+                    </div>
+                  )}
                   {rackDetails.length === 0 ? (
-                    <p style={{ fontSize: '13px', color: '#ff6b6b', margin: '4px 0 0 0' }}>⚠️ ยังไม่ได้เลือกชิ้นที่ขาย — เลือกจากรายการ "คลังหมูของฉัน" ด้านขวา</p>
+                    <p style={{ fontSize: '13px', color: '#ff6b6b', margin: '4px 0 0 0' }}>⚠️ ยังไม่ได้เลือกชิ้นที่ขาย — เลือกจากรายการ "คลังหมูของฉัน" ด้านขวา หรือพิมพ์น้ำหนักด้านบน</p>
                   ) : (
                     <>
                       <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--accent-green)', margin: '4px 0 0 0' }}>
