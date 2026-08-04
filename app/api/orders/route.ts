@@ -182,6 +182,7 @@ export async function GET(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
     const sellerName = searchParams.get("sellerName");
     const dateStr = searchParams.get("date"); // format: YYYY-MM-DD
     const dateFrom = searchParams.get("dateFrom"); // format: YYYY-MM-DD
@@ -191,6 +192,9 @@ export async function GET(req: Request) {
     const customerName = searchParams.get("customerName");
 
     let whereClause: any = sellerName ? { sellerName } : {};
+    if (id) {
+      whereClause.id = id;
+    }
     if (platform) {
       whereClause.platform = platform;
     } else if (excludePlatform) {
@@ -228,7 +232,7 @@ export async function GET(req: Request) {
     // Any explicit, scoped filter (date, platform, or a name search) means the
     // caller wants everything matching, not a "give me something recent"
     // sample — only cap the truly unscoped call.
-    const isScoped = Boolean(dateStr || dateFrom || dateTo || platform || excludePlatform || customerName);
+    const isScoped = Boolean(id || dateStr || dateFrom || dateTo || platform || excludePlatform || customerName);
 
     const orders = await prisma.order.findMany({
       where: whereClause,

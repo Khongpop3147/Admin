@@ -455,6 +455,12 @@ export default function StorefrontPage() {
                               👁️ ดูถาด
                             </button>
                             <button
+                              onClick={() => window.open(`${BASE_PATH}/storefront/print?orderId=${order.id}`, '_blank')}
+                              style={{ background: 'rgba(63,185,80,0.2)', color: 'var(--accent-green)', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                            >
+                              🖨️ ปริ้นถาด
+                            </button>
+                            <button
                               onClick={() => setEditingOrder({ ...order })}
                               style={{ background: 'rgba(255,172,51,0.2)', color: '#ffac33', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
                             >
@@ -499,6 +505,12 @@ export default function StorefrontPage() {
                         style={{ flex: 1, background: 'rgba(79,172,254,0.2)', color: '#4facfe', border: 'none', padding: '10px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
                       >
                         👁️ ดูถาด
+                      </button>
+                      <button
+                        onClick={() => window.open(`${BASE_PATH}/storefront/print?orderId=${order.id}`, '_blank')}
+                        style={{ flex: 1, background: 'rgba(63,185,80,0.2)', color: 'var(--accent-green)', border: 'none', padding: '10px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+                      >
+                        🖨️ ปริ้น
                       </button>
                       <button
                         onClick={() => setEditingOrder({ ...order })}
@@ -610,7 +622,13 @@ export default function StorefrontPage() {
               })()}
             </div>
 
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #333', textAlign: 'right' }}>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                onClick={() => window.open(`${BASE_PATH}/storefront/print?orderId=${viewingRacks.id}`, '_blank')}
+                style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'rgba(63,185,80,0.2)', color: 'var(--accent-green)', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                🖨️ ปริ้นถาด
+              </button>
               <button onClick={() => setViewingRacks(null)} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}>ปิด</button>
             </div>
           </div>
