@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 
 const SETTINGS_ID = "singleton";
 
-function currentBangkokMonth(): string {
+export function currentBangkokMonth(): string {
   const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -11,7 +11,7 @@ function currentBangkokMonth(): string {
 // Thailand has no DST (fixed UTC+7 year-round), so subtracting exactly 24h
 // from the first moment of thisMonth always lands on the first moment of
 // the last day of the previous month — no month/year rollover math needed.
-function lastDayOfPreviousMonthRange(thisMonth: string): { start: Date; end: Date } {
+export function lastDayOfPreviousMonthRange(thisMonth: string): { start: Date; end: Date } {
   const end = new Date(`${thisMonth}-01T00:00:00+07:00`);
   const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
   return { start, end };
