@@ -53,6 +53,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </Link>
           </>
         )}
+        {isSuperAdminRole(currentUser?.role) && (
+          <Link href="/private-clients" className={`${styles.navItem} ${pathname === '/private-clients' ? styles.active : ''}`}>
+            Private clients
+          </Link>
+        )}
         {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "PACKING") && (
           <Link href="/packing" className={`${styles.navItem} ${pathname === '/packing' ? styles.active : ''}`}>
             Packing & Export
