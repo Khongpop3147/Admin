@@ -1365,8 +1365,11 @@ export default function Home() {
               </div>
 
               {/* Auto-calculated summary — visually separated so it reads as
-                  "the system worked this out", not more fields to fill in. */}
-              <div style={{ display: isStorefrontMode ? 'none' : 'flex', gap: '12px', flexWrap: 'wrap', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '16px' }}>
+                  "the system worked this out", not more fields to fill in.
+                  Shown in storefront mode too: VAT/total are already computed
+                  off formData.price regardless of mode and saved with the
+                  order, they just weren't visible here before. */}
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '16px' }}>
                 <div style={{ flex: '1 1 200px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', padding: '14px 16px' }}>
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>🧮 ภาษีมูลค่าเพิ่ม (VAT 7%)</div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formData.vatAmount ? `฿${formData.vatAmount}` : '-'}</div>
