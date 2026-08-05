@@ -35,13 +35,20 @@ describe("computeRackAllocation", () => {
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
-  it("falls back to the forced-overshoot tier only when no in-range or under-target option exists at all", () => {
+  it("returns nothing (fully short) rather than break the overage cap, when there's no under-target option either", () => {
     // The user's own example: asked for 1.4kg, only a 1.7kg piece exists
     // (0.3kg over — past the cap) and there's no smaller piece to fall back
-    // to, so it has to give the oversized piece rather than nothing.
+    // to. The cap is a hard rule — better to give nothing (flagged as fully
+    // short upstream) than force an oversized piece on the order.
     const racks = [rack("a", 1.7)];
     const result = computeRackAllocation(racks, 1.4);
-    expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
+    expect(result).toEqual([]);
+  });
+
+  it("still returns nothing when several available pieces are all past the cap", () => {
+    const racks = [rack("a", 1.7), rack("b", 1.8), rack("c", 2.5)];
+    const result = computeRackAllocation(racks, 1.4);
+    expect(result).toEqual([]);
   });
 
   it("matches the user's own example: 3kg target lands on ~3.2 or ~3.19, not under", () => {

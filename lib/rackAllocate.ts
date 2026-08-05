@@ -15,20 +15,22 @@ export interface RackAllocation {
 // How far over the requested weight an allocation is allowed to go before
 // it's no longer considered "close enough" — beyond this, the customer is
 // better served by an under-target amount (flagged as short) than by
-// forcing a big unwanted overage on them.
+// forcing a big unwanted overage on them. This is a hard cap: an allocation
+// that exceeds it is never chosen, even as a last resort — if nothing fits
+// within the cap and there's no under-target option either, the function
+// returns nothing at all (an empty allocation, i.e. fully short) rather
+// than force an oversized piece on the order.
 export const MAX_OVER_ALLOCATION_KG = 0.2;
 
 // Picks a subset of available rack pieces whose weights sum as close as
-// possible to targetWeight (kg), preferring to round up. Three tiers, best
-// to worst:
+// possible to targetWeight (kg), preferring to round up. Two tiers, best to
+// worst:
 //   1. Meets or exceeds target, by no more than MAX_OVER_ALLOCATION_KG —
 //      the "close enough, round up" zone. Smallest overage wins.
 //   2. Falls short of target — the customer gets less than they asked for.
-//      Smallest shortfall wins. Always worse than tier 1, but still better
-//      than a huge unwanted overage.
-//   3. Exceeds target by more than MAX_OVER_ALLOCATION_KG — only chosen when
-//      nothing in tier 1 or 2 exists at all (e.g. the only piece in stock is
-//      much bigger than what's needed). Smallest overage wins here too.
+//      Smallest shortfall wins. Always worse than tier 1, but still chosen
+//      over any allocation that breaks the overage cap.
+// Anything exceeding the cap is disqualified outright, never selected.
 export function computeRackAllocation(racks: AllocatableRack[], targetWeight: number): RackAllocation[] {
   const availableRacks = racks
     .filter((r) => !r.isUsedUp && r.remainingWeight > 0)
@@ -52,11 +54,10 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
   let callBudget = 200000; // hard cap so a large/unreachable inventory can never hang the tab
 
   const UNDERSHOOT_PENALTY = 1_000_000;
-  const OVER_CAP_PENALTY = 2_000_000;
   const scoreOf = (sum: number) => {
     if (sum >= targetInt && sum <= targetInt + capInt) return sum - targetInt;
     if (sum < targetInt) return targetInt - sum + UNDERSHOOT_PENALTY;
-    return sum - targetInt - capInt + OVER_CAP_PENALTY;
+    return Infinity; // over the cap — disqualified, can never beat even an empty result
   };
 
   const considerCandidate = (subset: typeof racksWithInt, sum: number) => {
@@ -83,7 +84,10 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
       }
     }
 
-    if (index >= racksWithInt.length || currentSum > targetInt + 200) {
+    // Once already past the cap, every extension of this branch only grows
+    // further past it (all weights are positive) — score is Infinity from
+    // here on, so there's nothing left to explore.
+    if (index >= racksWithInt.length || currentSum > targetInt + capInt) {
       return false;
     }
 
