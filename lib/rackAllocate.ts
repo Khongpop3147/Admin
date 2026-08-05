@@ -23,9 +23,12 @@ export const MAX_WEIGHT_DEVIATION_KG = 0.2;
 
 // Picks a subset of available rack pieces whose weights sum as close as
 // possible to targetWeight (kg), within ±MAX_WEIGHT_DEVIATION_KG. Anything
-// outside that window is disqualified outright. Among valid candidates,
-// smallest deviation wins; an exact tie between an over-shoot and an
-// under-shoot of the same size favors the over-shoot (round up, not down).
+// outside that window is disqualified outright. Two tiers, best to worst:
+//   1. Meets or exceeds target, within the tolerance — smallest overage
+//      wins. Always preferred over tier 2, even when a tier-2 candidate
+//      would land numerically closer to target.
+//   2. Falls short of target, within the tolerance — smallest shortfall
+//      wins. Only used when nothing qualifies for tier 1.
 export function computeRackAllocation(racks: AllocatableRack[], targetWeight: number): RackAllocation[] {
   const availableRacks = racks
     .filter((r) => !r.isUsedUp && r.remainingWeight > 0)
@@ -48,13 +51,15 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
   let minScore = Infinity;
   let callBudget = 200000; // hard cap so a large/unreachable inventory can never hang the tab
 
+  // Tier 1 (meets/exceeds target) always scores lower than tier 2 (falls
+  // short) — offsetting every tier-2 score above the worst possible tier-1
+  // score (capInt) guarantees that, regardless of how much closer to target
+  // a tier-2 candidate might numerically be.
   const scoreOf = (sum: number) => {
-    const deviation = Math.abs(sum - targetInt);
-    if (deviation > capInt) return Infinity; // outside the tolerance either way — disqualified
-    // Tiny tie-break nudge (well under 1 int-unit) so an exact-magnitude
-    // over-shoot beats an equal-magnitude under-shoot without ever being
-    // able to flip a genuine difference.
-    return sum >= targetInt ? deviation : deviation + 0.5;
+    const overshoot = sum - targetInt;
+    if (overshoot >= 0) return overshoot <= capInt ? overshoot : Infinity;
+    const shortfall = -overshoot;
+    return shortfall <= capInt ? shortfall + capInt + 1 : Infinity;
   };
 
   const considerCandidate = (subset: typeof racksWithInt, sum: number) => {

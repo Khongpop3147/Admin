@@ -20,6 +20,15 @@ describe("computeRackAllocation", () => {
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
+  it("prefers an over-target candidate even when an under-target one is numerically closer", () => {
+    // Target 1.4: a=1.35 (under by only 0.05) is much closer than
+    // b=1.55 (over by 0.15) — but meeting/exceeding target always wins
+    // over falling short, regardless of which is closer.
+    const racks = [rack("a", 1.35), rack("b", 1.55)];
+    const result = computeRackAllocation(racks, 1.4);
+    expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
+  });
+
   it("caps the acceptable overage at MAX_WEIGHT_DEVIATION_KG (0.2kg) — beyond that, prefers falling short instead", () => {
     // 2.9 (under by 0.1) is numerically closer than 3.5 (over by 0.5), and
     // 0.5 is well past the 0.2kg tolerance, so the under-shoot wins here.
