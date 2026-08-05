@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getShippingRank, getShippingLabel, getRackDisplay, groupOrdersForPrint, PrintableOrder } from "./porkSlip";
+import { getShippingRank, getShippingLabel, getRackDisplay, extractShortageNote, groupOrdersForPrint, PrintableOrder } from "./porkSlip";
 
 describe("getShippingRank", () => {
   it("ranks NIM COD, NIM prepaid, EMS COD, EMS prepaid in that order", () => {
@@ -20,6 +20,35 @@ describe("getShippingLabel", () => {
     expect(getShippingLabel({ shippingMethod: "NIM Express", codAmount: null })).toBe("NIM Express -ส่งฟรี");
     expect(getShippingLabel({ shippingMethod: "EMS", codAmount: 300 })).toBe("EMS -ปลายทาง");
     expect(getShippingLabel({ shippingMethod: "EMS", codAmount: null })).toBe("EMS -ส่งฟรี");
+  });
+});
+
+describe("extractShortageNote", () => {
+  it("extracts a plain shortage note unchanged", () => {
+    expect(extractShortageNote("หมูในคลังไม่พอดี ขาดอีก 3 ขีด")).toBe("หมูในคลังไม่พอดี ขาดอีก 3 ขีด");
+  });
+
+  it("extracts the shortage note but drops a trailing slip-issue note", () => {
+    const combined = "หมูในคลังไม่พอดี ขาดอีก 2.4 ขีด [หมายเหตุสลิป: สลิปไม่มี QR โค้ด]";
+    expect(extractShortageNote(combined)).toBe("หมูในคลังไม่พอดี ขาดอีก 2.4 ขีด");
+  });
+
+  it("extracts the 'no stock at all' variant", () => {
+    expect(extractShortageNote("หมูในคลังไม่มี ขาดอีก 1 โล 3 ขีด")).toBe("หมูในคลังไม่มี ขาดอีก 1 โล 3 ขีด");
+  });
+
+  it("returns empty for a slip-only note (no shortage)", () => {
+    expect(extractShortageNote("[หมายเหตุสลิป: ยอดเงินไม่ตรง แต่ตรวจสอบแล้วถูกต้อง]")).toBe("");
+  });
+
+  it("returns empty for an arbitrary manually-typed note", () => {
+    expect(extractShortageNote("ลูกค้าขอให้ห่อพิเศษ")).toBe("");
+  });
+
+  it("returns empty for null/undefined/empty input", () => {
+    expect(extractShortageNote(null)).toBe("");
+    expect(extractShortageNote(undefined)).toBe("");
+    expect(extractShortageNote("")).toBe("");
   });
 });
 

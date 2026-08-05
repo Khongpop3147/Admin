@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { BASE_PATH } from "../../../lib/basePath";
-import { groupOrdersForPrint, getShippingLabel, getRackDisplay, AdminGroup as AdminGroupType, PrintableOrder } from "../../../lib/porkSlip";
+import { groupOrdersForPrint, getShippingLabel, getRackDisplay, extractShortageNote, AdminGroup as AdminGroupType, PrintableOrder } from "../../../lib/porkSlip";
 
 interface Order extends PrintableOrder {
   id: string;
@@ -121,7 +121,7 @@ function PrintSlipContent() {
                       {rackData.totalWeight > 0 ? `${rackData.totalWeight.toFixed(2)} kg` : "-"}
                     </td>
                     <td style={{ border: '1px solid #000', padding: '10px', fontSize: '14px', color: '#a00' }}>
-                      {order.adminNote || ""}
+                      {extractShortageNote(order.adminNote)}
                     </td>
                   </tr>
                 );
