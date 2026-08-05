@@ -1308,19 +1308,26 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                   <option value="COD">เก็บปลายทาง</option>
                 </select>
               </div>
-              <div
-                className={styles.formGroup}
-                style={{ display: showPriceAndSlip ? 'block' : 'none' }}
-                tabIndex={0}
-                onPaste={handleSlipPaste}
-              >
+              <div className={styles.formGroup} style={{ display: showPriceAndSlip ? 'block' : 'none' }}>
                 <label className={styles.label}>สลิปโอนเงิน</label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input type="file" accept="image/*" onChange={handleFileUpload} ref={fileInputRef} className={styles.input} style={{ padding: '8px', opacity: (formData.paymentStatus === "Unpaid" || formData.paymentStatus === "COD") ? 0.5 : 1 }} disabled={isUploading || formData.paymentStatus === "Unpaid" || formData.paymentStatus === "COD"} />
-                  {isUploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  หรือคัดลอกรูปสลิปมาแล้วกด Ctrl+V วางในกล่องนี้ได้เลย
+                <div
+                  tabIndex={0}
+                  onPaste={handleSlipPaste}
+                  style={{
+                    border: '2px dashed rgba(88,166,255,0.4)',
+                    borderRadius: '8px',
+                    padding: '14px',
+                    background: 'rgba(88,166,255,0.05)',
+                    opacity: (formData.paymentStatus === "Unpaid" || formData.paymentStatus === "COD") ? 0.5 : 1,
+                  }}
+                >
+                  <div style={{ fontSize: '13px', color: 'var(--accent-blue)', marginBottom: '10px', fontWeight: 'bold' }}>
+                    📋 คลิกตรงนี้แล้วกด Ctrl+V เพื่อวางรูปสลิป หรือเลือกไฟล์ด้านล่าง
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input type="file" accept="image/*" onChange={handleFileUpload} ref={fileInputRef} className={styles.input} style={{ padding: '8px' }} disabled={isUploading || formData.paymentStatus === "Unpaid" || formData.paymentStatus === "COD"} />
+                    {isUploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
+                  </div>
                 </div>
                 {formData.paymentStatus === "Unpaid" && (
                   <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '6px' }}>
@@ -1761,12 +1768,24 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                         <option value="COD">เก็บปลายทาง</option>
                       </select>
                     </div>
-                    <div className={styles.formGroup} tabIndex={0} onPaste={handleEditSlipPaste}>
+                    <div className={styles.formGroup}>
                       <label className={styles.label}>สลิปโอนเงิน</label>
-                      <input type="file" accept="image/*" onChange={handleEditFileUpload} className={styles.input} style={{ padding: '8px', opacity: (editOrderData.paymentStatus === "Unpaid" || editOrderData.paymentStatus === "COD") ? 0.5 : 1 }} disabled={isEditUploading || editOrderData.paymentStatus === "Unpaid" || editOrderData.paymentStatus === "COD"} />
-                      {isEditUploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        หรือคัดลอกรูปสลิปมาแล้วกด Ctrl+V วางในกล่องนี้ได้เลย
+                      <div
+                        tabIndex={0}
+                        onPaste={handleEditSlipPaste}
+                        style={{
+                          border: '2px dashed rgba(88,166,255,0.4)',
+                          borderRadius: '8px',
+                          padding: '14px',
+                          background: 'rgba(88,166,255,0.05)',
+                          opacity: (editOrderData.paymentStatus === "Unpaid" || editOrderData.paymentStatus === "COD") ? 0.5 : 1,
+                        }}
+                      >
+                        <div style={{ fontSize: '13px', color: 'var(--accent-blue)', marginBottom: '10px', fontWeight: 'bold' }}>
+                          📋 คลิกตรงนี้แล้วกด Ctrl+V เพื่อวางรูปสลิป หรือเลือกไฟล์ด้านล่าง
+                        </div>
+                        <input type="file" accept="image/*" onChange={handleEditFileUpload} className={styles.input} style={{ padding: '8px' }} disabled={isEditUploading || editOrderData.paymentStatus === "Unpaid" || editOrderData.paymentStatus === "COD"} />
+                        {isEditUploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '8px' }}>กำลังอัปโหลด...</span>}
                       </div>
                       {editOrderData.paymentStatus === "Unpaid" && (
                         <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '6px' }}>
