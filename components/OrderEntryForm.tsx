@@ -561,10 +561,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const uploadSlipFile = async (file: File) => {
     setIsUploading(true);
     setSlipVerification(null);
     setSlipIssueReason("");
@@ -597,6 +594,31 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadSlipFile(file);
+  };
+
+  // Lets an admin copy a slip image straight from a chat app and paste it
+  // here (Ctrl+V) instead of having to save it to disk first, then browse
+  // for it — same upload + Thunder verification pipeline either way.
+  const handleSlipPaste = (e: React.ClipboardEvent) => {
+    if (isUploading || formData.paymentStatus === "Unpaid" || formData.paymentStatus === "COD") return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          uploadSlipFile(file);
+        }
+        return;
+      }
+    }
+  };
+
   const handleStartEditOrder = () => {
     setEditOrderData({ ...selectedOrder });
     setIsEditingOrder(true);
@@ -622,10 +644,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   // Same "uploading a slip means it's paid" rule as the main new-order form —
   // covers the case where a customer sends the slip after the order was
   // already saved as unpaid.
-  const handleEditFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const uploadEditSlipFile = async (file: File) => {
     setIsEditUploading(true);
     setEditSlipVerification(null);
     setEditSlipIssueReason("");
@@ -652,6 +671,28 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
       alert("เกิดข้อผิดพลาดขณะอัปโหลดไฟล์");
     } finally {
       setIsEditUploading(false);
+    }
+  };
+
+  const handleEditFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadEditSlipFile(file);
+  };
+
+  const handleEditSlipPaste = (e: React.ClipboardEvent) => {
+    if (isEditUploading || editOrderData?.paymentStatus === "Unpaid" || editOrderData?.paymentStatus === "COD") return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          uploadEditSlipFile(file);
+        }
+        return;
+      }
     }
   };
 
@@ -1267,11 +1308,19 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                   <option value="COD">เก็บปลายทาง</option>
                 </select>
               </div>
-              <div className={styles.formGroup} style={{ display: showPriceAndSlip ? 'block' : 'none' }}>
+              <div
+                className={styles.formGroup}
+                style={{ display: showPriceAndSlip ? 'block' : 'none' }}
+                tabIndex={0}
+                onPaste={handleSlipPaste}
+              >
                 <label className={styles.label}>สลิปโอนเงิน</label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <input type="file" accept="image/*" onChange={handleFileUpload} ref={fileInputRef} className={styles.input} style={{ padding: '8px', opacity: (formData.paymentStatus === "Unpaid" || formData.paymentStatus === "COD") ? 0.5 : 1 }} disabled={isUploading || formData.paymentStatus === "Unpaid" || formData.paymentStatus === "COD"} />
                   {isUploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  หรือคัดลอกรูปสลิปมาแล้วกด Ctrl+V วางในกล่องนี้ได้เลย
                 </div>
                 {formData.paymentStatus === "Unpaid" && (
                   <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '6px' }}>
@@ -1712,10 +1761,13 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                         <option value="COD">เก็บปลายทาง</option>
                       </select>
                     </div>
-                    <div className={styles.formGroup}>
+                    <div className={styles.formGroup} tabIndex={0} onPaste={handleEditSlipPaste}>
                       <label className={styles.label}>สลิปโอนเงิน</label>
                       <input type="file" accept="image/*" onChange={handleEditFileUpload} className={styles.input} style={{ padding: '8px', opacity: (editOrderData.paymentStatus === "Unpaid" || editOrderData.paymentStatus === "COD") ? 0.5 : 1 }} disabled={isEditUploading || editOrderData.paymentStatus === "Unpaid" || editOrderData.paymentStatus === "COD"} />
                       {isEditUploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                        หรือคัดลอกรูปสลิปมาแล้วกด Ctrl+V วางในกล่องนี้ได้เลย
+                      </div>
                       {editOrderData.paymentStatus === "Unpaid" && (
                         <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '6px' }}>
                           เลือก "ยังไม่จ่ายเงิน" อยู่ ไม่สามารถแนบสลิปได้ — ถ้าลูกค้าโอนแล้วให้เปลี่ยนสถานะเป็น "จ่ายเงินแล้ว" ก่อน
