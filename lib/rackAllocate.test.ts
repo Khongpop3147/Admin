@@ -29,23 +29,39 @@ describe("computeRackAllocation", () => {
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
-  it("caps the acceptable overage at MAX_WEIGHT_DEVIATION_KG (0.2kg) — beyond that, prefers falling short instead", () => {
+  it("caps the acceptable overage at MAX_OVER_DEVIATION_KG (0.2kg) — beyond that, prefers falling short instead", () => {
     // 2.9 (under by 0.1) is numerically closer than 3.5 (over by 0.5), and
-    // 0.5 is well past the 0.2kg tolerance, so the under-shoot wins here.
+    // 0.5 is well past the 0.2kg over-cap, so the under-shoot wins here.
     const racks = [rack("a", 2.9), rack("b", 3.5)];
     const result = computeRackAllocation(racks, 3);
     expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
   });
 
-  it("still rounds up right at the cap boundary (exactly 0.2kg over vs 0.3kg under)", () => {
+  it("still rounds up right at the over-cap boundary (exactly 0.2kg over vs 0.3kg under)", () => {
+    // 0.3kg under also exceeds the 0.25kg under-cap, so b (0.2kg over,
+    // within the 0.2kg over-cap) is the only qualifying candidate either way.
     const racks = [rack("a", 2.7), rack("b", 3.2)];
     const result = computeRackAllocation(racks, 3);
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
-  it("also caps the acceptable shortfall at MAX_WEIGHT_DEVIATION_KG — beyond that, gives nothing rather than a mismatched amount", () => {
+  it("allows a shortfall up to MAX_UNDER_DEVIATION_KG (0.25kg), wider than the 0.2kg over-cap", () => {
+    // 2.75 (under by exactly 0.25) has no over-target alternative to compete
+    // with, and 0.25 is right at the under-cap boundary — should still qualify.
+    const racks = [rack("a", 2.75)];
+    const result = computeRackAllocation(racks, 3);
+    expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
+  });
+
+  it("rejects a shortfall just past MAX_UNDER_DEVIATION_KG (0.26kg over the 0.25kg cap)", () => {
+    const racks = [rack("a", 2.74)];
+    const result = computeRackAllocation(racks, 3);
+    expect(result).toEqual([]);
+  });
+
+  it("also caps the acceptable shortfall at MAX_UNDER_DEVIATION_KG — beyond that, gives nothing rather than a mismatched amount", () => {
     // Only 1.5kg achievable at all (1 + 0.5), 3.5kg short of a 5kg target —
-    // way outside the 0.2kg tolerance, so nothing gets allocated.
+    // way outside the 0.25kg under-cap, so nothing gets allocated.
     const racks = [rack("a", 1), rack("b", 0.5)];
     const result = computeRackAllocation(racks, 5);
     expect(result).toEqual([]);

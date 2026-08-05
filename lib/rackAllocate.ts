@@ -12,30 +12,33 @@ export interface RackAllocation {
   weight: number;
 }
 
-// How far an allocation is allowed to land from the requested weight, in
-// either direction, before it's no longer considered "close enough". This is
-// a hard, symmetric cap — an allocation whose total is more than this far
-// over OR under the target is never chosen, even as a last resort. If
-// nothing available lands within the tolerance in either direction, the
+// How far an allocation is allowed to land from the requested weight before
+// it's no longer considered "close enough" — a hard cap, checked separately
+// per direction (over vs under target). An allocation landing further than
+// this in either direction is never chosen, even as a last resort. If
+// nothing available lands within tolerance in either direction, the
 // function returns nothing at all (an empty allocation) rather than force a
 // badly-mismatched amount on the order.
-export const MAX_WEIGHT_DEVIATION_KG = 0.2;
+export const MAX_OVER_DEVIATION_KG = 0.2;
+export const MAX_UNDER_DEVIATION_KG = 0.25;
 
 // Picks a subset of available rack pieces whose weights sum as close as
-// possible to targetWeight (kg), within ±MAX_WEIGHT_DEVIATION_KG. Anything
-// outside that window is disqualified outright. Two tiers, best to worst:
-//   1. Meets or exceeds target, within the tolerance — smallest overage
-//      wins. Always preferred over tier 2, even when a tier-2 candidate
-//      would land numerically closer to target.
-//   2. Falls short of target, within the tolerance — smallest shortfall
-//      wins. Only used when nothing qualifies for tier 1.
+// possible to targetWeight (kg), within [target - MAX_UNDER_DEVIATION_KG,
+// target + MAX_OVER_DEVIATION_KG]. Anything outside that window is
+// disqualified outright. Two tiers, best to worst:
+//   1. Meets or exceeds target, within MAX_OVER_DEVIATION_KG — smallest
+//      overage wins. Always preferred over tier 2, even when a tier-2
+//      candidate would land numerically closer to target.
+//   2. Falls short of target, within MAX_UNDER_DEVIATION_KG — smallest
+//      shortfall wins. Only used when nothing qualifies for tier 1.
 export function computeRackAllocation(racks: AllocatableRack[], targetWeight: number): RackAllocation[] {
   const availableRacks = racks
     .filter((r) => !r.isUsedUp && r.remainingWeight > 0)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const targetInt = Math.round(targetWeight * 100);
-  const capInt = Math.round(MAX_WEIGHT_DEVIATION_KG * 100);
+  const overCapInt = Math.round(MAX_OVER_DEVIATION_KG * 100);
+  const underCapInt = Math.round(MAX_UNDER_DEVIATION_KG * 100);
   const racksWithInt = availableRacks.map((r) => ({
     ...r,
     intWeight: Math.round(r.remainingWeight * 100),
@@ -53,13 +56,13 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
 
   // Tier 1 (meets/exceeds target) always scores lower than tier 2 (falls
   // short) — offsetting every tier-2 score above the worst possible tier-1
-  // score (capInt) guarantees that, regardless of how much closer to target
-  // a tier-2 candidate might numerically be.
+  // score (overCapInt) guarantees that, regardless of how much closer to
+  // target a tier-2 candidate might numerically be.
   const scoreOf = (sum: number) => {
     const overshoot = sum - targetInt;
-    if (overshoot >= 0) return overshoot <= capInt ? overshoot : Infinity;
+    if (overshoot >= 0) return overshoot <= overCapInt ? overshoot : Infinity;
     const shortfall = -overshoot;
-    return shortfall <= capInt ? shortfall + capInt + 1 : Infinity;
+    return shortfall <= underCapInt ? shortfall + overCapInt + 1 : Infinity;
   };
 
   const considerCandidate = (subset: typeof racksWithInt, sum: number) => {
@@ -86,10 +89,10 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
       }
     }
 
-    // Once already past the cap, every extension of this branch only grows
-    // further past it (all weights are positive) — score is Infinity from
-    // here on, so there's nothing left to explore.
-    if (index >= racksWithInt.length || currentSum > targetInt + capInt) {
+    // Once already past the over-cap, every extension of this branch only
+    // grows further past it (all weights are positive) — score is Infinity
+    // from here on, so there's nothing left to explore.
+    if (index >= racksWithInt.length || currentSum > targetInt + overCapInt) {
       return false;
     }
 
