@@ -9,6 +9,7 @@ import { useRef } from "react";
 import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
+import { nextDayStr, previousDayStr } from "../../lib/packingCutoff";
 import styles from "../page.module.css";
 
 function formatMoney(value: unknown): string {
@@ -66,31 +67,31 @@ export default function PackingPage() {
   // clobber the screen with stale (or empty) data for the current date.
   const latestRequestedDateRef = useRef<string | null>(null);
 
+  // selectedDate is "the day Packing is working" — the day these pieces
+  // actually get packed/shipped. Orders are entered by admins the day
+  // *before* that, so this defaults to tomorrow (not today): open the page
+  // any time today and it already shows today's growing batch, ready for
+  // tomorrow's packing, without anyone needing to flip the date picker
+  // forward manually.
   const [selectedDate, setSelectedDate] = useState(() => {
-    // Default to today in Thai time
     const today = new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' });
     const d = new Date(today);
-    // Format as YYYY-MM-DD
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return nextDayStr(todayStr);
   });
 
   useEffect(() => {
     fetchOrders();
   }, [selectedDate]);
 
-  const getNextDayStr = (dateStr: string) => {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const date = new Date(Date.UTC(y, m - 1, d));
-    date.setUTCDate(date.getUTCDate() + 1);
-    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
-  };
-
   const fetchOrders = async () => {
     const requestedDate = selectedDate;
     latestRequestedDateRef.current = requestedDate;
     setIsLoading(true);
     try {
-      const res = await fetch(`${BASE_PATH}/api/orders?date=${requestedDate}`);
+      // The orders themselves were created the day *before* selectedDate
+      // (see the comment on selectedDate above) — fetch that actual date.
+      const res = await fetch(`${BASE_PATH}/api/orders?date=${previousDayStr(requestedDate)}`);
       const data = await res.json();
       // A newer request may have fired (and already resolved) while this one
       // was in flight — if so, drop this response instead of overwriting the
@@ -588,7 +589,7 @@ export default function PackingPage() {
                       body: JSON.stringify({ date: selectedDate, status: 'Shipped' })
                     });
                     if (res.ok) {
-                      setSelectedDate(getNextDayStr(selectedDate));
+                      setSelectedDate(nextDayStr(selectedDate));
                     } else {
                       alert("เกิดข้อผิดพลาดในการเปลี่ยนสถานะ");
                       setIsLoading(false);

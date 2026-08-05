@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { BASE_PATH } from "../../../lib/basePath";
 import { groupOrdersForPrint, getShippingLabel, getRackDisplay, extractShortageNote, AdminGroup as AdminGroupType, PrintableOrder } from "../../../lib/porkSlip";
+import { previousDayStr } from "../../../lib/packingCutoff";
 
 interface Order extends PrintableOrder {
   id: string;
@@ -33,8 +34,13 @@ function PrintSlipContent() {
 
   const fetchOrders = async (date: string) => {
     try {
+      // `date` is "the day Packing is working" (same meaning as selectedDate
+      // on /packing) — the orders themselves were created the day before
+      // that, so fetch that actual date, matching what the Packing list page
+      // shows for the same `date` value.
+      const orderDate = previousDayStr(date);
       const [ordersRes, usersRes] = await Promise.all([
-        fetch(`${BASE_PATH}/api/orders?date=${date}`),
+        fetch(`${BASE_PATH}/api/orders?date=${orderDate}`),
         fetch(`${BASE_PATH}/api/users`),
       ]);
       const ordersData = await ordersRes.json();

@@ -11,6 +11,13 @@ export function nextDayStr(dateStr: string): string {
   return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
 }
 
+// Same arithmetic as nextDayStr, one day the other direction.
+export function previousDayStr(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d - 1));
+  return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}-${String(prev.getUTCDate()).padStart(2, "0")}`;
+}
+
 // Once Packing has closed out a day (packingCutoffDate === today's real
 // date), any order created for the rest of that same calendar day gets
 // numbered as if it were the next day's first order instead of tacking onto

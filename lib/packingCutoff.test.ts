@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextDayStr, effectiveOrderDateKey } from "./packingCutoff";
+import { nextDayStr, previousDayStr, effectiveOrderDateKey } from "./packingCutoff";
 
 describe("nextDayStr", () => {
   it("advances a normal day", () => {
@@ -21,6 +21,30 @@ describe("nextDayStr", () => {
 
   it("handles a non-leap-year February correctly", () => {
     expect(nextDayStr("2026-02-28")).toBe("2026-03-01");
+  });
+});
+
+describe("previousDayStr", () => {
+  it("goes back a normal day", () => {
+    expect(previousDayStr("2026-08-05")).toBe("2026-08-04");
+  });
+
+  it("rolls back over a month boundary", () => {
+    expect(previousDayStr("2026-02-01")).toBe("2026-01-31");
+  });
+
+  it("rolls back over a year boundary", () => {
+    expect(previousDayStr("2027-01-01")).toBe("2026-12-31");
+  });
+
+  it("lands on a leap-year February 29 correctly", () => {
+    expect(previousDayStr("2024-03-01")).toBe("2024-02-29");
+  });
+
+  it("is the exact inverse of nextDayStr", () => {
+    for (const d of ["2026-08-04", "2026-01-31", "2026-12-31", "2024-02-29"]) {
+      expect(previousDayStr(nextDayStr(d))).toBe(d);
+    }
   });
 });
 
