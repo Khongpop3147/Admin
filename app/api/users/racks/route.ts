@@ -93,33 +93,36 @@ export async function DELETE(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
+    const idsParam = searchParams.get("ids");
+    const ids = idsParam ? idsParam.split(",").filter(Boolean) : (id ? [id] : []);
 
-    if (!id) {
+    if (ids.length === 0) {
       return NextResponse.json({ error: "Assignment ID is required" }, { status: 400 });
     }
 
-    const rackToDelete = await prisma.rackAssignment.findUnique({
-      where: { id },
+    const racksToDelete = await prisma.rackAssignment.findMany({
+      where: { id: { in: ids } },
       include: { user: true }
     });
 
-    if (!rackToDelete) {
+    if (racksToDelete.length === 0) {
       return NextResponse.json({ error: "ไม่พบชิ้นหมูนี้ อาจถูกลบไปแล้ว" }, { status: 404 });
     }
 
-    await prisma.deletedPorkLog.create({
-      data: {
-        rackNo: rackToDelete.rackNo,
-        weight: rackToDelete.remainingWeight,
-        userName: rackToDelete.user.name,
-      }
-    });
+    await prisma.$transaction([
+      prisma.deletedPorkLog.createMany({
+        data: racksToDelete.map((r) => ({
+          rackNo: r.rackNo,
+          weight: r.remainingWeight,
+          userName: r.user.name,
+        })),
+      }),
+      prisma.rackAssignment.deleteMany({
+        where: { id: { in: racksToDelete.map((r) => r.id) } },
+      }),
+    ]);
 
-    await prisma.rackAssignment.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({ success: true }, { status: 200 });
+    return NextResponse.json({ success: true, count: racksToDelete.length }, { status: 200 });
   } catch (error) {
     console.error("Error revoking rack:", error);
     return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });

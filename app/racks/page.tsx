@@ -693,6 +693,33 @@ export default function RacksPage() {
     }
   };
 
+  const handleDeleteSelectedCentralRacks = async () => {
+    if (selectedCentralRacks.size === 0) return;
+    if (!confirm(`ต้องการลบชิ้นหมูที่เลือกไว้ ${selectedCentralRacks.size} ชิ้นออกจากคลังกลางถาวรใช่ไหมครับ? (กู้คืนไม่ได้)`)) return;
+
+    setIsDistributing(true);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/users/racks?ids=${Array.from(selectedCentralRacks).join(",")}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        const deletedCount = selectedCentralRacks.size;
+        setSelectedCentralRacks(new Set());
+        await fetchUsers();
+        fetchDeletedLogs();
+        alert(`ลบสำเร็จ ${deletedCount} ชิ้น!`);
+      } else {
+        const err = await res.json();
+        alert(err.error || "ลบไม่สำเร็จ");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะลบ");
+    } finally {
+      setIsDistributing(false);
+    }
+  };
+
   // Same "type a count, pick the N lowest racks" shortcut already used for
   // distributing from central — grouped by base rack code (e.g. all of
   // A005-1..5 count as one "rack"), not by individual piece.
@@ -1385,17 +1412,27 @@ export default function RacksPage() {
                   ))}
                 </select>
               </div>
-              <button
-                onClick={() => {
-                  handleDistribute().then(() => {
-                    setIsDistributeModalOpen(false);
-                  });
-                }}
-                disabled={isDistributing || !distributeTargetUserId || selectedCentralRacks.size === 0}
-                style={{ background: '#ffac33', border: 'none', color: '#111', padding: '12px 32px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', height: '100%' }}
-              >
-                {isDistributing ? "กำลังแจกจ่าย..." : "แจกจ่ายชิ้นที่เลือก"}
-              </button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={handleDeleteSelectedCentralRacks}
+                  disabled={isDistributing || selectedCentralRacks.size === 0}
+                  title="ลบชิ้นหมูที่เลือกออกจากคลังกลางถาวร (กู้คืนไม่ได้)"
+                  style={{ background: 'rgba(255,107,107,0.15)', border: '1px solid rgba(255,107,107,0.4)', color: '#ff6b6b', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', height: '100%' }}
+                >
+                  🗑️ ลบชิ้นที่เลือก
+                </button>
+                <button
+                  onClick={() => {
+                    handleDistribute().then(() => {
+                      setIsDistributeModalOpen(false);
+                    });
+                  }}
+                  disabled={isDistributing || !distributeTargetUserId || selectedCentralRacks.size === 0}
+                  style={{ background: '#ffac33', border: 'none', color: '#111', padding: '12px 32px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', height: '100%' }}
+                >
+                  {isDistributing ? "กำลังแจกจ่าย..." : "แจกจ่ายชิ้นที่เลือก"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
