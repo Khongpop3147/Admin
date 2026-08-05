@@ -1552,7 +1552,9 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                         {order.trackingNumber && <span style={{ color: 'var(--accent-green)', marginLeft: '8px' }} title={`เลขพัสดุ: ${order.trackingNumber}`}>🚚 ได้เลขพัสดุแล้ว</span>}
                       </span>
                     </div>
-                    <span className={styles.itemTime}>
+                    <span className={styles.itemTime} style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {new Date(order.createdAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
+                      {' '}
                       {new Date(order.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </span>
                   </li>
@@ -1632,7 +1634,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
         return (
           <div className={styles.modalOverlay} onClick={handleCloseOrderDetail}>
-            <div className={styles.alertBox} style={{ maxWidth: '520px', width: '92%', maxHeight: '85vh', textAlign: 'left', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+            <div className={styles.alertBox} style={{ maxWidth: '760px', width: '92%', maxHeight: '88vh', textAlign: 'left', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
 
               {/* Header */}
               <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
