@@ -17,7 +17,12 @@ export const SHIPPING_RATES_NIM = [
   { w: 50, c: 750 }, { w: 75, c: 1000 }, { w: 100, c: 1500 }
 ];
 
+// Local/in-area delivery doesn't go through a courier's weight-tiered
+// pricing at all — it's always this flat rate regardless of weight.
+export const LOCAL_DELIVERY_FLAT_RATE = 200;
+
 export function calculateShippingCost(method: string, weight: number): number {
+  if (method === "ส่งในพื้นที่") return LOCAL_DELIVERY_FLAT_RATE;
   const rates = method === "EMS" ? SHIPPING_RATES_EMS : SHIPPING_RATES_NIM;
   const minCost = rates[0].c;
   const maxCost = rates[rates.length - 1].c;

@@ -10,8 +10,8 @@ export interface ShippingInfo {
 }
 
 // Report grouping order within each admin's own section: NIM -ปลายทาง,
-// NIM -ส่งฟรี, EMS -ปลายทาง, EMS -ส่งฟรี — COD comes first within each
-// shipping method.
+// NIM -ส่งฟรี, EMS -ปลายทาง, EMS -ส่งฟรี, ส่งในพื้นที่ -ปลายทาง,
+// ส่งในพื้นที่ -ส่งฟรี — COD comes first within each shipping method.
 export function getShippingRank(order: ShippingInfo): number {
   const method = order.shippingMethod || "";
   const hasCod = !!order.codAmount;
@@ -19,7 +19,9 @@ export function getShippingRank(order: ShippingInfo): number {
   if (method === "NIM Express") return 1;
   if (method === "EMS" && hasCod) return 2;
   if (method === "EMS") return 3;
-  return 4;
+  if (method === "ส่งในพื้นที่" && hasCod) return 4;
+  if (method === "ส่งในพื้นที่") return 5;
+  return 6;
 }
 
 // Every order ships either COD or prepaid — there's no bare "NIM Express"/

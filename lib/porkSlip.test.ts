@@ -9,8 +9,13 @@ describe("getShippingRank", () => {
     expect(getShippingRank({ shippingMethod: "EMS", codAmount: null })).toBe(3);
   });
 
+  it("ranks local delivery (ส่งในพื้นที่) COD/prepaid after EMS but before the catch-all", () => {
+    expect(getShippingRank({ shippingMethod: "ส่งในพื้นที่", codAmount: 300 })).toBe(4);
+    expect(getShippingRank({ shippingMethod: "ส่งในพื้นที่", codAmount: null })).toBe(5);
+  });
+
   it("ranks anything else last", () => {
-    expect(getShippingRank({ shippingMethod: "แมสเซนเจอร์", codAmount: null })).toBe(4);
+    expect(getShippingRank({ shippingMethod: "แมสเซนเจอร์", codAmount: null })).toBe(6);
   });
 });
 
@@ -20,6 +25,8 @@ describe("getShippingLabel", () => {
     expect(getShippingLabel({ shippingMethod: "NIM Express", codAmount: null })).toBe("NIM Express -ส่งฟรี");
     expect(getShippingLabel({ shippingMethod: "EMS", codAmount: 300 })).toBe("EMS -ปลายทาง");
     expect(getShippingLabel({ shippingMethod: "EMS", codAmount: null })).toBe("EMS -ส่งฟรี");
+    expect(getShippingLabel({ shippingMethod: "ส่งในพื้นที่", codAmount: 300 })).toBe("ส่งในพื้นที่ -ปลายทาง");
+    expect(getShippingLabel({ shippingMethod: "ส่งในพื้นที่", codAmount: null })).toBe("ส่งในพื้นที่ -ส่งฟรี");
   });
 });
 

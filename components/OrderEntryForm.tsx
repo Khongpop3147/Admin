@@ -52,7 +52,7 @@ function computeWeightDerivedFields(
   if (isCod) {
     updates.codAmount = calculateCodAmount(parsedWeight, settings).toFixed(2);
   }
-  if (shippingMethod === "EMS" || shippingMethod === "NIM Express") {
+  if (shippingMethod === "EMS" || shippingMethod === "NIM Express" || shippingMethod === "ส่งในพื้นที่") {
     updates.additionalShippingCost = calculateShippingCost(shippingMethod, parsedWeight).toFixed(2);
   }
   return updates;
@@ -509,15 +509,19 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
         }
       }
 
-      // Auto-calculate Shipping Cost for EMS & NIM Express
+      // Auto-calculate Shipping Cost for EMS, NIM Express & local delivery
       if (name === "crispyPorkWeight" || name === "shippingMethod") {
         const weightStr = name === "crispyPorkWeight" ? value : newData.crispyPorkWeight;
         const method = name === "shippingMethod" ? value : newData.shippingMethod;
         const parsedWeight = parseFloat(weightStr as string);
 
-        if ((method === "EMS" || method === "NIM Express") && !isNaN(parsedWeight) && parsedWeight > 0) {
+        if (method === "ส่งในพื้นที่") {
+          // Flat rate — doesn't depend on weight, so it fills in as soon as
+          // the method is picked instead of waiting for a weight to be typed.
+          newData.additionalShippingCost = calculateShippingCost(method, 0).toFixed(2);
+        } else if ((method === "EMS" || method === "NIM Express") && !isNaN(parsedWeight) && parsedWeight > 0) {
           newData.additionalShippingCost = calculateShippingCost(method, parsedWeight).toFixed(2);
-        } else if (name === "shippingMethod" && method !== "EMS" && method !== "NIM Express") {
+        } else if (name === "shippingMethod" && method !== "EMS" && method !== "NIM Express" && method !== "ส่งในพื้นที่") {
           newData.additionalShippingCost = "";
         }
       }
@@ -1256,6 +1260,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                       <>
                         <option value="EMS">EMS</option>
                         <option value="NIM Express">NIM Express</option>
+                        <option value="ส่งในพื้นที่">ส่งในพื้นที่</option>
                       </>
                     )}
                     {isStorefrontMode && (

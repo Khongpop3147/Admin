@@ -31,4 +31,10 @@ describe("calculateShippingCost", () => {
     expect(calculateShippingCost("NIM Express", 5)).toBe(260);
     expect(calculateShippingCost("something-else", 5)).toBe(260);
   });
+
+  it("local delivery (ส่งในพื้นที่) is always a flat 200, regardless of weight", () => {
+    expect(calculateShippingCost("ส่งในพื้นที่", 1)).toBe(200);
+    expect(calculateShippingCost("ส่งในพื้นที่", 20)).toBe(200);
+    expect(calculateShippingCost("ส่งในพื้นที่", 0)).toBe(200);
+  });
 });
