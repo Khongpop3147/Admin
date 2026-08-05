@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price, 
       shippingMethod, additionalShippingCost, codAmount, actualReceivedAmount, 
       transferSlip, paymentStatus, customerAddress, orderStatus, rackDetails, sellerName, trackingNumber,
-      bypassDuplicateCheck, adminNote
+      bypassDuplicateCheck, adminNote, entryDate
     } = body;
 
     if (!customerName) {
@@ -85,11 +85,20 @@ export async function POST(req: Request) {
       const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
       const todayDateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-      // Once Packing has closed out today (see /api/orders/bulk), any order
-      // created for the rest of the day gets numbered under tomorrow instead
-      // of tacking onto a batch Packing already considers finished.
+      // An admin can explicitly pick which date this order counts as (e.g.
+      // logging a walk-in sale from yesterday's paper notes) — falls back to
+      // today when left blank. Either way, still run it through the cutoff
+      // shift below, so a backdated/forward-dated order lands consistently
+      // with whatever Packing has already closed out for that date.
+      const baseDateKey = typeof entryDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entryDate)
+        ? entryDate
+        : todayDateKey;
+
+      // Once Packing has closed out a date (see /api/orders/bulk), any order
+      // entered for the rest of that day gets numbered under the next day
+      // instead of tacking onto a batch Packing already considers finished.
       const settings = await tx.settings.findUnique({ where: { id: "singleton" } });
-      const dateKey = effectiveOrderDateKey(todayDateKey, settings?.packingCutoffDate);
+      const dateKey = effectiveOrderDateKey(baseDateKey, settings?.packingCutoffDate);
 
       // 2. Increment DailyCounter atomically for every order EXCEPT an anonymous
       // shelf placement ("วางขายหน้าร้าน") — that's just a stock deduction, not
@@ -129,6 +138,7 @@ export async function POST(req: Request) {
           sellerName,
           trackingNumber,
           adminNote,
+          entryDate: dateKey,
         },
       });
 
@@ -191,9 +201,14 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     const sellerName = searchParams.get("sellerName");
-    const dateStr = searchParams.get("date"); // format: YYYY-MM-DD
-    const dateFrom = searchParams.get("dateFrom"); // format: YYYY-MM-DD
-    const dateTo = searchParams.get("dateTo"); // format: YYYY-MM-DD
+    const dateStr = searchParams.get("date"); // format: YYYY-MM-DD, filters by createdAt
+    const dateFrom = searchParams.get("dateFrom"); // format: YYYY-MM-DD, filters by createdAt
+    const dateTo = searchParams.get("dateTo"); // format: YYYY-MM-DD, filters by createdAt
+    // Exact match on the admin-chosen/effective entryDate — used by Packing
+    // instead of `date` so a backdated order shows on the day it was entered
+    // for, not the real instant it was submitted (which `date` still reflects
+    // for Order Details/Dashboard).
+    const entryDateStr = searchParams.get("entryDate"); // format: YYYY-MM-DD
     const platform = searchParams.get("platform");
     const excludePlatform = searchParams.get("excludePlatform");
     const customerName = searchParams.get("customerName");
@@ -220,7 +235,9 @@ export async function GET(req: Request) {
       whereClause.customerName = { contains: customerName, mode: "insensitive" };
     }
 
-    if (dateStr) {
+    if (entryDateStr) {
+      whereClause.entryDate = entryDateStr;
+    } else if (dateStr) {
       // Parse the date in Thai timezone (approximate by using UTC+7 offset or just treating input as local date)
       // Since server might be UTC, best to create start and end boundaries for the date string.
       const startDate = new Date(`${dateStr}T00:00:00+07:00`);
@@ -239,7 +256,7 @@ export async function GET(req: Request) {
     // Any explicit, scoped filter (date, platform, or a name search) means the
     // caller wants everything matching, not a "give me something recent"
     // sample — only cap the truly unscoped call.
-    const isScoped = Boolean(id || dateStr || dateFrom || dateTo || platform || excludePlatform || customerName);
+    const isScoped = Boolean(id || dateStr || dateFrom || dateTo || entryDateStr || platform || excludePlatform || customerName);
 
     const orders = await prisma.order.findMany({
       where: whereClause,

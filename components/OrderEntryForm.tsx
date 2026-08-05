@@ -256,6 +256,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     sellerName: "",
     trackingNumber: "",
     adminNote: "",
+    entryDate: "",
   };
 
   const isStorefrontMode = mode === "walkin";
@@ -980,6 +981,10 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 ) : (
                   <input required type="text" name="customerName" value={formData.customerName} onChange={handleChange} className={styles.input} placeholder="ชื่อลูกค้า" />
                 )}
+              </div>
+              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
+                <label className={styles.label}>วันที่ลงออเดอร์ <span style={{ fontWeight: 'normal', color: 'var(--text-secondary)' }}>(ไม่เลือก = วันนี้)</span></label>
+                <input type="date" name="entryDate" value={formData.entryDate} onChange={handleChange} className={styles.input} />
               </div>
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
                 <label className={styles.label}>ช่องทางการขาย <span style={{ color: '#ff6b6b' }}>*</span></label>

@@ -36,6 +36,12 @@ model Order {
   sellerName            String?
   trackingNumber        String?
   adminNote             String?
+  // The Bangkok-local "YYYY-MM-DD" this order counts as for order numbering
+  // and the Packing view — normally today, but an admin can back/forward-date
+  // it at entry time. Deliberately separate from createdAt (the real
+  // submission instant), which still drives Dashboard, Order Details, and
+  // duplicate detection unchanged.
+  entryDate             String
   createdAt             DateTime @default(now())
 }
 

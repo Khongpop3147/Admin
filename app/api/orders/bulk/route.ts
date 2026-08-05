@@ -34,15 +34,12 @@ export async function PATCH(req: Request) {
     }
 
     // `date` is "the day Packing is working" (matches the date picker on
-    // /packing) — the orders being finished were actually created the day
+    // /packing) — the orders being finished were entered under the day
     // *before* that (see the matching comment on selectedDate in
     // app/packing/page.tsx), so both the order lookup and the
     // numbering-cutoff marker below need this shifted-back date, not `date`
     // itself.
     const orderDate = previousDayStr(date);
-
-    const startDate = new Date(`${orderDate}T00:00:00+07:00`);
-    const endDate = new Date(`${orderDate}T23:59:59.999+07:00`);
 
     // "End of day" also closes out order numbering for this date — any order
     // created for the rest of this calendar day gets numbered as tomorrow's
@@ -56,10 +53,7 @@ export async function PATCH(req: Request) {
 
     const result = await prisma.order.updateMany({
       where: {
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
+        entryDate: orderDate,
         // Only update Pending and Packed orders. Storefront orders are normally
         // already "Completed" so this excludes them anyway, but check platform
         // directly too rather than relying on that alone — otherwise any

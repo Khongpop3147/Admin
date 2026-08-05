@@ -35,12 +35,12 @@ function PrintSlipContent() {
   const fetchOrders = async (date: string) => {
     try {
       // `date` is "the day Packing is working" (same meaning as selectedDate
-      // on /packing) — the orders themselves were created the day before
-      // that, so fetch that actual date, matching what the Packing list page
-      // shows for the same `date` value.
+      // on /packing) — the orders themselves were entered under the day
+      // before that, so filter by that entryDate, matching what the Packing
+      // list page shows for the same `date` value.
       const orderDate = previousDayStr(date);
       const [ordersRes, usersRes] = await Promise.all([
-        fetch(`${BASE_PATH}/api/orders?date=${orderDate}`),
+        fetch(`${BASE_PATH}/api/orders?entryDate=${orderDate}`),
         fetch(`${BASE_PATH}/api/users`),
       ]);
       const ordersData = await ordersRes.json();

@@ -89,9 +89,11 @@ export default function PackingPage() {
     latestRequestedDateRef.current = requestedDate;
     setIsLoading(true);
     try {
-      // The orders themselves were created the day *before* selectedDate
-      // (see the comment on selectedDate above) — fetch that actual date.
-      const res = await fetch(`${BASE_PATH}/api/orders?date=${previousDayStr(requestedDate)}`);
+      // Orders are entered under the day *before* selectedDate (see the
+      // comment on selectedDate above) — filter by that entryDate, not the
+      // real createdAt instant, so a backdated/forward-dated order shows up
+      // on the Packing day it was actually entered for.
+      const res = await fetch(`${BASE_PATH}/api/orders?entryDate=${previousDayStr(requestedDate)}`);
       const data = await res.json();
       // A newer request may have fired (and already resolved) while this one
       // was in flight — if so, drop this response instead of overwriting the
