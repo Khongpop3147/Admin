@@ -10,7 +10,6 @@ import { BASE_PATH } from "../lib/basePath";
 import { calculateCodAmount, AppSettings, computeVatAmount, computeActualReceivedAmount } from "../lib/money";
 import { calculateShippingCost } from "../lib/shipping";
 import { computeRackAllocation } from "../lib/rackAllocate";
-import { formatKgAsKheed } from "../lib/weightFormat";
 
 interface Order {
   id: string;
@@ -907,13 +906,11 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   let derivedWarning = "";
   if (targetWeight > 0 && rackDetails.length > 0 && totalAllocated < targetWeight) {
     const diff = Number((targetWeight - totalAllocated).toFixed(2));
-    const diffText = formatKgAsKheed(diff);
-    derivedAdminNote = `หมูในคลังไม่พอดี ขาดอีก ${diffText}`;
-    derivedWarning = `⚠️ หมูในคลังไม่พอดี ขาดอีก ${diffText} - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
+    derivedAdminNote = `หมูในคลังไม่พอดี ขาดอีก ${diff} กก.`;
+    derivedWarning = `⚠️ หมูในคลังไม่พอดี ขาดอีก ${diff} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
   } else if (targetWeight > 0 && rackDetails.length === 0) {
-    const diffText = formatKgAsKheed(targetWeight);
-    derivedAdminNote = `หมูในคลังไม่มี ขาดอีก ${diffText}`;
-    derivedWarning = `⚠️ หมูในคลังไม่มีเลย ขาดอีก ${diffText} - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
+    derivedAdminNote = `หมูในคลังไม่มี ขาดอีก ${targetWeight} กก.`;
+    derivedWarning = `⚠️ หมูในคลังไม่มีเลย ขาดอีก ${targetWeight} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
   }
 
   if (currentUser?.role === "PACKING" || currentUser?.role === "STOREFRONT") return null;
