@@ -12,59 +12,84 @@ describe("computeRackAllocation", () => {
     expect(result.map((r) => r.assignmentId).sort()).toEqual(["c"]);
   });
 
-  it("prefers a slight over-shoot over an exact-magnitude under-shoot (regression: round up on ties)", () => {
-    // No combo hits 3.0 exactly: 2.8 (under by 0.2) vs 3.2 (over by 0.2) —
-    // same absolute distance, but the over-shoot must win.
+  it("prefers a slight over-shoot over an under-shoot within the under-band", () => {
+    // No combo hits 3.0 exactly: 2.8 (under by 0.2, inside the [0.17,0.4]
+    // under-band) vs 3.2 (over by 0.2, inside the over-cap) — the over-shoot
+    // must still win regardless of which is numerically closer.
     const racks = [rack("a", 2.8), rack("b", 3.2)];
     const result = computeRackAllocation(racks, 3);
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
   it("prefers an over-target candidate even when an under-target one is numerically closer", () => {
-    // Target 1.4: a=1.35 (under by only 0.05) is much closer than
-    // b=1.55 (over by 0.15) — but meeting/exceeding target always wins
-    // over falling short, regardless of which is closer.
+    // Target 1.4: a=1.35 (under by only 0.05 — inside the "too close" dead
+    // zone below the 0.17kg floor, so disqualified anyway) vs b=1.55 (over
+    // by 0.15). Over wins either way.
     const racks = [rack("a", 1.35), rack("b", 1.55)];
     const result = computeRackAllocation(racks, 1.4);
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
-  it("caps the acceptable overage at MAX_OVER_DEVIATION_KG (0.2kg) — beyond that, prefers falling short instead", () => {
-    // 2.9 (under by 0.1) is numerically closer than 3.5 (over by 0.5), and
-    // 0.5 is well past the 0.2kg over-cap, so the under-shoot wins here.
+  it("caps the acceptable overage at MAX_OVER_DEVIATION_KG (0.2kg) — beyond that, falls back to an in-band under-shoot", () => {
+    // 3.5 (over by 0.5) is well past the 0.2kg over-cap. 2.9 (under by 0.1)
+    // is closer numerically but falls inside the new "too close" dead zone
+    // (below the 0.17kg floor), so it's disqualified too — nothing qualifies.
     const racks = [rack("a", 2.9), rack("b", 3.5)];
-    const result = computeRackAllocation(racks, 3);
-    expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
-  });
-
-  it("still rounds up right at the over-cap boundary (exactly 0.2kg over vs 0.3kg under)", () => {
-    // 0.3kg under also exceeds the 0.25kg under-cap, so b (0.2kg over,
-    // within the 0.2kg over-cap) is the only qualifying candidate either way.
-    const racks = [rack("a", 2.7), rack("b", 3.2)];
-    const result = computeRackAllocation(racks, 3);
-    expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
-  });
-
-  it("allows a shortfall up to MAX_UNDER_DEVIATION_KG (0.25kg), wider than the 0.2kg over-cap", () => {
-    // 2.75 (under by exactly 0.25) has no over-target alternative to compete
-    // with, and 0.25 is right at the under-cap boundary — should still qualify.
-    const racks = [rack("a", 2.75)];
-    const result = computeRackAllocation(racks, 3);
-    expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
-  });
-
-  it("rejects a shortfall just past MAX_UNDER_DEVIATION_KG (0.26kg over the 0.25kg cap)", () => {
-    const racks = [rack("a", 2.74)];
     const result = computeRackAllocation(racks, 3);
     expect(result).toEqual([]);
   });
 
-  it("also caps the acceptable shortfall at MAX_UNDER_DEVIATION_KG — beyond that, gives nothing rather than a mismatched amount", () => {
+  it("rejects a shortfall that's too close to target — below MIN_UNDER_DEVIATION_KG (0.17kg)", () => {
+    // 2.84 is only 0.16kg under target: closer than the 0.17kg floor allows,
+    // so it's treated the same as "nothing available", not "close enough".
+    const racks = [rack("a", 2.84)];
+    const result = computeRackAllocation(racks, 3);
+    expect(result).toEqual([]);
+  });
+
+  it("accepts a shortfall right at the MIN_UNDER_DEVIATION_KG floor (0.17kg)", () => {
+    const racks = [rack("a", 2.83)];
+    const result = computeRackAllocation(racks, 3);
+    expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
+  });
+
+  it("accepts a shortfall right at the MAX_UNDER_DEVIATION_KG ceiling (0.4kg)", () => {
+    const racks = [rack("a", 2.6)];
+    const result = computeRackAllocation(racks, 3);
+    expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
+  });
+
+  it("rejects a shortfall just past the MAX_UNDER_DEVIATION_KG ceiling (0.41kg)", () => {
+    const racks = [rack("a", 2.59)];
+    const result = computeRackAllocation(racks, 3);
+    expect(result).toEqual([]);
+  });
+
+  it("also rejects a shortfall far beyond the ceiling, rather than force a badly-mismatched amount", () => {
     // Only 1.5kg achievable at all (1 + 0.5), 3.5kg short of a 5kg target —
-    // way outside the 0.25kg under-cap, so nothing gets allocated.
+    // way outside the 0.4kg under-band, so nothing gets allocated.
     const racks = [rack("a", 1), rack("b", 0.5)];
     const result = computeRackAllocation(racks, 5);
     expect(result).toEqual([]);
+  });
+
+  it("finds an in-band subset even when the full remaining sum lands too close to target (regression)", () => {
+    // Target 3: taking BOTH pieces (2.65 + 0.30 = 2.95) is only 0.05kg
+    // under — inside the dead zone, disqualified. But taking piece "a"
+    // ALONE (2.65) is 0.35kg under — inside the [0.17,0.4] band, and valid.
+    // The search must not stop at "the max reachable sum from here is
+    // disqualified" and skip trying smaller subsets of the same branch.
+    const racks = [rack("a", 2.65), rack("b", 0.3)];
+    const result = computeRackAllocation(racks, 3);
+    expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
+  });
+
+  it("still rounds up right at the over-cap boundary, even though the under-shoot is also now in-band", () => {
+    // a=2.7 (under by 0.3) now falls inside the widened [0.17,0.4] band, but
+    // b=3.2 (over by 0.2, within the over-cap) still wins on tier priority.
+    const racks = [rack("a", 2.7), rack("b", 3.2)];
+    const result = computeRackAllocation(racks, 3);
+    expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
   it("returns nothing rather than break the tolerance, when the only pieces available are all too far over", () => {

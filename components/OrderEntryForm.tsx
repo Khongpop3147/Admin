@@ -904,10 +904,12 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const totalAllocated = Number(rackDetails.reduce((sum, r) => sum + r.weight, 0).toFixed(2));
   const targetWeight = parseFloat(formData.crispyPorkWeight) || 0;
 
-  // computeRackAllocation only ever lands within +0.2kg/-0.25kg of the
-  // target (or returns nothing at all) — flag whichever direction it landed
-  // in so the admin always sees exactly how far off it is, and why nothing
-  // got picked when picking was impossible within that tolerance.
+  // computeRackAllocation only ever lands within +0.2kg over target, or
+  // 0.17-0.4kg under it (a shortfall closer than 0.17kg is treated as "not
+  // close enough" too, same as nothing being available) — flag whichever
+  // direction it landed in so the admin always sees exactly how far off it
+  // is, and why nothing got picked when picking was impossible within that
+  // tolerance.
   let derivedAdminNote = "";
   let derivedWarning = "";
   if (targetWeight > 0 && rackDetails.length > 0 && totalAllocated !== targetWeight) {
@@ -922,7 +924,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     }
   } else if (targetWeight > 0 && rackDetails.length === 0) {
     derivedAdminNote = `ไม่มีชิ้นหมูที่ใกล้เคียงพอ ขาดอีก ${targetWeight} กก.`;
-    derivedWarning = `⚠️ ไม่มีชิ้นหมูในคลังที่น้ำหนักใกล้เคียงกับที่ต้องการมากพอ (ต้องเกินไม่เกิน 0.2 กก. หรือขาดไม่เกิน 0.25 กก.) — กรุณาเลือกชิ้นหมูเองด้านล่าง หรือปรับน้ำหนักที่ต้องการ`;
+    derivedWarning = `⚠️ ไม่มีชิ้นหมูในคลังที่น้ำหนักใกล้เคียงกับที่ต้องการมากพอ (ต้องเกินไม่เกิน 0.2 กก. หรือขาดอยู่ในช่วง 0.17-0.4 กก.) — กรุณาเลือกชิ้นหมูเองด้านล่าง หรือปรับน้ำหนักที่ต้องการ`;
   }
 
   if (currentUser?.role === "PACKING" || currentUser?.role === "STOREFRONT") return null;

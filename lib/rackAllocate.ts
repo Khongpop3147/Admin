@@ -13,24 +13,30 @@ export interface RackAllocation {
 }
 
 // How far an allocation is allowed to land from the requested weight before
-// it's no longer considered "close enough" — a hard cap, checked separately
-// per direction (over vs under target). An allocation landing further than
-// this in either direction is never chosen, even as a last resort. If
-// nothing available lands within tolerance in either direction, the
-// function returns nothing at all (an empty allocation) rather than force a
-// badly-mismatched amount on the order.
+// it's no longer considered "close enough" — checked separately per
+// direction. Over target: a flat cap, 0 to MAX_OVER_DEVIATION_KG over is
+// fine. Under target: a *band*, not a cap starting at zero — a shortfall
+// has to be at least MIN_UNDER_DEVIATION_KG before it's accepted at all
+// (anything closer than that is treated the same as "nothing available"),
+// and no more than MAX_UNDER_DEVIATION_KG. An allocation landing outside
+// its direction's window is never chosen, even as a last resort. If nothing
+// available lands within tolerance either way, the function returns nothing
+// at all (an empty allocation) rather than force a mismatched amount.
 export const MAX_OVER_DEVIATION_KG = 0.2;
-export const MAX_UNDER_DEVIATION_KG = 0.25;
+export const MIN_UNDER_DEVIATION_KG = 0.17;
+export const MAX_UNDER_DEVIATION_KG = 0.4;
 
 // Picks a subset of available rack pieces whose weights sum as close as
-// possible to targetWeight (kg), within [target - MAX_UNDER_DEVIATION_KG,
-// target + MAX_OVER_DEVIATION_KG]. Anything outside that window is
-// disqualified outright. Two tiers, best to worst:
+// possible to targetWeight (kg), within target + MAX_OVER_DEVIATION_KG on
+// the over side, or [target - MAX_UNDER_DEVIATION_KG, target -
+// MIN_UNDER_DEVIATION_KG] on the under side. Anything outside those windows
+// is disqualified outright. Two tiers, best to worst:
 //   1. Meets or exceeds target, within MAX_OVER_DEVIATION_KG — smallest
 //      overage wins. Always preferred over tier 2, even when a tier-2
 //      candidate would land numerically closer to target.
-//   2. Falls short of target, within MAX_UNDER_DEVIATION_KG — smallest
-//      shortfall wins. Only used when nothing qualifies for tier 1.
+//   2. Falls short of target, by between MIN_UNDER_DEVIATION_KG and
+//      MAX_UNDER_DEVIATION_KG — smallest shortfall (within that band) wins.
+//      Only used when nothing qualifies for tier 1.
 export function computeRackAllocation(racks: AllocatableRack[], targetWeight: number): RackAllocation[] {
   const availableRacks = racks
     .filter((r) => !r.isUsedUp && r.remainingWeight > 0)
@@ -38,6 +44,7 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
 
   const targetInt = Math.round(targetWeight * 100);
   const overCapInt = Math.round(MAX_OVER_DEVIATION_KG * 100);
+  const underFloorInt = Math.round(MIN_UNDER_DEVIATION_KG * 100);
   const underCapInt = Math.round(MAX_UNDER_DEVIATION_KG * 100);
   const racksWithInt = availableRacks.map((r) => ({
     ...r,
@@ -62,16 +69,7 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
     const overshoot = sum - targetInt;
     if (overshoot >= 0) return overshoot <= overCapInt ? overshoot : Infinity;
     const shortfall = -overshoot;
-    return shortfall <= underCapInt ? shortfall + overCapInt + 1 : Infinity;
-  };
-
-  const considerCandidate = (subset: typeof racksWithInt, sum: number) => {
-    if (sum <= 0) return;
-    const score = scoreOf(sum);
-    if (score < minScore) {
-      minScore = score;
-      closestSubset = subset;
-    }
+    return shortfall >= underFloorInt && shortfall <= underCapInt ? shortfall + overCapInt + 1 : Infinity;
   };
 
   const findSubset = (index: number, currentSubset: typeof racksWithInt, currentSum: number): boolean => {
@@ -96,8 +94,16 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
       return false;
     }
 
-    if (currentSum + suffixSum[index] < targetInt) {
-      considerCandidate([...currentSubset, ...racksWithInt.slice(index)], currentSum + suffixSum[index]);
+    // Unlike the over-side prune above, taking every remaining piece is no
+    // longer automatically the best under-target candidate from this branch
+    // — with a floor on the under-side band, that closest-to-target sum can
+    // land too close and get disqualified, while some smaller subset of the
+    // same remaining pieces lands inside the [floor, cap] band instead. So
+    // this only prunes the branch when NO achievable sum (not even the
+    // maximum) can climb as high as the band's lowest allowed sum
+    // (target - cap, i.e. the largest allowed shortfall); every other case
+    // has to actually be tried. callBudget still bounds the worst case.
+    if (currentSum + suffixSum[index] < targetInt - underCapInt) {
       return false;
     }
 
