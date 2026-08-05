@@ -899,18 +899,25 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const totalAllocated = Number(rackDetails.reduce((sum, r) => sum + r.weight, 0).toFixed(2));
   const targetWeight = parseFloat(formData.crispyPorkWeight) || 0;
 
-  // Only flagged when the customer actually gets less than they asked for —
-  // a small overage (within MAX_OVER_ALLOCATION_KG) is the expected/accepted
-  // outcome of computeRackAllocation and doesn't need a note.
+  // computeRackAllocation only ever lands within ±0.2kg of the target (or
+  // returns nothing at all) — flag whichever direction it landed in so the
+  // admin always sees exactly how far off it is, and why nothing got picked
+  // when picking was impossible within that tolerance.
   let derivedAdminNote = "";
   let derivedWarning = "";
-  if (targetWeight > 0 && rackDetails.length > 0 && totalAllocated < targetWeight) {
+  if (targetWeight > 0 && rackDetails.length > 0 && totalAllocated !== targetWeight) {
     const diff = Number((targetWeight - totalAllocated).toFixed(2));
-    derivedAdminNote = `หมูในคลังไม่พอดี ขาดอีก ${diff} กก.`;
-    derivedWarning = `⚠️ หมูในคลังไม่พอดี ขาดอีก ${diff} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
+    if (diff > 0) {
+      derivedAdminNote = `หมูในคลังไม่พอดี ขาดอีก ${diff} กก.`;
+      derivedWarning = `⚠️ หมูในคลังไม่พอดี ขาดอีก ${diff} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
+    } else {
+      const over = Math.abs(diff);
+      derivedAdminNote = `หมูในคลังไม่พอดี เกินมา ${over} กก.`;
+      derivedWarning = `⚠️ หมูในคลังไม่พอดี เกินมา ${over} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
+    }
   } else if (targetWeight > 0 && rackDetails.length === 0) {
-    derivedAdminNote = `หมูในคลังไม่มี ขาดอีก ${targetWeight} กก.`;
-    derivedWarning = `⚠️ หมูในคลังไม่มีเลย ขาดอีก ${targetWeight} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
+    derivedAdminNote = `ไม่มีชิ้นหมูที่ใกล้เคียงพอ ขาดอีก ${targetWeight} กก.`;
+    derivedWarning = `⚠️ ไม่มีชิ้นหมูในคลังที่น้ำหนักใกล้เคียงกับที่ต้องการมากพอ (ต้องห่างจากที่พิมพ์ไม่เกิน 0.2 กก.) — กรุณาเลือกชิ้นหมูเองด้านล่าง หรือปรับน้ำหนักที่ต้องการ`;
   }
 
   if (currentUser?.role === "PACKING" || currentUser?.role === "STOREFRONT") return null;

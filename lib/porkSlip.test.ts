@@ -25,16 +25,20 @@ describe("getShippingLabel", () => {
 
 describe("extractShortageNote", () => {
   it("extracts a plain shortage note unchanged", () => {
-    expect(extractShortageNote("หมูในคลังไม่พอดี ขาดอีก 3 ขีด")).toBe("หมูในคลังไม่พอดี ขาดอีก 3 ขีด");
+    expect(extractShortageNote("หมูในคลังไม่พอดี ขาดอีก 0.3 กก.")).toBe("หมูในคลังไม่พอดี ขาดอีก 0.3 กก.");
   });
 
   it("extracts the shortage note but drops a trailing slip-issue note", () => {
-    const combined = "หมูในคลังไม่พอดี ขาดอีก 2.4 ขีด [หมายเหตุสลิป: สลิปไม่มี QR โค้ด]";
-    expect(extractShortageNote(combined)).toBe("หมูในคลังไม่พอดี ขาดอีก 2.4 ขีด");
+    const combined = "หมูในคลังไม่พอดี ขาดอีก 0.24 กก. [หมายเหตุสลิป: สลิปไม่มี QR โค้ด]";
+    expect(extractShortageNote(combined)).toBe("หมูในคลังไม่พอดี ขาดอีก 0.24 กก.");
   });
 
-  it("extracts the 'no stock at all' variant", () => {
-    expect(extractShortageNote("หมูในคลังไม่มี ขาดอีก 1 โล 3 ขีด")).toBe("หมูในคลังไม่มี ขาดอีก 1 โล 3 ขีด");
+  it("extracts the 'nothing close enough allocated' variant", () => {
+    expect(extractShortageNote("ไม่มีชิ้นหมูที่ใกล้เคียงพอ ขาดอีก 1.4 กก.")).toBe("ไม่มีชิ้นหมูที่ใกล้เคียงพอ ขาดอีก 1.4 กก.");
+  });
+
+  it("returns empty for an over-allocation note — the print slip only wants shortage, not overage", () => {
+    expect(extractShortageNote("หมูในคลังไม่พอดี เกินมา 0.15 กก.")).toBe("");
   });
 
   it("returns empty for a slip-only note (no shortage)", () => {

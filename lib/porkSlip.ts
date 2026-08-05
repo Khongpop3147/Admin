@@ -63,15 +63,16 @@ export function getRackDisplay(rackDetailsStr: string): RackDisplay {
   }
 }
 
-// adminNote is a grab-bag — it can carry the auto-derived pork-shortage
-// note ("หมูในคลังไม่พอดี ขาดอีก ...' / 'หมูในคลังไม่มี ขาดอีก ..."), a
-// bracketed slip-issue note, and/or anything an admin typed by hand, all
-// joined together. The pork withdrawal slip only wants the shortage part —
-// everything else (slip notes, manual notes) is admin-facing, not something
-// Packing needs printed on the slip.
+// adminNote is a grab-bag — it can carry the auto-derived pork-shortage note
+// ("หมูในคลังไม่พอดี ขาดอีก ..." / "ไม่มีชิ้นหมูที่ใกล้เคียงพอ ขาดอีก
+// ..."), an over-allocation note ("...เกินมา ..."), a bracketed slip-issue
+// note, and/or anything an admin typed by hand, all joined together. The
+// pork withdrawal slip only wants the shortage part — over-allocation, slip
+// notes, and manual notes are admin-facing, not something Packing needs
+// printed on the slip.
 export function extractShortageNote(adminNote: string | null | undefined): string {
   if (!adminNote) return "";
-  const match = adminNote.match(/หมูในคลัง(?:ไม่พอดี|ไม่มี) ขาดอีก [^\[]*/);
+  const match = adminNote.match(/(?:หมูในคลังไม่พอดี|ไม่มีชิ้นหมูที่ใกล้เคียงพอ) ขาดอีก [\d.]+ กก\./);
   return match ? match[0].trim() : "";
 }
 

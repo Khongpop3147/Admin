@@ -12,32 +12,27 @@ export interface RackAllocation {
   weight: number;
 }
 
-// How far over the requested weight an allocation is allowed to go before
-// it's no longer considered "close enough" — beyond this, the customer is
-// better served by an under-target amount (flagged as short) than by
-// forcing a big unwanted overage on them. This is a hard cap: an allocation
-// that exceeds it is never chosen, even as a last resort — if nothing fits
-// within the cap and there's no under-target option either, the function
-// returns nothing at all (an empty allocation, i.e. fully short) rather
-// than force an oversized piece on the order.
-export const MAX_OVER_ALLOCATION_KG = 0.2;
+// How far an allocation is allowed to land from the requested weight, in
+// either direction, before it's no longer considered "close enough". This is
+// a hard, symmetric cap — an allocation whose total is more than this far
+// over OR under the target is never chosen, even as a last resort. If
+// nothing available lands within the tolerance in either direction, the
+// function returns nothing at all (an empty allocation) rather than force a
+// badly-mismatched amount on the order.
+export const MAX_WEIGHT_DEVIATION_KG = 0.2;
 
 // Picks a subset of available rack pieces whose weights sum as close as
-// possible to targetWeight (kg), preferring to round up. Two tiers, best to
-// worst:
-//   1. Meets or exceeds target, by no more than MAX_OVER_ALLOCATION_KG —
-//      the "close enough, round up" zone. Smallest overage wins.
-//   2. Falls short of target — the customer gets less than they asked for.
-//      Smallest shortfall wins. Always worse than tier 1, but still chosen
-//      over any allocation that breaks the overage cap.
-// Anything exceeding the cap is disqualified outright, never selected.
+// possible to targetWeight (kg), within ±MAX_WEIGHT_DEVIATION_KG. Anything
+// outside that window is disqualified outright. Among valid candidates,
+// smallest deviation wins; an exact tie between an over-shoot and an
+// under-shoot of the same size favors the over-shoot (round up, not down).
 export function computeRackAllocation(racks: AllocatableRack[], targetWeight: number): RackAllocation[] {
   const availableRacks = racks
     .filter((r) => !r.isUsedUp && r.remainingWeight > 0)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const targetInt = Math.round(targetWeight * 100);
-  const capInt = Math.round(MAX_OVER_ALLOCATION_KG * 100);
+  const capInt = Math.round(MAX_WEIGHT_DEVIATION_KG * 100);
   const racksWithInt = availableRacks.map((r) => ({
     ...r,
     intWeight: Math.round(r.remainingWeight * 100),
@@ -53,11 +48,13 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
   let minScore = Infinity;
   let callBudget = 200000; // hard cap so a large/unreachable inventory can never hang the tab
 
-  const UNDERSHOOT_PENALTY = 1_000_000;
   const scoreOf = (sum: number) => {
-    if (sum >= targetInt && sum <= targetInt + capInt) return sum - targetInt;
-    if (sum < targetInt) return targetInt - sum + UNDERSHOOT_PENALTY;
-    return Infinity; // over the cap — disqualified, can never beat even an empty result
+    const deviation = Math.abs(sum - targetInt);
+    if (deviation > capInt) return Infinity; // outside the tolerance either way — disqualified
+    // Tiny tie-break nudge (well under 1 int-unit) so an exact-magnitude
+    // over-shoot beats an equal-magnitude under-shoot without ever being
+    // able to flip a genuine difference.
+    return sum >= targetInt ? deviation : deviation + 0.5;
   };
 
   const considerCandidate = (subset: typeof racksWithInt, sum: number) => {
