@@ -12,19 +12,30 @@ export interface RackAllocation {
   weight: number;
 }
 
+// How far over the requested weight an allocation is allowed to go before
+// it's no longer considered "close enough" — beyond this, the customer is
+// better served by an under-target amount (flagged as short) than by
+// forcing a big unwanted overage on them.
+export const MAX_OVER_ALLOCATION_KG = 0.2;
+
 // Picks a subset of available rack pieces whose weights sum as close as
-// possible to targetWeight (kg). Under-shooting the target means the
-// customer gets less pork than they asked for — always worse than
-// over-shooting, even by a lot — so among candidates, any sum that meets or
-// exceeds the target beats every sum that falls short, and within each group
-// the closest to target wins (real pork pieces mean the resulting overage is
-// typically small, well under 0.2kg).
+// possible to targetWeight (kg), preferring to round up. Three tiers, best
+// to worst:
+//   1. Meets or exceeds target, by no more than MAX_OVER_ALLOCATION_KG —
+//      the "close enough, round up" zone. Smallest overage wins.
+//   2. Falls short of target — the customer gets less than they asked for.
+//      Smallest shortfall wins. Always worse than tier 1, but still better
+//      than a huge unwanted overage.
+//   3. Exceeds target by more than MAX_OVER_ALLOCATION_KG — only chosen when
+//      nothing in tier 1 or 2 exists at all (e.g. the only piece in stock is
+//      much bigger than what's needed). Smallest overage wins here too.
 export function computeRackAllocation(racks: AllocatableRack[], targetWeight: number): RackAllocation[] {
   const availableRacks = racks
     .filter((r) => !r.isUsedUp && r.remainingWeight > 0)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const targetInt = Math.round(targetWeight * 100);
+  const capInt = Math.round(MAX_OVER_ALLOCATION_KG * 100);
   const racksWithInt = availableRacks.map((r) => ({
     ...r,
     intWeight: Math.round(r.remainingWeight * 100),
@@ -41,7 +52,12 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
   let callBudget = 200000; // hard cap so a large/unreachable inventory can never hang the tab
 
   const UNDERSHOOT_PENALTY = 1_000_000;
-  const scoreOf = (sum: number) => (sum >= targetInt ? sum - targetInt : targetInt - sum + UNDERSHOOT_PENALTY);
+  const OVER_CAP_PENALTY = 2_000_000;
+  const scoreOf = (sum: number) => {
+    if (sum >= targetInt && sum <= targetInt + capInt) return sum - targetInt;
+    if (sum < targetInt) return targetInt - sum + UNDERSHOOT_PENALTY;
+    return sum - targetInt - capInt + OVER_CAP_PENALTY;
+  };
 
   const considerCandidate = (subset: typeof racksWithInt, sum: number) => {
     if (sum <= 0) return;

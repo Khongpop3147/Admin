@@ -10,6 +10,7 @@ import { BASE_PATH } from "../lib/basePath";
 import { calculateCodAmount, AppSettings, computeVatAmount, computeActualReceivedAmount } from "../lib/money";
 import { calculateShippingCost } from "../lib/shipping";
 import { computeRackAllocation } from "../lib/rackAllocate";
+import { formatKgAsKheed } from "../lib/weightFormat";
 
 interface Order {
   id: string;
@@ -899,20 +900,20 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const totalAllocated = Number(rackDetails.reduce((sum, r) => sum + r.weight, 0).toFixed(2));
   const targetWeight = parseFloat(formData.crispyPorkWeight) || 0;
 
+  // Only flagged when the customer actually gets less than they asked for —
+  // a small overage (within MAX_OVER_ALLOCATION_KG) is the expected/accepted
+  // outcome of computeRackAllocation and doesn't need a note.
   let derivedAdminNote = "";
   let derivedWarning = "";
-  if (targetWeight > 0 && rackDetails.length > 0 && totalAllocated !== targetWeight) {
+  if (targetWeight > 0 && rackDetails.length > 0 && totalAllocated < targetWeight) {
     const diff = Number((targetWeight - totalAllocated).toFixed(2));
-    if (diff > 0) {
-      derivedAdminNote = `หมูในคลังไม่พอดี ขาดอีก ${diff} kg`;
-      derivedWarning = `⚠️ ไม่มีชิ้นส่วนหมูที่บวกกันได้พอดีเป๊ะ (ขาดอีก ${diff} kg) - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
-    } else {
-      derivedAdminNote = `หมูในคลังไม่พอดี เกินมา ${Math.abs(diff)} kg`;
-      derivedWarning = `⚠️ ไม่มีชิ้นส่วนหมูที่บวกกันได้พอดีเป๊ะ (เกินมา ${Math.abs(diff)} kg) - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
-    }
+    const diffText = formatKgAsKheed(diff);
+    derivedAdminNote = `หมูในคลังไม่พอดี ขาดอีก ${diffText}`;
+    derivedWarning = `⚠️ หมูในคลังไม่พอดี ขาดอีก ${diffText} - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
   } else if (targetWeight > 0 && rackDetails.length === 0) {
-    derivedAdminNote = `หมูในคลังไม่มี ขาดอีก ${targetWeight} kg`;
-    derivedWarning = `⚠️ หมูในคลังไม่มีเลย (ขาดอีก ${targetWeight} kg) - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
+    const diffText = formatKgAsKheed(targetWeight);
+    derivedAdminNote = `หมูในคลังไม่มี ขาดอีก ${diffText}`;
+    derivedWarning = `⚠️ หมูในคลังไม่มีเลย ขาดอีก ${diffText} - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
   }
 
   if (currentUser?.role === "PACKING" || currentUser?.role === "STOREFRONT") return null;

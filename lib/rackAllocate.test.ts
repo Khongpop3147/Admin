@@ -20,12 +20,28 @@ describe("computeRackAllocation", () => {
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
-  it("prefers a larger over-shoot over a smaller under-shoot", () => {
-    // 2.9 (under by 0.1) is numerically closer than 3.5 (over by 0.5), but
-    // over-shooting must still win regardless of magnitude.
+  it("caps the acceptable overage at MAX_OVER_ALLOCATION_KG (0.2kg) — beyond that, prefers falling short instead", () => {
+    // 2.9 (under by 0.1) is numerically closer than 3.5 (over by 0.5), and
+    // 0.5 is well past the 0.2kg overage cap, so the under-shoot wins here —
+    // the reverse of the old "always round up no matter how much" rule.
     const racks = [rack("a", 2.9), rack("b", 3.5)];
     const result = computeRackAllocation(racks, 3);
+    expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
+  });
+
+  it("still rounds up right at the cap boundary (exactly 0.2kg over)", () => {
+    const racks = [rack("a", 2.7), rack("b", 3.2)];
+    const result = computeRackAllocation(racks, 3);
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
+  });
+
+  it("falls back to the forced-overshoot tier only when no in-range or under-target option exists at all", () => {
+    // The user's own example: asked for 1.4kg, only a 1.7kg piece exists
+    // (0.3kg over — past the cap) and there's no smaller piece to fall back
+    // to, so it has to give the oversized piece rather than nothing.
+    const racks = [rack("a", 1.7)];
+    const result = computeRackAllocation(racks, 1.4);
+    expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
   });
 
   it("matches the user's own example: 3kg target lands on ~3.2 or ~3.19, not under", () => {
