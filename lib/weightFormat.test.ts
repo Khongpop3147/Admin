@@ -14,9 +14,10 @@ describe("formatKgAsKheed", () => {
     expect(formatKgAsKheed(1.3)).toBe("1 โล 3 ขีด");
   });
 
-  it("rounds to the nearest ขีด (100g)", () => {
-    expect(formatKgAsKheed(1.25)).toBe("1 โล 3 ขีด"); // rounds .5 up
-    expect(formatKgAsKheed(0.24)).toBe("2 ขีด");
+  it("keeps the exact fractional ขีด instead of rounding to a whole one", () => {
+    expect(formatKgAsKheed(1.25)).toBe("1 โล 2.5 ขีด");
+    expect(formatKgAsKheed(0.24)).toBe("2.4 ขีด");
+    expect(formatKgAsKheed(0.03)).toBe("0.3 ขีด");
   });
 
   it("handles zero", () => {
