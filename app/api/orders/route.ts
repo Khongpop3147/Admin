@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import { getSessionUser } from "../../../lib/session";
 import { findDuplicateOrder } from "../../../lib/orderDuplicate";
 import { isShelfSale } from "../../../lib/money";
+import { effectiveOrderDateKey } from "../../../lib/packingCutoff";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 
@@ -82,7 +83,13 @@ export async function POST(req: Request) {
     const newOrder = await prisma.$transaction(async (tx) => {
       // 1. Get today's date in Thai time for the daily counter
       const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
-      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const todayDateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      // Once Packing has closed out today (see /api/orders/bulk), any order
+      // created for the rest of the day gets numbered under tomorrow instead
+      // of tacking onto a batch Packing already considers finished.
+      const settings = await tx.settings.findUnique({ where: { id: "singleton" } });
+      const dateKey = effectiveOrderDateKey(todayDateKey, settings?.packingCutoffDate);
 
       // 2. Increment DailyCounter atomically for every order EXCEPT an anonymous
       // shelf placement ("วางขายหน้าร้าน") — that's just a stock deduction, not

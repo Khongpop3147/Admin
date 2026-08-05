@@ -21,7 +21,7 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma2 = prisma;
 export async function PATCH(req: Request) {
   try {
     const session = await getSessionUser();
-    if (!session || !isSuperAdminRole(session.role)) {
+    if (!session || (!isSuperAdminRole(session.role) && session.role !== "PACKING")) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
 
@@ -34,6 +34,16 @@ export async function PATCH(req: Request) {
 
     const startDate = new Date(`${date}T00:00:00+07:00`);
     const endDate = new Date(`${date}T23:59:59.999+07:00`);
+
+    // "End of day" also closes out order numbering for this date — any order
+    // created for the rest of this calendar day gets numbered as tomorrow's
+    // instead (see effectiveOrderDateKey in POST /api/orders), so a late
+    // order doesn't get folded into a batch Packing already marked shipped.
+    await prisma.settings.upsert({
+      where: { id: "singleton" },
+      update: { packingCutoffDate: date },
+      create: { id: "singleton", packingCutoffDate: date },
+    });
 
     const result = await prisma.order.updateMany({
       where: {

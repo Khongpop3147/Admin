@@ -87,6 +87,7 @@ model Settings {
   porkPricePerKg      Float    @default(250)
   lastPorkCleanupMonth String?
   lastSlipCleanupDate String?
+  packingCutoffDate   String? // date (YYYY-MM-DD) Packing last closed out — new orders created while today matches this date get numbered under the next day instead
   updatedAt           DateTime @updatedAt
 }
 

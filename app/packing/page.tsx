@@ -576,10 +576,10 @@ export default function PackingPage() {
             🔓 ยืนยันรับ COD
           </button>
 
-          {isSuperAdminRole(currentUser?.role) && (
+          {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "PACKING") && (
             <button
               onClick={async () => {
-                if (confirm("ต้องการเปลี่ยนสถานะออเดอร์ของวันนี้ทั้งหมดเป็น 'จัดส่งแล้ว' และเริ่มหน้าจอวันใหม่ใช่หรือไม่?")) {
+                if (confirm("ต้องการเปลี่ยนสถานะออเดอร์ของวันนี้ทั้งหมดเป็น 'จัดส่งแล้ว' และเริ่มหน้าจอวันใหม่ใช่หรือไม่?\n\nออเดอร์ที่แอดมินเพิ่มเข้ามาหลังจากนี้ (แม้ยังเป็นวันเดิม) จะถูกนับเลขออเดอร์เป็นของวันถัดไปแทน")) {
                   setIsLoading(true);
                   try {
                     const res = await fetch(`${BASE_PATH}/api/orders/bulk`, {
