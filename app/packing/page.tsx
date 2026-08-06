@@ -328,6 +328,18 @@ export default function PackingPage() {
         { width: 6.75 }, { width: 14.5 }, { width: 5.125 }, { width: 6.125 }, { width: 8.625 }, { width: 8.875 }, { width: 10.875 },
       ];
 
+      // Matches the reference file's own print setup exactly — without this,
+      // the sheet prints using Excel's own defaults (portrait, wide margins),
+      // not the landscape A4 label layout it's actually meant for.
+      worksheet.pageSetup = {
+        paperSize: 9, // A4
+        orientation: "landscape",
+        margins: { left: 0.3229166666666667, right: 0, top: 0.1968503937007874, bottom: 0.03937007874015748, header: 0.31496062992125984, footer: 0.31496062992125984 },
+        pageOrder: "downThenOver",
+        scale: 100,
+        fitToPage: false,
+      };
+
       const writeLabel = (startRow: number, colOffset: number, order: (typeof nimOrders)[number]) => {
         const { phone, address } = parseAddressBlock(order.customerAddress);
         const courierLabel = Number(order.codAmount) > 0 ? "NIM COD" : "NIM";
