@@ -88,7 +88,11 @@ export default function PackingPage() {
     fetchOrders();
   }, [selectedDate]);
 
-  const fetchOrders = async () => {
+  // Returns the freshly-fetched list (not just setting state) so callers
+  // that need to act on the result right away — like checking for orders
+  // still missing a tracking number after an import — don't have to work
+  // around the stale-closure problem of reading `orders` right after calling this.
+  const fetchOrders = async (): Promise<Order[] | undefined> => {
     const requestedDate = selectedDate;
     latestRequestedDateRef.current = requestedDate;
     setIsLoading(true);
@@ -102,7 +106,7 @@ export default function PackingPage() {
       // A newer request may have fired (and already resolved) while this one
       // was in flight — if so, drop this response instead of overwriting the
       // screen with data for a date the user has since navigated away from.
-      if (latestRequestedDateRef.current !== requestedDate) return;
+      if (latestRequestedDateRef.current !== requestedDate) return undefined;
       if (res.ok) {
         const packingOrders = data.orders.filter((o: any) =>
           o.orderStatus !== "Completed" &&
@@ -111,12 +115,14 @@ export default function PackingPage() {
           o.shippingMethod !== "ส่งเอง"
         );
         setOrders(packingOrders);
+        return packingOrders;
       }
     } catch (e) {
       console.error(e);
     } finally {
       if (latestRequestedDateRef.current === requestedDate) setIsLoading(false);
     }
+    return undefined;
   };
 
 
@@ -520,8 +526,16 @@ export default function PackingPage() {
 
       const result = await res.json();
       if (res.ok) {
-        alert(`อัปเดต Tracking สำเร็จ ${result.successCount} รายการ`);
-        fetchOrders();
+        const freshOrders = await fetchOrders();
+        // Flags any EMS order still sitting without a tracking number after
+        // the import — whether it just wasn't in the file at all, or its
+        // customer name didn't match closely enough to the courier's sheet.
+        const missingEms = (freshOrders || []).filter((o) => o.shippingMethod === "EMS" && !o.trackingNumber);
+        let message = `อัปเดต Tracking สำเร็จ ${result.successCount} รายการ`;
+        if (missingEms.length > 0) {
+          message += `\n\n⚠️ ออเดอร์ EMS ที่ยังไม่ได้เลข Tracking (${missingEms.length} รายการ):\n${missingEms.map((o) => `- ${o.orderNo || "?"} ${o.customerName}`).join("\n")}`;
+        }
+        alert(message);
       } else {
         alert("เกิดข้อผิดพลาดในการอัปเดต Tracking");
       }
