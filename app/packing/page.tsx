@@ -195,9 +195,10 @@ export default function PackingPage() {
   const matchesShippingFilter = (o: Order) => filterShipping === "All" || o.shippingMethod === filterShipping;
 
   const generateExportData = () => {
-    // NIM Express ships via its own separate export (see handleExportNim) —
-    // never through Postone.
-    const exportOrders = sortOrders(orders.filter(o => matchesStatusFilter(o) && o.shippingMethod !== "NIM Express"));
+    // NIM Express ships via its own separate export (see handleExportNim),
+    // and "ส่งในพื้นที่" is delivered locally by the shop itself — neither
+    // ever goes through Postone.
+    const exportOrders = sortOrders(orders.filter(o => matchesStatusFilter(o) && o.shippingMethod !== "NIM Express" && o.shippingMethod !== "ส่งในพื้นที่"));
     if (exportOrders.length === 0) return null;
 
     // Postone only needs the shipper's own name/phone/address filled in once
