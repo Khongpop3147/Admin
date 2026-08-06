@@ -22,6 +22,7 @@ interface Order {
   paymentStatus?: string;
   adminNote?: string;
   trackingNumber?: string;
+  shippingMethod?: string;
   createdAt: string;
 }
 
@@ -281,6 +282,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const [rackDetails, setRackDetails] = useState<RackDetail[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
+  const [filterShippingMethod, setFilterShippingMethod] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [slipVerification, setSlipVerification] = useState<any | null>(null);
@@ -1142,7 +1144,9 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   // The storefront role always needs the price field (that's the whole
   // point of the role — recording what a piece sold for).
   const showPriceAndSlip = isStorefrontRole || !isStorefrontMode || formData.customerName !== "วางขายหน้าร้าน";
-  const displayedOrders = showUnpaidOnly ? recentOrders.filter(o => o.paymentStatus === "Unpaid") : recentOrders;
+  const displayedOrders = recentOrders
+    .filter(o => !showUnpaidOnly || o.paymentStatus === "Unpaid")
+    .filter(o => !filterShippingMethod || o.shippingMethod === filterShippingMethod);
   // Super Admin/DEV using storefront mode themselves get the same click-a-
   // piece picker as the storefront role, instead of the full weight/piece-
   // count auto-allocate form meant for shipped orders.
@@ -1841,6 +1845,19 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
               >
                 💸 {showUnpaidOnly ? '✓ ' : ''}ยังไม่จ่ายเงิน
               </button>
+              <select
+                className={styles.input}
+                style={{ fontSize: '13px', flex: '1 1 160px' }}
+                value={filterShippingMethod}
+                onChange={(e) => setFilterShippingMethod(e.target.value)}
+              >
+                <option value="">วิธีจัดส่งทั้งหมด</option>
+                <option value="EMS">EMS</option>
+                <option value="NIM Express">NIM Express</option>
+                <option value="ส่งในพื้นที่">ส่งในพื้นที่</option>
+                <option value="รับหน้าร้าน">รับหน้าร้าน</option>
+                <option value="ส่งเอง">ส่งเอง</option>
+              </select>
             </div>
 
             {displayedOrders.length === 0 ? (
