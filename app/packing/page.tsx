@@ -521,7 +521,11 @@ export default function PackingPage() {
       const res = await fetch(`${BASE_PATH}/api/orders/bulk-tracking`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ updates })
+        // Scope matching to only the orders shown for the currently-viewed
+        // Packing date — same entryDate shift fetchOrders() itself uses —
+        // so a same-named customer on a different (still-open) day never
+        // gets matched by mistake.
+        body: JSON.stringify({ updates, entryDate: previousDayStr(selectedDate) })
       });
 
       const result = await res.json();

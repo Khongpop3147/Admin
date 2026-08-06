@@ -26,7 +26,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
 
-    const { updates } = await request.json();
+    const { updates, entryDate } = await request.json();
 
     if (!Array.isArray(updates)) {
       return NextResponse.json({ error: 'Invalid updates format' }, { status: 400 });
@@ -34,7 +34,11 @@ export async function PATCH(request: Request) {
 
     // We fetch all orders that are either Pending or Packed (orderStatus is
     // normally '' rather than null for a fresh order, but treat null the same
-    // way so this doesn't silently skip a record either way)
+    // way so this doesn't silently skip a record either way). Scoped to the
+    // given entryDate when provided — the Packing date currently being
+    // worked on — so a same-named customer from a different still-open day
+    // can't get matched by mistake; without it, falls back to searching
+    // every open order regardless of date (old behavior).
     const activeOrders = await prisma.order.findMany({
       where: {
         AND: [
@@ -50,6 +54,7 @@ export async function PATCH(request: Request) {
               { platform: null },
             ],
           },
+          ...(entryDate ? [{ entryDate }] : []),
         ],
       }
     });
