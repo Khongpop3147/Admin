@@ -6,7 +6,7 @@ import { useUser } from "../../components/UserProvider";
 import { useSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
-import { isShelfSale, isCodPending, isExcludedFromRevenue, commissionForOrder } from "../../lib/money";
+import { isPendingStorefrontMoney, isCodPending, isExcludedFromRevenue, commissionForOrder } from "../../lib/money";
 import styles from "../page.module.css";
 
 interface Order {
@@ -401,7 +401,7 @@ export default function DashboardPage() {
               const res = await fetch(url);
               const data = await res.json();
               const monthOrders: Order[] = data.orders || [];
-              const sales = monthOrders.reduce((sum, o) => sum + (isShelfSale(o) ? 0 : Number(o.price) || 0), 0);
+              const sales = monthOrders.reduce((sum, o) => sum + (isPendingStorefrontMoney(o) ? 0 : Number(o.price) || 0), 0);
               return { date: ym, sales, orderCount: monthOrders.length };
             })
           );
@@ -425,7 +425,7 @@ export default function DashboardPage() {
             const res = await fetch(url);
             const data = await res.json();
             const dayOrders: Order[] = data.orders || [];
-            const sales = dayOrders.reduce((sum, o) => sum + (isShelfSale(o) ? 0 : Number(o.price) || 0), 0);
+            const sales = dayOrders.reduce((sum, o) => sum + (isPendingStorefrontMoney(o) ? 0 : Number(o.price) || 0), 0);
             return { date: d, sales, orderCount: dayOrders.length };
           })
         );

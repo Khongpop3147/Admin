@@ -5,6 +5,7 @@ import {
   computeVatAmount,
   computeActualReceivedAmount,
   isShelfSale,
+  isPendingStorefrontMoney,
   isCodPending,
   isExcludedFromRevenue,
   commissionForOrder,
@@ -63,6 +64,18 @@ describe("isShelfSale", () => {
   });
 });
 
+describe("isPendingStorefrontMoney", () => {
+  it("is true for any Storefront-platform order, named customer or not", () => {
+    expect(isPendingStorefrontMoney({ platform: "Storefront", customerName: "วางขายหน้าร้าน" })).toBe(true);
+    expect(isPendingStorefrontMoney({ platform: "Storefront", customerName: "คุณสมชาย" })).toBe(true);
+  });
+
+  it("is false for every other platform", () => {
+    expect(isPendingStorefrontMoney({ platform: "Facebook", customerName: "คุณสมชาย" })).toBe(false);
+    expect(isPendingStorefrontMoney({ platform: "PrivateClient", customerName: "คุณสมชาย" })).toBe(false);
+  });
+});
+
 describe("isCodPending", () => {
   it("is true when there's a COD amount and it hasn't been confirmed", () => {
     expect(isCodPending({ codAmount: 350, codConfirmed: false })).toBe(true);
@@ -83,6 +96,10 @@ describe("isExcludedFromRevenue", () => {
     expect(isExcludedFromRevenue({ platform: "Storefront", customerName: "วางขายหน้าร้าน" })).toBe(true);
   });
 
+  it("excludes a named-customer Storefront sale too — not counted until a real POS system backfills it", () => {
+    expect(isExcludedFromRevenue({ platform: "Storefront", customerName: "คุณสมชาย" })).toBe(true);
+  });
+
   it("excludes returned orders", () => {
     expect(isExcludedFromRevenue({ isReturned: true })).toBe(true);
   });
@@ -99,6 +116,10 @@ describe("isExcludedFromRevenue", () => {
 describe("commissionForOrder", () => {
   it("is 0 for a shelf sale", () => {
     expect(commissionForOrder({ platform: "Storefront", customerName: "วางขายหน้าร้าน", price: 250 }, DEFAULT_SETTINGS)).toBe(0);
+  });
+
+  it("is 0 for a named-customer Storefront sale too", () => {
+    expect(commissionForOrder({ platform: "Storefront", customerName: "คุณสมชาย", price: 250 }, DEFAULT_SETTINGS)).toBe(0);
   });
 
   it("is 0 for a still-pending COD order", () => {
