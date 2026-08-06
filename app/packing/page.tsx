@@ -395,6 +395,23 @@ export default function PackingPage() {
         setCell(startRow + 13, c(3), "วันที่:");
         setCell(startRow + 13, c(4), dateLabel);
         worksheet.getRow(startRow + 13).height = 18;
+
+        // Thin box around the whole label (A-G here, H-N for the second
+        // label) — a cutting guide, since the reference file relies on
+        // Excel's own on-screen gridlines for that, which don't print.
+        const thin = { style: "thin" as const };
+        const topRow = startRow, bottomRow = startRow + 13, leftCol = c(0), rightCol = c(6);
+        for (let r = topRow; r <= bottomRow; r++) {
+          for (let col = leftCol; col <= rightCol; col++) {
+            const cell = worksheet.getRow(r).getCell(col);
+            cell.border = {
+              top: r === topRow ? thin : undefined,
+              bottom: r === bottomRow ? thin : undefined,
+              left: col === leftCol ? thin : undefined,
+              right: col === rightCol ? thin : undefined,
+            };
+          }
+        }
       };
 
       for (let i = 0; i < nimOrders.length; i += 2) {
