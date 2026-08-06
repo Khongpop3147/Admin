@@ -119,7 +119,7 @@ function PrintSlipContent() {
                     </td>
                     <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>
                       {rackData.detailsArray?.map((line, idx) => (
-                        <div key={idx}>{line}</div>
+                        <div key={idx}>{line.replace(/ kg$/, '')}</div>
                       ))}
                       {extractShortageNote(order.adminNote) && (
                         <div style={{ fontSize: '14px', color: '#a00', marginTop: '4px' }}>{extractShortageNote(order.adminNote)}</div>
