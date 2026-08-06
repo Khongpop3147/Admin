@@ -71,11 +71,12 @@ export function getRackDisplay(rackDetailsStr: string): RackDisplay {
 // note, and/or anything an admin typed by hand, all joined together. The
 // pork withdrawal slip only wants the shortage part — over-allocation, slip
 // notes, and manual notes are admin-facing, not something Packing needs
-// printed on the slip.
+// printed on the slip. Reformatted down to just "ขาด X กก." — the slip is
+// working notes for the packer, not the fuller admin-facing wording.
 export function extractShortageNote(adminNote: string | null | undefined): string {
   if (!adminNote) return "";
-  const match = adminNote.match(/(?:หมูในคลังไม่พอดี|ไม่มีชิ้นหมูที่ใกล้เคียงพอ) ขาดอีก [\d.]+ กก\./);
-  return match ? match[0].trim() : "";
+  const match = adminNote.match(/(?:หมูในคลังไม่พอดี|ไม่มีชิ้นหมูที่ใกล้เคียงพอ) ขาดอีก ([\d.]+) กก\./);
+  return match ? `ขาด ${match[1]} กก.` : "";
 }
 
 export interface PrintableOrder extends ShippingInfo {

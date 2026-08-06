@@ -91,13 +91,12 @@ function PrintSlipContent() {
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
             <thead>
               <tr>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '5%' }}>Order #</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '21%' }}>ชื่อลูกค้า / ที่อยู่</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '14%' }}>วิธีจัดส่ง</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '19%' }}>รหัสถาด (Rack)</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '8%' }}>จำนวนแผ่น</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '14%' }}>น้ำหนักรวม</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '19%' }}>หมายเหตุ</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '6%' }}>Order #</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '26%' }}>ชื่อลูกค้า / ที่อยู่</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '17%' }}>วิธีจัดส่ง</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '24%' }}>รหัสถาด (Rack)</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '10%' }}>จำนวนแผ่น</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '17%' }}>น้ำหนักรวม</th>
               </tr>
             </thead>
             <tbody>
@@ -112,22 +111,25 @@ function PrintSlipContent() {
                         <div style={{ fontWeight: 'normal', fontSize: '13px', marginTop: '4px', color: '#333' }}>{order.customerAddress}</div>
                       )}
                     </td>
-                    <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>
+                    <td style={{
+                      border: '1px solid #000', padding: '10px', fontSize: '18px',
+                      ...(order.shippingMethod === 'NIM Express' ? { backgroundColor: '#cfe8ff', color: '#004a99', fontWeight: 'bold' } : {}),
+                    }}>
                       {getShippingLabel(order)}
                     </td>
                     <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>
                       {rackData.detailsArray?.map((line, idx) => (
                         <div key={idx}>{line}</div>
                       ))}
+                      {extractShortageNote(order.adminNote) && (
+                        <div style={{ fontSize: '14px', color: '#a00', marginTop: '4px' }}>{extractShortageNote(order.adminNote)}</div>
+                      )}
                     </td>
                     <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' }}>
                       {rackData.pieceCount > 0 ? rackData.pieceCount : "-"}
                     </td>
                     <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' }}>
                       {rackData.totalWeight > 0 ? `${rackData.totalWeight.toFixed(2)} kg` : "-"}
-                    </td>
-                    <td style={{ border: '1px solid #000', padding: '10px', fontSize: '14px', color: '#a00' }}>
-                      {extractShortageNote(order.adminNote)}
                     </td>
                   </tr>
                 );
