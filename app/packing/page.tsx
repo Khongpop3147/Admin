@@ -385,7 +385,12 @@ export default function PackingPage() {
         setCell(startRow + 10, c(0), "ช่องทางขาย");
         worksheet.getRow(startRow + 10).height = 18;
 
-        for (let col = c(0); col <= c(4); col++) setCell(startRow + 11, col, CHECKBOX_TEXT);
+        // One merged cell, not the same text repeated into every unmerged
+        // column — writing it into each column separately (matching the
+        // reference file's own layout) meant every narrow column truncated
+        // its own copy to fit, so "LINE" visibly repeated across the row.
+        setCell(startRow + 11, c(0), CHECKBOX_TEXT);
+        worksheet.mergeCells(startRow + 11, c(0), startRow + 11, c(4));
         worksheet.getRow(startRow + 11).height = 18;
 
         worksheet.getRow(startRow + 12).height = 18; // blank, matches the source
