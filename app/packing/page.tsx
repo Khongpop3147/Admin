@@ -56,6 +56,7 @@ export default function PackingPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
+  const [filterShipping, setFilterShipping] = useState("All");
   const [sortBy, setSortBy] = useState<"date" | "admin">("date");
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
@@ -187,10 +188,16 @@ export default function PackingPage() {
     return [...list].sort((a, b) => (a.sellerName || "").localeCompare(b.sellerName || "", "th"));
   };
 
+  const matchesStatusFilter = (o: Order) => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending");
+  // View-only filter (which shipping method to look at on screen) — kept
+  // separate from the export buttons' own shipping-method filtering, which
+  // always splits Postone/NIM correctly regardless of what's shown here.
+  const matchesShippingFilter = (o: Order) => filterShipping === "All" || o.shippingMethod === filterShipping;
+
   const generateExportData = () => {
     // NIM Express ships via its own separate export (see handleExportNim) —
     // never through Postone.
-    const exportOrders = sortOrders(orders.filter(o => (!filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")) && o.shippingMethod !== "NIM Express"));
+    const exportOrders = sortOrders(orders.filter(o => matchesStatusFilter(o) && o.shippingMethod !== "NIM Express"));
     if (exportOrders.length === 0) return null;
 
     // Postone only needs the shipper's own name/phone/address filled in once
@@ -296,7 +303,7 @@ export default function PackingPage() {
   // each time (no template file to load, unlike Postone) since the label
   // count varies with however many NIM orders are in this batch.
   const handleExportNim = async () => {
-    const nimOrders = sortOrders(orders.filter(o => (!filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")) && o.shippingMethod === "NIM Express"));
+    const nimOrders = sortOrders(orders.filter(o => matchesStatusFilter(o) && o.shippingMethod === "NIM Express"));
     if (nimOrders.length === 0) {
       alert("ไม่มีออเดอร์ NIM Express ให้ส่งออก");
       return;
@@ -561,6 +568,19 @@ export default function PackingPage() {
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>วิธีจัดส่ง</label>
+            <select
+              value={filterShipping}
+              onChange={(e) => setFilterShipping(e.target.value)}
+              style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '14px' }}
+            >
+              <option value="All" style={{ color: '#000' }}>ทั้งหมด</option>
+              <option value="EMS" style={{ color: '#000' }}>EMS</option>
+              <option value="NIM Express" style={{ color: '#000' }}>NIM Express</option>
+              <option value="ส่งในพื้นที่" style={{ color: '#000' }}>ส่งในพื้นที่</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>เรียงตาม</label>
             <select
               value={sortBy}
@@ -686,7 +706,7 @@ export default function PackingPage() {
               </tr>
             </thead>
             <tbody>
-              {sortOrders(orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending"))).map(order => (
+              {sortOrders(orders.filter(o => matchesStatusFilter(o) && matchesShippingFilter(o))).map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)', background: order.isReturned ? 'rgba(255,107,107,0.06)' : undefined, opacity: order.isReturned ? 0.75 : 1 }}>
                   <td style={{ padding: '16px', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 'bold' }}>{order.orderNo || "?"} - {order.customerName}</div>
@@ -799,7 +819,7 @@ export default function PackingPage() {
                   </td>
                 </tr>
               ))}
-              {orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")).length === 0 && (
+              {orders.filter(o => matchesStatusFilter(o) && matchesShippingFilter(o)).length === 0 && (
                 <tr>
                   <td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     ไม่พบออเดอร์
