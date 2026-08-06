@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
 import { useRef } from "react";
@@ -194,23 +195,19 @@ export default function PackingPage() {
   // always splits Postone/NIM correctly regardless of what's shown here.
   const matchesShippingFilter = (o: Order) => filterShipping === "All" || o.shippingMethod === filterShipping;
 
-  const generateExportData = () => {
-    // NIM Express ships via its own separate export (see handleExportNim),
-    // and "ส่งในพื้นที่" is delivered locally by the shop itself — neither
-    // ever goes through Postone.
-    const exportOrders = sortOrders(orders.filter(o => matchesStatusFilter(o) && o.shippingMethod !== "NIM Express" && o.shippingMethod !== "ส่งในพื้นที่"));
-    if (exportOrders.length === 0) return null;
-
-    // Postone only needs the shipper's own name/phone/address filled in once
-    // per file — leaving it blank on every other row makes it fall back to
-    // that first row's shipper automatically.
+  // Postone only needs the shipper's own name/phone/address filled in once
+  // per file — leaving it blank on every other row makes it fall back to
+  // that first row's shipper automatically. Shared by the combined export
+  // and the per-admin split (handleExportPostoneByAdmin) so "first row" is
+  // always relative to whatever list is actually going into one file.
+  const buildPostoneRows = (orderList: Order[]) => {
     const SENDER_NAME = "หมูกรอบอีซี่ l หมูกรอบ EASY";
     const SENDER_PHONE = "0971622755";
     const SENDER_ADDRESS = "153, ตำบล สมอแข อำเภอเมืองพิษณุโลก พิษณุโลก";
     const SENDER_ZIP = "65000";
     const COD_ACCOUNT = "0644177042";
 
-    return exportOrders.map((order, index) => {
+    return orderList.map((order, index) => {
       const { phone, zip, address } = parseAddressBlock(order.customerAddress);
 
       // adminNote (internal packing/admin remarks) is deliberately left out of
@@ -239,6 +236,46 @@ export default function PackingPage() {
     });
   };
 
+  // NIM Express ships via its own separate export (see handleExportNim),
+  // and "ส่งในพื้นที่" is delivered locally by the shop itself — neither
+  // ever goes through Postone.
+  const getPostoneEligibleOrders = () =>
+    sortOrders(orders.filter(o => matchesStatusFilter(o) && o.shippingMethod !== "NIM Express" && o.shippingMethod !== "ส่งในพื้นที่"));
+
+  const generateExportData = () => {
+    const exportOrders = getPostoneEligibleOrders();
+    if (exportOrders.length === 0) return null;
+    return buildPostoneRows(exportOrders);
+  };
+
+  // Fills the real Postone template with a given set of data rows — shared
+  // by the single combined export and each per-admin file in the ZIP, so
+  // both stay byte-for-byte identical in structure to Postone's own template.
+  const fillPostoneTemplate = async (dataRows: ReturnType<typeof buildPostoneRows>) => {
+    const templateRes = await fetch(`${BASE_PATH}/Postone_Template.xlsx`);
+    if (!templateRes.ok) throw new Error('โหลดไฟล์ template ไม่สำเร็จ');
+    const templateBuffer = await templateRes.arrayBuffer();
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(templateBuffer);
+    const worksheet = workbook.getWorksheet(1);
+    if (!worksheet) throw new Error('ไม่พบชีตในไฟล์ template');
+
+    // Template's own example row starts at row 3 (rows 1-2 are the
+    // headers) — overwrite it and every row after with real order data.
+    // Column N (instructions) is left completely untouched since our rows
+    // are only 13 columns wide (A-M).
+    dataRows.forEach((row, i) => {
+      const excelRow = worksheet.getRow(i + 3);
+      row.forEach((val, colIdx) => {
+        excelRow.getCell(colIdx + 1).value = val;
+      });
+      excelRow.commit();
+    });
+
+    return workbook.xlsx.writeBuffer();
+  };
+
   const handlePreview = () => {
     const data = generateExportData();
     if (!data) {
@@ -257,33 +294,7 @@ export default function PackingPage() {
     }
 
     try {
-      // Rebuilding the file from scratch kept producing subtle structural
-      // differences from Postone's own template (extra spacer column, missing
-      // print area, different cell styles) that made their importer silently
-      // reject every row. Loading their real template and only overwriting
-      // the data cells guarantees the file stays byte-for-byte compatible.
-      const templateRes = await fetch(`${BASE_PATH}/Postone_Template.xlsx`);
-      if (!templateRes.ok) throw new Error('โหลดไฟล์ template ไม่สำเร็จ');
-      const templateBuffer = await templateRes.arrayBuffer();
-
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(templateBuffer);
-      const worksheet = workbook.getWorksheet(1);
-      if (!worksheet) throw new Error('ไม่พบชีตในไฟล์ template');
-
-      // Template's own example row starts at row 3 (rows 1-2 are the
-      // headers) — overwrite it and every row after with real order data.
-      // Column N (instructions) is left completely untouched since our rows
-      // are only 13 columns wide (A-M).
-      dataRows.forEach((row, i) => {
-        const excelRow = worksheet.getRow(i + 3);
-        row.forEach((val, colIdx) => {
-          excelRow.getCell(colIdx + 1).value = val;
-        });
-        excelRow.commit();
-      });
-
-      const buffer = await workbook.xlsx.writeBuffer();
+      const buffer = await fillPostoneTemplate(dataRows);
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       // selectedDate is already the Bangkok-anchored date being exported —
       // using it (instead of new Date().toISOString(), which is UTC) avoids
@@ -295,6 +306,40 @@ export default function PackingPage() {
 
     } catch (error) {
       console.error("Error exporting excel:", error);
+      alert("ส่งออกไฟล์ Excel ไม่สำเร็จ");
+    }
+  };
+
+  // One Postone-template file per admin, zipped together — same eligible
+  // orders and same template-filling logic as the combined export, just
+  // grouped by sellerName first so each admin's own sheet is self-contained
+  // (its own first-row sender info, not sharing one with everyone else's).
+  const handleExportPostoneByAdmin = async () => {
+    const exportOrders = getPostoneEligibleOrders();
+    if (exportOrders.length === 0) {
+      alert("ไม่มีออเดอร์ให้ส่งออก");
+      return;
+    }
+
+    const bySeller = new Map<string, Order[]>();
+    for (const order of exportOrders) {
+      const key = order.sellerName || "ไม่ระบุแอดมิน";
+      if (!bySeller.has(key)) bySeller.set(key, []);
+      bySeller.get(key)!.push(order);
+    }
+
+    try {
+      const zip = new JSZip();
+      for (const [sellerName, sellerOrders] of bySeller) {
+        const buffer = await fillPostoneTemplate(buildPostoneRows(sellerOrders));
+        // Slashes in a name would otherwise be read as a subfolder inside the zip.
+        const safeName = sellerName.replace(/[\\/]/g, "-");
+        zip.file(`Postone_${safeName}_${selectedDate}.xlsx`, buffer);
+      }
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      saveAs(zipBlob, `Postone_ByAdmin_${selectedDate}.zip`);
+    } catch (error) {
+      console.error("Error exporting per-admin excel zip:", error);
       alert("ส่งออกไฟล์ Excel ไม่สำเร็จ");
     }
   };
@@ -668,6 +713,15 @@ export default function PackingPage() {
             style={{ background: 'var(--accent-green)', color: '#000' }}
           >
             📊 แปลงเป็น Excel (Postone)
+          </button>
+
+          <button
+            onClick={handleExportPostoneByAdmin}
+            className={styles.toolbarBtn}
+            style={{ background: 'rgba(63,185,80,0.2)', border: '1px solid var(--accent-green)', color: 'var(--accent-green)' }}
+            title="แยกไฟล์ Postone ทีละแอดมิน รวมเป็น ZIP ไฟล์เดียว"
+          >
+            📁 Postone แยกแอดมิน (ZIP)
           </button>
 
           <button
