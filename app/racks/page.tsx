@@ -1007,7 +1007,7 @@ export default function RacksPage() {
                     </div>
                   </div>
 
-                  <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '8px', marginBottom: '16px' }}>
+                  <div className={styles.rackScrollInner} style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '8px', marginBottom: '16px' }}>
                       {draftRacks
                         .map((rack, idx) => ({ ...rack, originalIdx: idx }))
                         .filter(r => !searchDraft || r.rackNo.toLowerCase().includes(searchDraft.toLowerCase()))
@@ -1220,7 +1220,7 @@ export default function RacksPage() {
       {/* Distribution Modal */}
       {isDistributeModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#ffac33', fontSize: '24px' }}>แจกจ่ายจากคลังกลาง</h2>
               <button 
@@ -1366,7 +1366,7 @@ export default function RacksPage() {
               </button>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', marginBottom: '24px', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', alignContent: 'start' }}>
+            <div className={styles.rackScrollInner} style={{ flex: 1, overflowY: 'auto', marginBottom: '24px', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', alignContent: 'start' }}>
               {centralRacks.length === 0 ? (
                 <div className={styles.emptyState} style={{ gridColumn: '1 / -1' }}>ไม่มีชิ้นหมูในคลังกลาง</div>
               ) : (
@@ -1442,7 +1442,7 @@ export default function RacksPage() {
       {/* Current Assignments Modal */}
       {isAssignmentsModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '1000px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '1000px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>รายการที่มอบหมายไปแล้ว</h2>
               <button
@@ -1525,7 +1525,7 @@ export default function RacksPage() {
               </div>
             )}
 
-            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignContent: 'start', background: 'rgba(0,0,0,0.2)' }}>
+            <div className={styles.rackScrollInner} style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignContent: 'start', background: 'rgba(0,0,0,0.2)' }}>
               {!users.find(u => u.id === selectedUserId) && selectedUserId !== currentUser.id ? (
                 <div className={styles.emptyState} style={{ gridColumn: '1 / -1', padding: '40px' }}>เลือกแอดมินเพื่อดูชิ้นหมูของเขา</div>
               ) : (users.find(u => u.id === selectedUserId)?.racks || (selectedUserId === currentUser.id ? currentUser.racks : [])).length === 0 ? (
@@ -1631,7 +1631,7 @@ export default function RacksPage() {
       {/* Deleted Log Modal */}
       {isDeletedLogModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#ffac33', fontSize: '24px' }}>ประวัติชิ้นหมูที่ถูกลบ / ขาดหาย</h2>
               <button
@@ -1670,7 +1670,7 @@ export default function RacksPage() {
 
                 {/* Mobile: stacked cards — a 4-column table is unreadable on a
                     phone, so each deletion gets its own full-width card. */}
-                <div className={styles.mobileCardList} style={{ overflowY: 'auto' }}>
+                <div className={`${styles.mobileCardList} ${styles.rackScrollInner}`} style={{ overflowY: 'auto' }}>
                   {deletedLogs.map((log) => (
                     <div key={log.id} className={styles.mobileCard}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
