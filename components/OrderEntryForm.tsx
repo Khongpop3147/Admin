@@ -248,7 +248,12 @@ function getOrderStatusInfo(status?: string) {
 export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) {
   const initialForm = {
     customerName: "",
-    platform: mode === "walkin" ? "Storefront" : "",
+    // "PrivateClient" is its own distinct value, deliberately not
+    // "Storefront" — Private Clients and the actual Store Front page used to
+    // share the same platform value and couldn't be told apart; this keeps
+    // them in fully separate queries (see fetchOrders below and the
+    // excludePlatform list on Order Details' own fetch).
+    platform: mode === "walkin" ? "PrivateClient" : "",
     socialMediaName: "",
     crispyPorkPiece: "",
     crispyPorkWeight: "",
@@ -427,10 +432,11 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
       if (date) params.set("date", date);
       if (customerNameSearch) params.set("customerName", customerNameSearch);
       // Each page's own order list only shows what it's responsible for —
-      // Private Clients sees only its Storefront-platform walk-in sales,
-      // Order Details sees everything else.
-      if (mode === "walkin") params.set("platform", "Storefront");
-      else params.set("excludePlatform", "Storefront");
+      // Private Clients sees only its own PrivateClient-platform walk-in
+      // sales, Order Details sees everything except that AND the actual
+      // Store Front page's own Storefront-platform sales.
+      if (mode === "walkin") params.set("platform", "PrivateClient");
+      else params.set("excludePlatform", "Storefront,PrivateClient");
       const qs = params.toString();
       const url = qs ? `${BASE_PATH}/api/orders?${qs}` : `${BASE_PATH}/api/orders`;
       const res = await fetch(url);

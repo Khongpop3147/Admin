@@ -221,20 +221,22 @@ export async function GET(req: Request) {
     // for Order Details/Dashboard).
     const entryDateStr = searchParams.get("entryDate"); // format: YYYY-MM-DD
     const platform = searchParams.get("platform");
-    const excludePlatform = searchParams.get("excludePlatform");
+    const excludePlatform = searchParams.get("excludePlatform"); // comma-separated, e.g. "Storefront,PrivateClient"
     const customerName = searchParams.get("customerName");
 
     let whereClause: any = sellerName ? { sellerName } : {};
     if (id) {
       whereClause.id = id;
     }
+    const excludePlatformList = excludePlatform ? excludePlatform.split(",").filter(Boolean) : [];
     if (platform) {
       whereClause.platform = platform;
-    } else if (excludePlatform) {
-      // Lets Order Details hide Private-Clients (Storefront-platform) walk-in
-      // sales from its own order list, the mirror of the platform filter
-      // above — each page shows only the orders it's responsible for.
-      whereClause.platform = { not: excludePlatform };
+    } else if (excludePlatformList.length > 0) {
+      // Lets Order Details hide the walk-in-style pages' own sales (Store
+      // Front, Private Clients) from its own order list, the mirror of the
+      // platform filter above — each page shows only the orders it's
+      // responsible for.
+      whereClause.platform = { notIn: excludePlatformList };
     }
     // STOREFRONT's own page only ever asks for platform=Storefront — force
     // it server-side too, so that role can't be used to pull every other

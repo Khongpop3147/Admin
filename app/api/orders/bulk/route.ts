@@ -54,11 +54,15 @@ export async function PATCH(req: Request) {
     const result = await prisma.order.updateMany({
       where: {
         entryDate: orderDate,
-        // Only update Pending and Packed orders. Storefront orders are normally
-        // already "Completed" so this excludes them anyway, but check platform
-        // directly too rather than relying on that alone — otherwise any
-        // storefront order that isn't "Completed" (edited, imported, a bug
-        // elsewhere) would get swept up into a shipping-day bulk action.
+        // Only update Pending and Packed orders. Storefront/Private-Client
+        // orders are normally already "Completed" so this excludes them
+        // anyway, but check platform and shipping method directly too rather
+        // than relying on that alone — otherwise any such order that isn't
+        // "Completed" (edited, imported, a bug elsewhere) would get swept up
+        // into a shipping-day bulk action. Same exclusion the Packing list
+        // and the printable pork slip already use (see app/packing/page.tsx
+        // and lib/porkSlip.ts) — both sell/settle immediately and never go
+        // through Packing at all.
         AND: [
           {
             OR: [
@@ -68,8 +72,14 @@ export async function PATCH(req: Request) {
           },
           {
             OR: [
-              { platform: { not: "Storefront" } },
+              { platform: { notIn: ["Storefront", "PrivateClient"] } },
               { platform: null }
+            ]
+          },
+          {
+            OR: [
+              { shippingMethod: { notIn: ["รับหน้าร้าน", "ส่งเอง"] } },
+              { shippingMethod: null }
             ]
           }
         ]
