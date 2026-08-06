@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useUser } from "../../components/UserProvider";
-import { useSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import styles from "../page.module.css";
@@ -35,39 +34,17 @@ interface Piece {
   isUsedUp?: boolean;
 }
 
-function formatMoney(value: unknown): string {
-  const num = typeof value === "string" ? parseFloat(value) : (value as number);
-  if (num === undefined || num === null || isNaN(num)) return "0";
-  return Math.round(num).toLocaleString("th-TH");
-}
-
-// Shared by both the desktop table and the mobile card list so the two
-// views never drift out of sync on how the grand total is derived.
-function getOrderTotal(order: Order): number {
-  const p = Number(order.price) || 0;
-  const s = Number(order.additionalShippingCost) || 0;
-  const c = Number(order.codAmount) || 0;
-  const calculatedTotal = (p + s) * 1.07 + c;
-
-  const actual = Number(order.actualReceivedAmount) || 0;
-  if (actual > 0 && actual >= (p + s) * 0.5) {
-    return actual;
-  }
-  return calculatedTotal;
-}
-
 export default function StorefrontPage() {
   const { currentUser } = useUser();
-  const { settings } = useSettings();
 
   const canAccess = !!currentUser && (isSuperAdminRole(currentUser.role) || currentUser.role === "STOREFRONT");
 
-  // Every storefront sale is an anonymous walk-in rung up at a fixed rate —
-  // no customer name to type, no price to type. Rate comes from Super Admin
-  // Setting (ราคาหมูกรอบ) so it can change without a code deploy.
+  // Every storefront sale is an anonymous walk-in — no customer name to
+  // type. Storefront sales are just a stock deduction for now, not a priced
+  // transaction (see isPendingStorefrontMoney in lib/money.ts) — no price is
+  // calculated or recorded here; real sales figures will come from a future
+  // POS/till integration.
   const WALKIN_NAME = "ลูกค้าหน้าร้าน";
-  const RATE_PER_KG = settings.porkPricePerKg;
-  const VAT_RATE = 0.07;
 
   // ===== Sale entry =====
   const [pieces, setPieces] = useState<Piece[]>([]);
@@ -83,9 +60,6 @@ export default function StorefrontPage() {
   }, [currentUser]);
 
   const totalWeight = Number(selected.reduce((sum, p) => sum + p.remainingWeight, 0).toFixed(2));
-  const basePrice = Math.round(totalWeight * RATE_PER_KG);
-  const vatAmount = Math.round(basePrice * VAT_RATE);
-  const totalWithVat = basePrice + vatAmount;
 
   const togglePiece = (p: Piece) => {
     setSelected((prev) => (prev.some((x) => x.id === p.id) ? prev.filter((x) => x.id !== p.id) : [...prev, p]));
@@ -109,9 +83,7 @@ export default function StorefrontPage() {
           platform: "Storefront",
           crispyPorkPiece: String(selected.length),
           crispyPorkWeight: String(totalWeight),
-          price: basePrice,
           shippingMethod: "รับหน้าร้าน",
-          actualReceivedAmount: totalWithVat,
           paymentStatus: "Paid",
           orderStatus: "Completed",
           rackDetails: JSON.stringify(selected.map((s) => ({ assignmentId: s.id, rackNo: s.rackNo, weight: s.remainingWeight }))),
@@ -267,20 +239,8 @@ export default function StorefrontPage() {
             )}
           </div>
 
-          <div style={{ background: "rgba(63,185,80,0.08)", border: "1px solid rgba(63,185,80,0.25)", padding: "16px", borderRadius: "8px", marginBottom: "16px" }}>
-            <label className={styles.label} style={{ display: "block", marginBottom: "8px" }}>ราคา (โลละ {RATE_PER_KG} บาท)</label>
-            {selected.length === 0 ? (
-              <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: 0 }}>เลือกชิ้นหมูก่อนเพื่อคำนวณราคา</p>
-            ) : (
-              <>
-                <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
-                  {totalWeight} กก. × {RATE_PER_KG} = ฿{formatMoney(basePrice)} + VAT 7% (฿{formatMoney(vatAmount)})
-                </div>
-                <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--accent-green)", marginTop: "4px" }}>
-                  ฿{formatMoney(totalWithVat)}
-                </div>
-              </>
-            )}
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "16px" }}>
+            📦 บันทึกเป็นการตัดสต๊อคหมูออกเฉยๆ ยังไม่มีการคิดยอดขาย — ยอดขายจริงจะดึงมาจากระบบ POS ในอนาคต
           </div>
 
           {saleMsg && (
@@ -452,9 +412,6 @@ export default function StorefrontPage() {
                         </td>
                         <td style={{ padding: '16px', verticalAlign: 'top' }}>
                           <div>{order.crispyPorkPiece ? `${order.crispyPorkPiece} ชิ้น` : '-'} / {order.crispyPorkWeight ? `${order.crispyPorkWeight} กก.` : '-'}</div>
-                          <div style={{ fontSize: '12px', marginTop: '6px', color: '#a0a0a0', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
-                            หมู: ฿{formatMoney(order.price)} | ส่ง: ฿{formatMoney(order.additionalShippingCost)} | COD: {order.codAmount > 0 ? `฿${formatMoney(order.codAmount)}` : '-'} | <strong style={{ color: 'white' }}>รวม: ฿{formatMoney(getOrderTotal(order))}</strong>
-                          </div>
                           {order.adminNote && <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '4px' }}>หมายเหตุ: {order.adminNote}</div>}
                           {order.sellerName && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>โดย: {order.sellerName}</div>}
                         </td>
@@ -508,11 +465,6 @@ export default function StorefrontPage() {
                     </div>
 
                     <div style={{ fontSize: '13px' }}>{order.crispyPorkPiece ? `${order.crispyPorkPiece} ชิ้น` : '-'} / {order.crispyPorkWeight ? `${order.crispyPorkWeight} กก.` : '-'}</div>
-                    <div style={{ fontSize: '12px', color: '#a0a0a0', background: 'rgba(255,255,255,0.05)', padding: '8px 10px', borderRadius: '6px' }}>
-                      <div>หมู: ฿{formatMoney(order.price)} | ส่ง: ฿{formatMoney(order.additionalShippingCost)}</div>
-                      <div>COD: {order.codAmount > 0 ? `฿${formatMoney(order.codAmount)}` : '-'}</div>
-                      <div style={{ marginTop: '4px' }}><strong style={{ color: 'white', fontSize: '14px' }}>รวม: ฿{formatMoney(getOrderTotal(order))}</strong></div>
-                    </div>
                     {order.adminNote && <div style={{ fontSize: '12px', color: '#ffac33' }}>หมายเหตุ: {order.adminNote}</div>}
                     {order.sellerName && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>โดย: {order.sellerName}</div>}
 
