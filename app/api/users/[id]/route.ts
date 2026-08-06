@@ -22,6 +22,7 @@ if (globalForPrisma.prisma) {
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN", "PACKING", "STOREFRONT"];
+const ALLOWED_DEFAULT_PLATFORMS = ["Facebook", "Line", "TikTok", "Shopee", "Other"];
 
 function stripPassword<T extends { password?: string | null }>(user: T) {
   const { password, ...rest } = user;
@@ -78,6 +79,13 @@ export async function PATCH(
     if (body.nickname !== undefined) {
       const nickname = String(body.nickname).trim();
       updateData.nickname = nickname || null;
+    }
+    if (body.defaultPlatform !== undefined) {
+      const defaultPlatform = String(body.defaultPlatform).trim();
+      if (defaultPlatform && !ALLOWED_DEFAULT_PLATFORMS.includes(defaultPlatform)) {
+        return NextResponse.json({ error: "ช่องทางการขายเริ่มต้นไม่ถูกต้อง" }, { status: 400 });
+      }
+      updateData.defaultPlatform = defaultPlatform || null;
     }
 
     const user = await prisma.$transaction(async (tx) => {

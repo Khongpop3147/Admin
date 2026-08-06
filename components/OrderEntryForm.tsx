@@ -357,7 +357,16 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
   useEffect(() => {
     if (currentUser) {
-      setFormData(prev => ({ ...prev, sellerName: currentUser.name }));
+      setFormData(prev => ({
+        ...prev,
+        sellerName: currentUser.name,
+        // Only fills in a still-empty platform — never overwrites a channel
+        // the admin already picked for the order in progress. This effect
+        // re-fires on every currentUser refresh (fetchUsers() runs after
+        // every order save), which is also what makes the default reapply
+        // once the form resets back to an empty platform after each save.
+        platform: (!isStorefrontMode && !prev.platform && currentUser.defaultPlatform) ? currentUser.defaultPlatform : prev.platform,
+      }));
     }
   }, [currentUser]);
 
@@ -896,6 +905,30 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     }
   };
 
+  // SUPER_ADMIN-only, Order Details-only action — closes out today's order
+  // numbering without touching any existing order's status (unlike Packing's
+  // own "จบงานวันนี้", which also bulk-marks orders Shipped). Any order
+  // entered for the rest of today then numbers as tomorrow's instead, and
+  // since Packing already shows a day ahead of that, it surfaces there two
+  // calendar days after today.
+  const handleEndTodayOrders = async () => {
+    if (!confirm("ยืนยันจบออเดอร์ของวันนี้?\n\nออเดอร์ที่ลงหลังจากนี้ (แม้ยังเป็นวันเดิม) จะถูกนับเป็นออเดอร์ของวันถัดไปแทน แล้วจะไปขึ้นหน้า Packing ของอีก 2 วันข้างหน้า")) {
+      return;
+    }
+    try {
+      const res = await fetch(`${BASE_PATH}/api/settings/packing-cutoff`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`เรียบร้อยครับ ออเดอร์ที่ลงหลังจากนี้ในวันนี้จะถูกนับเป็นออเดอร์ของวันที่ ${data.nextOrderDate}`);
+      } else {
+        alert(data.error || "เกิดข้อผิดพลาด");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
+    }
+  };
+
   const handleConfirmDuplicate = () => {
     const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
     handleSubmit(fakeEvent, true);
@@ -958,9 +991,20 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
   return (
     <div className={styles.container}>
-      <div className={styles.header}>
-        <h1 className={styles.title}>บันทึกออเดอร์ใหม่</h1>
-        <p className={styles.subtitle}>กรอกรายละเอียดออเดอร์ให้ครบ ระบบจะช่วยเช็คชื่อลูกค้าซ้ำให้อัตโนมัติ</p>
+      <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 className={styles.title}>บันทึกออเดอร์ใหม่</h1>
+          <p className={styles.subtitle}>กรอกรายละเอียดออเดอร์ให้ครบ ระบบจะช่วยเช็คชื่อลูกค้าซ้ำให้อัตโนมัติ</p>
+        </div>
+        {!isStorefrontMode && isSuperAdminRole(currentUser?.role) && (
+          <button
+            type="button"
+            onClick={handleEndTodayOrders}
+            style={{ background: '#4facfe', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+          >
+            ✅ จบ Order วันนี้
+          </button>
+        )}
       </div>
 
       <div className={styles.layout}>

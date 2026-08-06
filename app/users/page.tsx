@@ -25,6 +25,15 @@ const ROLE_ICONS: Record<string, string> = {
   CENTRAL_INVENTORY: "🏭",
 };
 
+const DEFAULT_PLATFORM_OPTIONS = ["Facebook", "Line", "TikTok", "Shopee", "Other"];
+const PLATFORM_LABELS: Record<string, string> = {
+  Facebook: "Facebook",
+  Line: "Line",
+  TikTok: "TikTok",
+  Shopee: "Shopee",
+  Other: "อื่นๆ",
+};
+
 const CLEAR_CONFIRM_PHRASE = "ลบข้อมูล";
 
 interface AuditLog {
@@ -67,6 +76,7 @@ export default function UsersPage() {
   const [editNickname, setEditNickname] = useState("");
   const [editRole, setEditRole] = useState("ADMIN");
   const [editPassword, setEditPassword] = useState("");
+  const [editDefaultPlatform, setEditDefaultPlatform] = useState("");
 
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -155,6 +165,7 @@ export default function UsersPage() {
     setEditNickname((u as any).nickname || "");
     setEditRole(u.role);
     setEditPassword("");
+    setEditDefaultPlatform((u as any).defaultPlatform || "");
     setErrorMsg("");
   };
 
@@ -176,7 +187,7 @@ export default function UsersPage() {
     setIsSaving(true);
     setErrorMsg("");
     try {
-      const body: any = { name, role: editRole, nickname: editNickname.trim() };
+      const body: any = { name, role: editRole, nickname: editNickname.trim(), defaultPlatform: editDefaultPlatform };
       if (editPassword) body.password = editPassword;
       const res = await fetch(`${BASE_PATH}/api/users/${id}`, {
         method: "PATCH",
@@ -430,6 +441,18 @@ export default function UsersPage() {
                       <option value="PACKING">แพ็คของ</option>
                       <option value="STOREFRONT">หน้าร้าน</option>
                     </select>
+                    <select
+                      className={styles.input}
+                      style={{ padding: "8px 12px", fontSize: "14px" }}
+                      value={editDefaultPlatform}
+                      onChange={(e) => setEditDefaultPlatform(e.target.value)}
+                      title="ช่องทางการขายเริ่มต้น — จะถูกเลือกไว้ให้อัตโนมัติทุกครั้งที่คนนี้เปิดหน้าลงออเดอร์"
+                    >
+                      <option value="">ไม่ตั้งค่าช่องทางเริ่มต้น</option>
+                      {DEFAULT_PLATFORM_OPTIONS.map((p) => (
+                        <option key={p} value={p}>ช่องทางเริ่มต้น: {PLATFORM_LABELS[p]}</option>
+                      ))}
+                    </select>
                     <div style={{ flex: "1 1 180px" }}>
                       <PasswordField
                         className={styles.input}
@@ -470,6 +493,7 @@ export default function UsersPage() {
                     <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                       {ROLE_LABELS[u.role] || u.role}
                       {(u as any).nickname && ` · ชื่อเล่น: ${(u as any).nickname}`}
+                      {(u as any).defaultPlatform && ` · ช่องทางเริ่มต้น: ${PLATFORM_LABELS[(u as any).defaultPlatform] || (u as any).defaultPlatform}`}
                       {u.role !== "SUPER_ADMIN" && u.racks && u.racks.length > 0 && ` · ชิ้นหมู ${u.racks.length} รายการ`}
                     </div>
                   </div>
