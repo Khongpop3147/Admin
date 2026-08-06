@@ -931,7 +931,7 @@ export default function RacksPage() {
       {/* Batch Assign Modal */}
       {isBatchModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: 'var(--accent-blue)', fontSize: '24px' }}>เพิ่มชิ้นหมูใหม่</h2>
               <button
@@ -964,9 +964,9 @@ export default function RacksPage() {
                 </div>
 
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div className={styles.rackToolbarRow} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '12px' }}>
                     <h3 style={{ fontSize: '14px' }}>ชิ้นหมูที่สร้างไว้ ({draftRacks.length})</h3>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div className={styles.rackToolbarRow} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                       <input
                         type="text"
                         placeholder="ค้นหารหัสถาด..."
@@ -1012,8 +1012,9 @@ export default function RacksPage() {
                         .map((rack, idx) => ({ ...rack, originalIdx: idx }))
                         .filter(r => !searchDraft || r.rackNo.toLowerCase().includes(searchDraft.toLowerCase()))
                         .map((rack) => (
-                        <div key={rack.originalIdx} className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr auto', gap: '12px', marginBottom: '8px', alignItems: 'center', background: rack.weight === 0 ? 'rgba(255,255,0,0.1)' : 'transparent', padding: rack.weight === 0 ? '4px' : '0' }}>
+                        <div key={rack.originalIdx} className={styles.rackItemRow} style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr auto', gap: '12px', marginBottom: '8px', alignItems: 'center', background: rack.weight === 0 ? 'rgba(255,255,0,0.1)' : 'transparent', padding: rack.weight === 0 ? '4px' : '0' }}>
                           <input
+                            className={styles.rackItemCheck}
                             type="checkbox"
                             checked={!!rack.selected}
                             onChange={(e) => {
@@ -1025,12 +1026,12 @@ export default function RacksPage() {
                           />
                           <input
                             type="text"
-                            className={styles.input}
+                            className={`${styles.input} ${styles.rackItemName}`}
                             value={rack.rackNo}
                             onChange={e => handleDraftNameChange(rack.originalIdx, e.target.value)}
                             style={{ color: rack.weight === 0 ? '#aaa' : 'inherit' }}
                           />
-                          <div style={{ position: 'relative' }}>
+                          <div className={styles.rackItemWeight} style={{ position: 'relative' }}>
                             <input
                               type="number"
                               className={styles.input}
@@ -1039,7 +1040,7 @@ export default function RacksPage() {
                             />
                             <span style={{ position: 'absolute', right: '12px', top: '10px', color: '#666', fontSize: '12px' }}>กก.</span>
                           </div>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                          <div className={styles.rackItemActions} style={{ display: 'flex', gap: '8px' }}>
                             <button onClick={() => handleInsertGap(rack.originalIdx)} title="แทรกช่องว่างตรงนี้" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>+</button>
                             <button onClick={() => handleRemoveDraft(rack.originalIdx)} title="ลบรายการนี้" style={{ background: 'rgba(255,0,0,0.2)', border: 'none', color: '#ff6b6b', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>✕</button>
                           </div>
@@ -1219,7 +1220,7 @@ export default function RacksPage() {
       {/* Distribution Modal */}
       {isDistributeModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#ffac33', fontSize: '24px' }}>แจกจ่ายจากคลังกลาง</h2>
               <button 
@@ -1279,13 +1280,13 @@ export default function RacksPage() {
 
             <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>เลือกถาดอัตโนมัติตามลำดับ</h3>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <input 
-                  type="number" 
-                  placeholder="จำนวนถาด (เช่น 10)" 
+              <div className={styles.rackToolbarRow} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <input
+                  type="number"
+                  placeholder="จำนวนถาด (เช่น 10)"
                   id="auto-select-racks-count"
-                  className={styles.input} 
-                  style={{ width: '150px', padding: '8px 12px' }} 
+                  className={styles.input}
+                  style={{ width: '150px', padding: '8px 12px' }}
                 />
                 <button 
                   onClick={() => {
@@ -1327,8 +1328,8 @@ export default function RacksPage() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div className={styles.rackToolbarRow} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '12px' }}>
+              <div className={styles.rackToolbarRow} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <h3 style={{ fontSize: '16px', margin: 0 }}>เลือกทีละชิ้น</h3>
                 <input
                   type="text"
@@ -1412,7 +1413,7 @@ export default function RacksPage() {
                   ))}
                 </select>
               </div>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div className={styles.rackButtonRow} style={{ display: 'flex', gap: '12px' }}>
                 <button
                   onClick={handleDeleteSelectedCentralRacks}
                   disabled={isDistributing || selectedCentralRacks.size === 0}
@@ -1441,7 +1442,7 @@ export default function RacksPage() {
       {/* Current Assignments Modal */}
       {isAssignmentsModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '1000px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '1000px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>รายการที่มอบหมายไปแล้ว</h2>
               <button
@@ -1450,7 +1451,7 @@ export default function RacksPage() {
               >✕</button>
             </div>
             
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
+            <div className={styles.rackToolbarRow} style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
                 <label className={styles.label} style={{ margin: 0 }}>เลือกแอดมิน:</label>
                 <select
                   className={styles.input}
@@ -1482,7 +1483,7 @@ export default function RacksPage() {
             </div>
 
             {selectedUserId && (
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', background: 'rgba(88,166,255,0.06)', border: '1px solid rgba(88,166,255,0.2)', borderRadius: '8px', padding: '12px 16px' }}>
+              <div className={styles.rackToolbarRow} style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', background: 'rgba(88,166,255,0.06)', border: '1px solid rgba(88,166,255,0.2)', borderRadius: '8px', padding: '12px 16px' }}>
                 <input
                   type="number"
                   placeholder="จำนวน rack"
@@ -1630,7 +1631,7 @@ export default function RacksPage() {
       {/* Deleted Log Modal */}
       {isDeletedLogModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#ffac33', fontSize: '24px' }}>ประวัติชิ้นหมูที่ถูกลบ / ขาดหาย</h2>
               <button
@@ -1641,30 +1642,49 @@ export default function RacksPage() {
             {deletedLogs.length === 0 ? (
               <div className={styles.emptyState} style={{ padding: '40px' }}>ยังไม่มีประวัติการลบ</div>
             ) : (
-              <div style={{ overflow: 'auto', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
-                      <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>วันที่ลบ</th>
-                      <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>รหัสชิ้น</th>
-                      <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>น้ำหนักก่อนลบ</th>
-                      <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>ลบโดย / จากแอดมิน</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {deletedLogs.map((log) => (
-                      <tr key={log.id} style={{ borderTop: '1px solid var(--border-color)' }}>
-                        <td style={{ padding: '12px 16px', color: '#fff' }}>
-                          {new Date(log.deletedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
-                        </td>
-                        <td style={{ padding: '12px 16px', color: '#ffac33', fontWeight: 'bold' }}>{log.rackNo}</td>
-                        <td style={{ padding: '12px 16px', color: '#fff' }}>{Number(log.weight).toFixed(2)} กก.</td>
-                        <td style={{ padding: '12px 16px', color: '#fff' }}>{log.userName}</td>
+              <>
+                <div className={styles.desktopOnly} style={{ overflow: 'auto', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                        <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>วันที่ลบ</th>
+                        <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>รหัสชิ้น</th>
+                        <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>น้ำหนักก่อนลบ</th>
+                        <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>ลบโดย / จากแอดมิน</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {deletedLogs.map((log) => (
+                        <tr key={log.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: '12px 16px', color: '#fff' }}>
+                            {new Date(log.deletedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
+                          </td>
+                          <td style={{ padding: '12px 16px', color: '#ffac33', fontWeight: 'bold' }}>{log.rackNo}</td>
+                          <td style={{ padding: '12px 16px', color: '#fff' }}>{Number(log.weight).toFixed(2)} กก.</td>
+                          <td style={{ padding: '12px 16px', color: '#fff' }}>{log.userName}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile: stacked cards — a 4-column table is unreadable on a
+                    phone, so each deletion gets its own full-width card. */}
+                <div className={styles.mobileCardList} style={{ overflowY: 'auto' }}>
+                  {deletedLogs.map((log) => (
+                    <div key={log.id} className={styles.mobileCard}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#ffac33', fontWeight: 'bold', fontSize: '15px' }}>{log.rackNo}</span>
+                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          {new Date(log.deletedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '14px' }}>น้ำหนักก่อนลบ: {Number(log.weight).toFixed(2)} กก.</div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>ลบโดย: {log.userName}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>

@@ -509,3 +509,73 @@
   padding: 40px 0;
   font-style: italic;
 }
+
+/* Rack Management's four modals are all "90%-width, 32px-padding floating
+   box" — reasonable on desktop, but on a phone that leaves barely 250px of
+   usable width for anything with side-by-side controls (a search box next
+   to a select next to a button, etc). Go near full-screen with tighter
+   padding below 768px so every inner row actually has room to lay out. */
+@media (max-width: 768px) {
+  .rackModal {
+    width: 100% !important;
+    height: 100%;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+    padding: 16px !important;
+  }
+}
+
+/* Several toolbar rows on that same page cram a search box + 3-4 small
+   buttons into one flex row with fixed pixel widths — fine on desktop, but
+   on a phone they either overflow or wrap into an illegible cluster of
+   half-width buttons. Stack each child into its own full-width, properly
+   tap-sized row below 768px instead. */
+@media (max-width: 768px) {
+  .rackToolbarRow {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .rackToolbarRow > * {
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+  /* Bump up the tiny 6px/12px desktop button padding — full width alone
+     doesn't help if the tap target is still only ~24px tall. */
+  .rackToolbarRow > button {
+    padding: 12px 16px !important;
+    font-size: 14px !important;
+  }
+}
+
+/* Same idea, one level down — a row of 2-3 action buttons (not a full
+   toolbar) that should sit side-by-side on desktop but stack (or at least
+   wrap onto equal-width halves) on a phone rather than getting squeezed. */
+@media (max-width: 768px) {
+  .rackButtonRow {
+    flex-direction: column !important;
+  }
+  .rackButtonRow > * {
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+}
+
+/* Draft-rack rows (batch-add modal) and per-piece assignment rows both pack
+   a checkbox/label + rack-code input + weight input + action buttons into
+   one dense row. mobileStackGrid's naive 1-column stack leaves a lone
+   checkbox floating on its own line — group checkbox+name and weight+
+   actions into their own two-part rows instead, each full width. */
+@media (max-width: 768px) {
+  .rackItemRow {
+    grid-template-columns: auto 1fr !important;
+    grid-template-areas:
+      "check name"
+      "weight actions" !important;
+    row-gap: 8px !important;
+  }
+  .rackItemCheck { grid-area: check; }
+  .rackItemName { grid-area: name; }
+  .rackItemWeight { grid-area: weight; }
+  .rackItemActions { grid-area: actions; justify-self: end; }
+}
