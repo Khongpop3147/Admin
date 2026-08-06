@@ -10,6 +10,8 @@ import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { nextDayStr, previousDayStr } from "../../lib/packingCutoff";
+import { parseAddressBlock } from "../../lib/addressParse";
+import { formatDateDDMMYY_BE } from "../../lib/thaiDate";
 import styles from "../page.module.css";
 
 function formatMoney(value: unknown): string {
@@ -186,7 +188,9 @@ export default function PackingPage() {
   };
 
   const generateExportData = () => {
-    const exportOrders = sortOrders(orders.filter(o => !filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")));
+    // NIM Express ships via its own separate export (see handleExportNim) —
+    // never through Postone.
+    const exportOrders = sortOrders(orders.filter(o => (!filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")) && o.shippingMethod !== "NIM Express"));
     if (exportOrders.length === 0) return null;
 
     // Postone only needs the shipper's own name/phone/address filled in once
@@ -199,47 +203,7 @@ export default function PackingPage() {
     const COD_ACCOUNT = "0644177042";
 
     return exportOrders.map((order, index) => {
-      let phone = "";
-      let zip = "";
-      let address = order.customerAddress || "";
-
-      // Smart extraction for Phone (Thai mobile = 10 digits, landline = 9 digits,
-      // optionally dash-grouped e.g. 081-234-5678). Deliberately does NOT treat a
-      // plain space as a separator between digits — otherwise this can "reach
-      // across" a space into an adjacent zip code and swallow part of it (e.g.
-      // "...10110 021234567" would misread as one 10-digit phone number starting
-      // from the zip's last digit, corrupting both fields). \b keeps it from
-      // matching inside a longer digit run too.
-      const phoneRaw = address.match(/\b0[\d-]{7,11}\d\b/);
-      if (phoneRaw) {
-        const digitsOnly = phoneRaw[0].replace(/-/g, "");
-        if (digitsOnly.length === 9 || digitsOnly.length === 10) {
-          phone = digitsOnly;
-          address = address.replace(phoneRaw[0], "").trim();
-        }
-      }
-
-      // Smart extraction for Zip code (5-digit standalone token, checked after
-      // the phone is already removed so it can't be confused with it)
-      const zipMatch = address.match(/\b\d{5}\b/);
-      if (zipMatch) {
-        zip = zipMatch[0];
-        address = address.replace(zipMatch[0], "").trim();
-      }
-
-      // Remove "ที่อยู่ :" or similar prefixes at the start
-      address = address.replace(/^ที่อยู่\s*:\s*/, "").replace(/^ที่อยู่\s*/, "");
-      
-      // Remove "เบอร์โทร :" or similar text anywhere
-      address = address.replace(/เบอร์โทร\s*:\s*/g, "")
-                       .replace(/เบอร์โทร\s*/g, "")
-                       .replace(/เบอร์\s*:\s*/g, "")
-                       .replace(/เบอร์\s*/g, "")
-                       .replace(/โทร\s*:\s*/g, "")
-                       .replace(/โทร\s*/g, "");
-      
-      // Clean up stray characters at the end (like trailing colons or dashes)
-      address = address.replace(/[\s:,.-]+$/, "").trim();
+      const { phone, zip, address } = parseAddressBlock(order.customerAddress);
 
       // adminNote (internal packing/admin remarks) is deliberately left out of
       // this column — it's for staff, not something that should go out on the
@@ -323,6 +287,93 @@ export default function PackingPage() {
 
     } catch (error) {
       console.error("Error exporting excel:", error);
+      alert("ส่งออกไฟล์ Excel ไม่สำเร็จ");
+    }
+  };
+
+  // NIM Express ships via a printable customer-address label sheet instead
+  // of Postone — two labels per row, repeating down the sheet. Built fresh
+  // each time (no template file to load, unlike Postone) since the label
+  // count varies with however many NIM orders are in this batch.
+  const handleExportNim = async () => {
+    const nimOrders = sortOrders(orders.filter(o => (!filterStatus || filterStatus === "All" || o.orderStatus === filterStatus || (!o.orderStatus && filterStatus === "Pending")) && o.shippingMethod === "NIM Express"));
+    if (nimOrders.length === 0) {
+      alert("ไม่มีออเดอร์ NIM Express ให้ส่งออก");
+      return;
+    }
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const dateLabel = formatDateDDMMYY_BE(selectedDate);
+      const worksheet = workbook.addWorksheet(dateLabel);
+
+      // Two label blocks per row: A-F for the first, H-M for the second,
+      // with G/N left as narrow gutters — same column shape as the label
+      // sheet this is modeled on.
+      worksheet.columns = [
+        { width: 12 }, { width: 16 }, { width: 7 }, { width: 10 }, { width: 7 }, { width: 8 }, { width: 3 },
+        { width: 12 }, { width: 16 }, { width: 7 }, { width: 10 }, { width: 7 }, { width: 8 },
+      ];
+
+      const PACKER_NAME = "นัยปพร";
+      const ROWS_PER_BLOCK = 8; // 7 content rows + 1 blank spacer row
+
+      const writeLabel = (startRow: number, colOffset: number, order: (typeof nimOrders)[number]) => {
+        const { phone, address } = parseAddressBlock(order.customerAddress);
+        const courierLabel = Number(order.codAmount) > 0 ? "NIM COD" : "NIM";
+        const c = (n: number) => colOffset + n; // 0-based offset into this label's own 6 columns
+
+        const setLabelRow = (rowIdx: number, label: string, value: string | number) => {
+          const row = worksheet.getRow(rowIdx);
+          row.getCell(c(0)).value = label;
+          row.getCell(c(1)).value = value;
+          worksheet.mergeCells(rowIdx, c(1), rowIdx, c(5));
+          row.getCell(c(1)).alignment = { wrapText: true, vertical: "top" };
+        };
+
+        setLabelRow(startRow, "ชื่อลูกค้า", order.customerName);
+        setLabelRow(startRow + 1, "โทรศัพท์", phone);
+        setLabelRow(startRow + 2, "ที่อยู่", address);
+        worksheet.getRow(startRow + 2).height = 45;
+        setLabelRow(startRow + 3, "สินค้า", "หมูกรอบ");
+
+        const weightRow = worksheet.getRow(startRow + 4);
+        weightRow.getCell(c(0)).value = "น้ำหนัก:";
+        weightRow.getCell(c(1)).value = order.crispyPorkWeight ? Number(order.crispyPorkWeight) : "";
+        weightRow.getCell(c(2)).value = "กก.";
+        weightRow.getCell(c(3)).value = "จำนวน :";
+        weightRow.getCell(c(4)).value = order.crispyPorkPiece ? Number(order.crispyPorkPiece) : "";
+        weightRow.getCell(c(5)).value = "แผ่น";
+
+        setLabelRow(startRow + 5, "ประเภทขนส่ง", courierLabel);
+
+        const packRow = worksheet.getRow(startRow + 6);
+        packRow.getCell(c(0)).value = "ผู้แพ็ค:";
+        packRow.getCell(c(1)).value = PACKER_NAME;
+        packRow.getCell(c(3)).value = "วันที่:";
+        packRow.getCell(c(4)).value = dateLabel;
+
+        // Thin border around the whole block as a print-cutting guide.
+        for (let r = startRow; r <= startRow + 6; r++) {
+          for (let col = c(0); col <= c(5); col++) {
+            worksheet.getCell(r, col).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+          }
+        }
+      };
+
+      for (let i = 0; i < nimOrders.length; i += 2) {
+        const rowStart = 1 + (i / 2) * ROWS_PER_BLOCK;
+        writeLabel(rowStart, 1, nimOrders[i]);
+        if (nimOrders[i + 1]) {
+          writeLabel(rowStart, 8, nimOrders[i + 1]);
+        }
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, `NIM_Export_${selectedDate}.xlsx`);
+    } catch (error) {
+      console.error("Error exporting NIM excel:", error);
       alert("ส่งออกไฟล์ Excel ไม่สำเร็จ");
     }
   };
@@ -546,6 +597,14 @@ export default function PackingPage() {
             style={{ background: 'var(--accent-green)', color: '#000' }}
           >
             📊 แปลงเป็น Excel (Postone)
+          </button>
+
+          <button
+            onClick={handleExportNim}
+            className={styles.toolbarBtn}
+            style={{ background: '#f39c12', color: '#000' }}
+          >
+            📇 แปลงเป็น Excel (NIM)
           </button>
 
           <input
