@@ -95,9 +95,27 @@ export async function PATCH(
       updateData.actualReceivedAmount = computeActualReceivedAmount(finalPrice, finalShipping, finalCod);
     }
 
+    // extraSlips is a relation write, not a scalar column — kept out of
+    // updateData (and so out of the change-diff loop below, which only
+    // makes sense for plain field values) and merged in separately. Full
+    // replace: whatever list the client sends becomes the complete set of
+    // extra slips, same "current state wins" semantics as every other field
+    // here (not an append).
+    const extraSlipsData = Array.isArray(body.extraSlipUrls)
+      ? {
+          extraSlips: {
+            deleteMany: {},
+            create: body.extraSlipUrls
+              .filter((u: unknown) => typeof u === "string" && u.trim())
+              .map((url: string) => ({ url })),
+          },
+        }
+      : {};
+
     const updatedOrder = await prisma.order.update({
       where: { id },
-      data: updateData,
+      data: { ...updateData, ...extraSlipsData },
+      include: { extraSlips: true },
     });
 
     const changes: string[] = [];

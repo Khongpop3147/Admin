@@ -10,6 +10,7 @@ import { BASE_PATH } from "../lib/basePath";
 import { calculateCodAmount, AppSettings, computeVatAmount, computeActualReceivedAmount } from "../lib/money";
 import { calculateShippingCost } from "../lib/shipping";
 import { computeRackAllocation } from "../lib/rackAllocate";
+import { sumUsableSlipAmounts, isTotalAmountMatched, hasAnySlipIssue } from "../lib/slipVerification";
 
 interface Order {
   id: string;
@@ -175,15 +176,26 @@ function SlipVerificationBadge({ result }: { result: any }) {
   );
 }
 
-// True whenever the Thunder check came back anything other than a clean
-// pass — used to force the admin to explain why they're saving anyway.
-function hasSlipIssue(result: any): boolean {
-  if (!result) return false;
-  if (!result.success) return true;
-  if (result.isDuplicate) return true;
-  if (result.amountMatched === false) return true;
-  if (result.accountMatched === false) return true;
-  return false;
+// Shown once below every slip on the order (not per-slip) — sums whatever
+// Thunder confirmed across all of them (see lib/slipVerification.ts) and
+// compares that total to what the order actually needs, covering both the
+// single-slip case (same ±2 baht check Thunder used to do per-slip) and a
+// customer who paid in two transfers.
+function CombinedSlipSummary({ totalVerified, expectedTotal, slipCount }: { totalVerified: number; expectedTotal: number; slipCount: number }) {
+  if (slipCount === 0 || expectedTotal <= 0) return null;
+  const matched = isTotalAmountMatched(totalVerified, expectedTotal);
+  if (matched) {
+    return (
+      <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
+        ✅ รวมยอดจาก{slipCount > 1 ? `${slipCount} สลิป` : 'สลิป'}แล้ว: ฿{formatMoney(totalVerified)} ตรงกับยอดที่ต้องได้รับ
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginTop: '8px', fontSize: '12px', color: '#ffac33', background: 'rgba(255,172,51,0.1)', border: '1px solid rgba(255,172,51,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
+      ⚠️ รวมยอดจาก{slipCount > 1 ? `${slipCount} สลิป` : 'สลิป'}แล้ว: ฿{formatMoney(totalVerified)} ไม่ตรงกับยอดที่ต้องได้รับ (฿{formatMoney(expectedTotal)}) กรุณาตรวจสอบ
+    </div>
+  );
 }
 
 const SLIP_ISSUE_REASONS = [
@@ -268,6 +280,9 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const [isUploading, setIsUploading] = useState(false);
   const [slipVerification, setSlipVerification] = useState<any | null>(null);
   const [slipIssueReason, setSlipIssueReason] = useState("");
+  // Extra slips beyond the primary one (formData.transferSlip) — only used
+  // when a customer paid short and transferred the rest separately.
+  const [extraSlips, setExtraSlips] = useState<{ url: string; verification: any; uploading?: boolean }[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [isEditingOrder, setIsEditingOrder] = useState(false);
   const [editOrderData, setEditOrderData] = useState<any | null>(null);
@@ -275,6 +290,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const [isEditUploading, setIsEditUploading] = useState(false);
   const [editSlipVerification, setEditSlipVerification] = useState<any | null>(null);
   const [editSlipIssueReason, setEditSlipIssueReason] = useState("");
+  const [editExtraSlips, setEditExtraSlips] = useState<{ url: string; verification: any; uploading?: boolean }[]>([]);
   const [alertData, setAlertData] = useState({
     show: false,
     message: "",
@@ -592,10 +608,12 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
         setFormData(prev => ({ ...prev, transferSlip: data.url, paymentStatus: "Paid" }));
         // /api/upload returns a basePath-prefixed path like
         // "/admin/api/uploads/xxx.jpg" — Thunder needs a full absolute URL,
-        // not a bare path.
+        // not a bare path. No matchAmount here anymore — with a second slip
+        // now possible, per-slip amount-matching doesn't make sense; the
+        // combined total across every slip is checked separately instead
+        // (see CombinedSlipSummary / lib/slipVerification.ts).
         const absoluteSlipUrl = data.url.startsWith("http") ? data.url : `${window.location.origin}${data.url}`;
-        const expectedAmount = parseFloat(formData.actualReceivedAmount);
-        const result = await verifySlip(absoluteSlipUrl, !isNaN(expectedAmount) && expectedAmount > 0 ? expectedAmount : undefined);
+        const result = await verifySlip(absoluteSlipUrl);
         setSlipVerification(result);
       } else {
         alert("อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
@@ -633,11 +651,70 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     }
   };
 
+  // Adds an empty extra-slip slot — for when a customer paid short the
+  // first time and transferred the rest separately.
+  const addExtraSlipSlot = () => {
+    setExtraSlips(prev => [...prev, { url: "", verification: null }]);
+  };
+
+  const removeExtraSlip = (index: number) => {
+    setExtraSlips(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadExtraSlipFile = async (index: number, file: File) => {
+    setExtraSlips(prev => prev.map((s, i) => i === index ? { ...s, uploading: true, verification: null } : s));
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/upload`, { method: "POST", body: form });
+      const data = await res.json();
+      if (data.url) {
+        setExtraSlips(prev => prev.map((s, i) => i === index ? { ...s, url: data.url, uploading: false } : s));
+        const absoluteSlipUrl = data.url.startsWith("http") ? data.url : `${window.location.origin}${data.url}`;
+        const result = await verifySlip(absoluteSlipUrl);
+        setExtraSlips(prev => prev.map((s, i) => i === index ? { ...s, verification: result } : s));
+      } else {
+        alert("อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+        setExtraSlips(prev => prev.map((s, i) => i === index ? { ...s, uploading: false } : s));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะอัปโหลดไฟล์");
+      setExtraSlips(prev => prev.map((s, i) => i === index ? { ...s, uploading: false } : s));
+    }
+  };
+
+  const handleExtraSlipFileInput = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadExtraSlipFile(index, file);
+  };
+
+  const handleExtraSlipPaste = (index: number, e: React.ClipboardEvent) => {
+    if (extraSlips[index]?.uploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          uploadExtraSlipFile(index, file);
+        }
+        return;
+      }
+    }
+  };
+
   const handleStartEditOrder = () => {
     setEditOrderData({ ...selectedOrder });
     setIsEditingOrder(true);
     setEditSlipVerification(null);
     setEditSlipIssueReason("");
+    // Existing extra slips already saved on this order carry over into the
+    // edit form as already-uploaded (no re-verification needed unless the
+    // admin explicitly replaces one — verification is just advisory).
+    setEditExtraSlips((selectedOrder?.extraSlips || []).map((s: any) => ({ url: s.url, verification: null })));
   };
 
   const handleCancelEditOrder = () => {
@@ -645,6 +722,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     setEditOrderData(null);
     setEditSlipVerification(null);
     setEditSlipIssueReason("");
+    setEditExtraSlips([]);
   };
 
   const handleCloseOrderDetail = () => {
@@ -653,6 +731,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     setEditOrderData(null);
     setEditSlipVerification(null);
     setEditSlipIssueReason("");
+    setEditExtraSlips([]);
   };
 
   // Same "uploading a slip means it's paid" rule as the main new-order form —
@@ -674,8 +753,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
       if (data.url) {
         setEditOrderData((prev: any) => ({ ...prev, transferSlip: data.url, paymentStatus: "Paid" }));
         const absoluteSlipUrl = data.url.startsWith("http") ? data.url : `${window.location.origin}${data.url}`;
-        const expectedAmount = parseFloat(editOrderData?.actualReceivedAmount);
-        const result = await verifySlip(absoluteSlipUrl, !isNaN(expectedAmount) && expectedAmount > 0 ? expectedAmount : undefined);
+        const result = await verifySlip(absoluteSlipUrl);
         setEditSlipVerification(result);
       } else {
         alert("อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
@@ -710,13 +788,73 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     }
   };
 
+  const addEditExtraSlipSlot = () => {
+    setEditExtraSlips(prev => [...prev, { url: "", verification: null }]);
+  };
+
+  const removeEditExtraSlip = (index: number) => {
+    setEditExtraSlips(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadEditExtraSlipFile = async (index: number, file: File) => {
+    setEditExtraSlips(prev => prev.map((s, i) => i === index ? { ...s, uploading: true, verification: null } : s));
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/upload`, { method: "POST", body: form });
+      const data = await res.json();
+      if (data.url) {
+        setEditExtraSlips(prev => prev.map((s, i) => i === index ? { ...s, url: data.url, uploading: false } : s));
+        const absoluteSlipUrl = data.url.startsWith("http") ? data.url : `${window.location.origin}${data.url}`;
+        const result = await verifySlip(absoluteSlipUrl);
+        setEditExtraSlips(prev => prev.map((s, i) => i === index ? { ...s, verification: result } : s));
+      } else {
+        alert("อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+        setEditExtraSlips(prev => prev.map((s, i) => i === index ? { ...s, uploading: false } : s));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะอัปโหลดไฟล์");
+      setEditExtraSlips(prev => prev.map((s, i) => i === index ? { ...s, uploading: false } : s));
+    }
+  };
+
+  const handleEditExtraSlipFileInput = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadEditExtraSlipFile(index, file);
+  };
+
+  const handleEditExtraSlipPaste = (index: number, e: React.ClipboardEvent) => {
+    if (editExtraSlips[index]?.uploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          uploadEditExtraSlipFile(index, file);
+        }
+        return;
+      }
+    }
+  };
+
+  const editAllSlipResults = [editSlipVerification, ...editExtraSlips.map(s => s.verification)];
+  const editTotalVerifiedSlipAmount = sumUsableSlipAmounts(editAllSlipResults);
+  const editExpectedPaymentTotal = parseFloat(editOrderData?.actualReceivedAmount) || 0;
+  const editHasAnySlipUploaded = !!editOrderData?.transferSlip || editExtraSlips.length > 0;
+  const editSlipAmountMismatch = editHasAnySlipUploaded && editExpectedPaymentTotal > 0 && !isTotalAmountMatched(editTotalVerifiedSlipAmount, editExpectedPaymentTotal);
+  const editHasSlipIssue = hasAnySlipIssue(editAllSlipResults) || editSlipAmountMismatch;
+
   const handleSaveOrderEdit = async () => {
     if (!editOrderData) return;
-    if (hasSlipIssue(editSlipVerification) && !editSlipIssueReason) {
+    if (editHasSlipIssue && !editSlipIssueReason) {
       alert("สลิปมีปัญหา กรุณาเลือกเหตุผลก่อนบันทึกออเดอร์");
       return;
     }
-    const slipIssueNote = hasSlipIssue(editSlipVerification) && editSlipIssueReason ? `[หมายเหตุสลิป: ${editSlipIssueReason}]` : "";
+    const slipIssueNote = editHasSlipIssue && editSlipIssueReason ? `[หมายเหตุสลิป: ${editSlipIssueReason}]` : "";
     const combinedAdminNote = [editOrderData.adminNote, slipIssueNote].filter(Boolean).join(" ");
     setIsSavingEdit(true);
     try {
@@ -734,6 +872,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
           adminNote: combinedAdminNote,
           paymentStatus: editOrderData.paymentStatus,
           transferSlip: editOrderData.transferSlip,
+          extraSlipUrls: editExtraSlips.map(s => s.url).filter(Boolean),
           editedBy: currentUser?.name,
         }),
       });
@@ -742,6 +881,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
         setSelectedOrder(data.order);
         setIsEditingOrder(false);
         setEditOrderData(null);
+        setEditExtraSlips([]);
         const dateForFetch = customerSearch ? undefined : filterDate;
         if (isSuperAdminRole(currentUser?.role)) {
           fetchOrders(filterAdminName, dateForFetch, customerSearch);
@@ -831,7 +971,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
       alert("กรุณาเลือกช่องทางการขายก่อนบันทึกออเดอร์");
       return;
     }
-    if (hasSlipIssue(slipVerification) && !slipIssueReason) {
+    if (combinedHasSlipIssue && !slipIssueReason) {
       alert("สลิปมีปัญหา กรุณาเลือกเหตุผลก่อนบันทึกออเดอร์");
       return;
     }
@@ -839,7 +979,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     // Validation
     const requestedWeight = parseFloat(formData.crispyPorkWeight);
 
-    const slipIssueNote = hasSlipIssue(slipVerification) && slipIssueReason ? `[หมายเหตุสลิป: ${slipIssueReason}]` : "";
+    const slipIssueNote = combinedHasSlipIssue && slipIssueReason ? `[หมายเหตุสลิป: ${slipIssueReason}]` : "";
     const combinedAdminNote = [derivedAdminNote, slipIssueNote].filter(Boolean).join(" ");
 
     setIsLoading(true);
@@ -852,6 +992,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
           orderStatus: isStorefrontMode ? "Completed" : formData.orderStatus,
           adminNote: combinedAdminNote,
           rackDetails: JSON.stringify(rackDetails),
+          extraSlipUrls: extraSlips.map(s => s.url).filter(Boolean),
           bypassDuplicateCheck,
         }),
       });
@@ -882,6 +1023,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
         setAlertData({ show: false, message: "", customerName: "" });
         setSlipVerification(null);
         setSlipIssueReason("");
+        setExtraSlips([]);
         if (fileInputRef.current) fileInputRef.current.value = "";
         // The order just saved under the logged-in user's own name — make sure the
         // list refresh can actually show it, even if a SUPER_ADMIN had the filter
@@ -936,6 +1078,17 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
   const totalAllocated = Number(rackDetails.reduce((sum, r) => sum + r.weight, 0).toFixed(2));
   const targetWeight = parseFloat(formData.crispyPorkWeight) || 0;
+
+  // Combined across the primary slip and every extra one — a customer who
+  // paid in two transfers has their amounts summed and checked against the
+  // order total together, rather than each slip needing to match the full
+  // amount on its own (see lib/slipVerification.ts).
+  const allSlipResults = [slipVerification, ...extraSlips.map(s => s.verification)];
+  const totalVerifiedSlipAmount = sumUsableSlipAmounts(allSlipResults);
+  const expectedPaymentTotal = parseFloat(formData.actualReceivedAmount) || 0;
+  const hasAnySlipUploaded = !!formData.transferSlip || extraSlips.length > 0;
+  const slipAmountMismatch = hasAnySlipUploaded && expectedPaymentTotal > 0 && !isTotalAmountMatched(totalVerifiedSlipAmount, expectedPaymentTotal);
+  const combinedHasSlipIssue = hasAnySlipIssue(allSlipResults) || slipAmountMismatch;
 
   // computeRackAllocation only ever lands within +0.2kg over target, or
   // 0.17-0.4kg under it (a shortfall closer than 0.17kg is treated as "not
@@ -1407,7 +1560,43 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                   </div>
                 )}
                 <SlipVerificationBadge result={slipVerification} />
-                {hasSlipIssue(slipVerification) && (
+
+                {/* Extra slips — ลูกค้าโอนไม่ครบรอบแรกแล้วโอนเพิ่มรอบหลัง */}
+                {extraSlips.map((slip, index) => (
+                  <div key={index} style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed rgba(255,255,255,0.15)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>สลิปเพิ่มเติม #{index + 1}</span>
+                      <button type="button" onClick={() => removeExtraSlip(index)} style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontSize: '12px' }}>✕ ลบ</button>
+                    </div>
+                    {!slip.url ? (
+                      <div
+                        tabIndex={0}
+                        onPaste={(e) => handleExtraSlipPaste(index, e)}
+                        style={{ border: '2px dashed rgba(88,166,255,0.4)', borderRadius: '8px', padding: '14px', background: 'rgba(88,166,255,0.05)' }}
+                      >
+                        <div style={{ fontSize: '13px', color: 'var(--accent-blue)', marginBottom: '10px', fontWeight: 'bold' }}>
+                          📋 คลิกตรงนี้แล้วกด Ctrl+V เพื่อวางรูปสลิป หรือเลือกไฟล์ด้านล่าง
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <input type="file" accept="image/*" onChange={(e) => handleExtraSlipFileInput(index, e)} className={styles.input} style={{ padding: '8px' }} disabled={slip.uploading} />
+                          {slip.uploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '12px' }}>
+                        <a href={slip.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิปที่อัปโหลด</a>
+                      </div>
+                    )}
+                    <SlipVerificationBadge result={slip.verification} />
+                  </div>
+                ))}
+                {formData.transferSlip && formData.paymentStatus !== "Unpaid" && formData.paymentStatus !== "COD" && (
+                  <button type="button" onClick={addExtraSlipSlot} style={{ marginTop: '10px', background: 'rgba(88,166,255,0.1)', border: '1px solid rgba(88,166,255,0.3)', color: 'var(--accent-blue)', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '12px' }}>
+                    + เพิ่มสลิป (ถ้าลูกค้าโอนไม่ครบแล้วโอนเพิ่ม)
+                  </button>
+                )}
+                <CombinedSlipSummary totalVerified={totalVerifiedSlipAmount} expectedTotal={expectedPaymentTotal} slipCount={allSlipResults.filter(Boolean).length} />
+                {combinedHasSlipIssue && (
                   <SlipIssueReasonPicker value={slipIssueReason} onChange={setSlipIssueReason} />
                 )}
               </div>
@@ -1864,7 +2053,43 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                         </div>
                       )}
                       <SlipVerificationBadge result={editSlipVerification} />
-                      {hasSlipIssue(editSlipVerification) && (
+
+                      {/* Extra slips — ลูกค้าโอนไม่ครบรอบแรกแล้วโอนเพิ่มรอบหลัง */}
+                      {editExtraSlips.map((slip, index) => (
+                        <div key={index} style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed rgba(255,255,255,0.15)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>สลิปเพิ่มเติม #{index + 1}</span>
+                            <button type="button" onClick={() => removeEditExtraSlip(index)} style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontSize: '12px' }}>✕ ลบ</button>
+                          </div>
+                          {!slip.url ? (
+                            <div
+                              tabIndex={0}
+                              onPaste={(e) => handleEditExtraSlipPaste(index, e)}
+                              style={{ border: '2px dashed rgba(88,166,255,0.4)', borderRadius: '8px', padding: '14px', background: 'rgba(88,166,255,0.05)' }}
+                            >
+                              <div style={{ fontSize: '13px', color: 'var(--accent-blue)', marginBottom: '10px', fontWeight: 'bold' }}>
+                                📋 คลิกตรงนี้แล้วกด Ctrl+V เพื่อวางรูปสลิป หรือเลือกไฟล์ด้านล่าง
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <input type="file" accept="image/*" onChange={(e) => handleEditExtraSlipFileInput(index, e)} className={styles.input} style={{ padding: '8px' }} disabled={slip.uploading} />
+                                {slip.uploading && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>กำลังอัปโหลด...</span>}
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '12px' }}>
+                              <a href={slip.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิปที่อัปโหลด</a>
+                            </div>
+                          )}
+                          <SlipVerificationBadge result={slip.verification} />
+                        </div>
+                      ))}
+                      {editOrderData.transferSlip && editOrderData.paymentStatus !== "Unpaid" && editOrderData.paymentStatus !== "COD" && (
+                        <button type="button" onClick={addEditExtraSlipSlot} style={{ marginTop: '10px', background: 'rgba(88,166,255,0.1)', border: '1px solid rgba(88,166,255,0.3)', color: 'var(--accent-blue)', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '12px' }}>
+                          + เพิ่มสลิป (ถ้าลูกค้าโอนไม่ครบแล้วโอนเพิ่ม)
+                        </button>
+                      )}
+                      <CombinedSlipSummary totalVerified={editTotalVerifiedSlipAmount} expectedTotal={editExpectedPaymentTotal} slipCount={editAllSlipResults.filter(Boolean).length} />
+                      {editHasSlipIssue && (
                         <SlipIssueReasonPicker value={editSlipIssueReason} onChange={setEditSlipIssueReason} />
                       )}
                     </div>
@@ -1943,6 +2168,21 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                         label="สลิปโอนเงิน"
                         value={selectedOrder.transferSlip ? <a href={selectedOrder.transferSlip} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิป</a> : '-'}
                       />
+                      {selectedOrder.extraSlips?.length > 0 && (
+                        <DetailRow
+                          label="สลิปเพิ่มเติม"
+                          value={
+                            <span>
+                              {selectedOrder.extraSlips.map((s: any, i: number) => (
+                                <span key={s.id}>
+                                  {i > 0 && ', '}
+                                  <a href={s.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>สลิป #{i + 2}</a>
+                                </span>
+                              ))}
+                            </span>
+                          }
+                        />
+                      )}
                     </DetailSection>
 
                     {selectedOrder.adminNote && (

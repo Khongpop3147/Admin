@@ -43,6 +43,19 @@ model Order {
   // duplicate detection unchanged.
   entryDate             String
   createdAt             DateTime @default(now())
+  // Extra slips beyond transferSlip (the primary one) — for when a customer
+  // pays short the first time and transfers the rest separately. transferSlip
+  // itself is untouched by this: every existing order and every order with
+  // just one slip behaves exactly as before.
+  extraSlips            OrderSlip[]
+}
+
+model OrderSlip {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  url       String
+  createdAt DateTime @default(now())
 }
 
 model User {

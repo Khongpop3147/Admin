@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price, 
       shippingMethod, additionalShippingCost, codAmount, actualReceivedAmount, 
       transferSlip, paymentStatus, customerAddress, orderStatus, rackDetails, sellerName, trackingNumber,
-      bypassDuplicateCheck, adminNote, entryDate
+      bypassDuplicateCheck, adminNote, entryDate, extraSlipUrls
     } = body;
 
     if (!customerName) {
@@ -115,6 +115,10 @@ export async function POST(req: Request) {
       }
 
       // 3. Create the order
+      const validExtraSlipUrls: string[] = Array.isArray(extraSlipUrls)
+        ? extraSlipUrls.filter((u: unknown) => typeof u === "string" && u.trim())
+        : [];
+
       const order = await tx.order.create({
         data: {
           orderNo: currentOrderNo,
@@ -139,7 +143,14 @@ export async function POST(req: Request) {
           trackingNumber,
           adminNote,
           entryDate: dateKey,
+          // Only ever non-empty when a customer paid short and transferred
+          // the rest separately — transferSlip above still holds the
+          // primary/first slip exactly as before.
+          extraSlips: validExtraSlipUrls.length > 0
+            ? { create: validExtraSlipUrls.map((url: string) => ({ url })) }
+            : undefined,
         },
+        include: { extraSlips: true },
       });
 
       // 4. Deduct weight from assigned racks atomically
@@ -260,6 +271,7 @@ export async function GET(req: Request) {
 
     const orders = await prisma.order.findMany({
       where: whereClause,
+      include: { extraSlips: true },
       orderBy: {
         createdAt: "desc",
       },
