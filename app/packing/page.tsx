@@ -319,7 +319,7 @@ export default function PackingPage() {
       const worksheet = workbook.addWorksheet(dateLabel);
 
       const LABEL_FONT = { name: "Tahoma", size: 10 } as const;
-      const CHECKBOX_TEXT = "☐ LINE                   ☐ FB                      ☐ ตัวแทนขาย";
+      const CHECKBOX_TEXT = "☐ LINE                   ☐ FB";
       const PACKER_NAME = "นัยปพร";
       const BLOCK_HEIGHT = 15; // 14 content rows + 1 blank spacer row before the next pair
 
