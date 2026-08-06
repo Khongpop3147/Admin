@@ -300,9 +300,12 @@ export default function PackingPage() {
   };
 
   // NIM Express ships via a printable customer-address label sheet instead
-  // of Postone — two labels per row, repeating down the sheet. Built fresh
-  // each time (no template file to load, unlike Postone) since the label
-  // count varies with however many NIM orders are in this batch.
+  // of Postone — two labels per row, repeating down the sheet. Column
+  // widths, merge shape, font (Tahoma 10), row heights, and every label's
+  // exact wording are copied from a real, never-manually-edited blank slot
+  // in the reference file the shop actually uses, not approximated —
+  // column G/N (unused by the template's own fields) is where the courier
+  // marker (NIM/NIM COD) goes, matching where staff already handwrite it.
   const handleExportNim = async () => {
     const nimOrders = sortOrders(orders.filter(o => matchesStatusFilter(o) && o.shippingMethod === "NIM Express"));
     if (nimOrders.length === 0) {
@@ -315,62 +318,75 @@ export default function PackingPage() {
       const dateLabel = formatDateDDMMYY_BE(selectedDate);
       const worksheet = workbook.addWorksheet(dateLabel);
 
-      // Two label blocks per row: A-F for the first, H-M for the second,
-      // with G/N left as narrow gutters — same column shape as the label
-      // sheet this is modeled on.
-      worksheet.columns = [
-        { width: 12 }, { width: 16 }, { width: 7 }, { width: 10 }, { width: 7 }, { width: 8 }, { width: 3 },
-        { width: 12 }, { width: 16 }, { width: 7 }, { width: 10 }, { width: 7 }, { width: 8 },
-      ];
-
+      const LABEL_FONT = { name: "Tahoma", size: 10 } as const;
+      const CHECKBOX_TEXT = "☐ LINE                   ☐ FB                      ☐ ตัวแทนขาย";
       const PACKER_NAME = "นัยปพร";
-      const ROWS_PER_BLOCK = 8; // 7 content rows + 1 blank spacer row
+      const BLOCK_HEIGHT = 15; // 14 content rows + 1 blank spacer row before the next pair
+
+      worksheet.columns = [
+        { width: 6.75 }, { width: 14.5 }, { width: 5.125 }, { width: 6.125 }, { width: 8.625 }, { width: 8.875 }, { width: 10.875 },
+        { width: 6.75 }, { width: 14.5 }, { width: 5.125 }, { width: 6.125 }, { width: 8.625 }, { width: 8.875 }, { width: 10.875 },
+      ];
 
       const writeLabel = (startRow: number, colOffset: number, order: (typeof nimOrders)[number]) => {
         const { phone, address } = parseAddressBlock(order.customerAddress);
         const courierLabel = Number(order.codAmount) > 0 ? "NIM COD" : "NIM";
-        const c = (n: number) => colOffset + n; // 0-based offset into this label's own 6 columns
+        const c = (n: number) => colOffset + n; // 0-based offset into this label's own 7 columns (A-G / H-N)
 
-        const setLabelRow = (rowIdx: number, label: string, value: string | number) => {
-          const row = worksheet.getRow(rowIdx);
-          row.getCell(c(0)).value = label;
-          row.getCell(c(1)).value = value;
-          worksheet.mergeCells(rowIdx, c(1), rowIdx, c(5));
-          row.getCell(c(1)).alignment = { wrapText: true, vertical: "top" };
+        const setCell = (r: number, col: number, value: string | number, align?: Partial<ExcelJS.Alignment>) => {
+          const cell = worksheet.getRow(r).getCell(col);
+          cell.value = value;
+          cell.font = LABEL_FONT;
+          cell.alignment = { horizontal: "left", vertical: "middle", ...align };
         };
 
-        setLabelRow(startRow, "ชื่อลูกค้า", order.customerName);
-        setLabelRow(startRow + 1, "โทรศัพท์", phone);
-        setLabelRow(startRow + 2, "ที่อยู่", address);
-        worksheet.getRow(startRow + 2).height = 45;
-        setLabelRow(startRow + 3, "สินค้า", "หมูกรอบ");
+        setCell(startRow, c(0), "ชื่อลูกค้า");
+        setCell(startRow, c(1), order.customerName);
+        worksheet.mergeCells(startRow, c(1), startRow, c(4));
+        worksheet.getRow(startRow).height = 18;
 
-        const weightRow = worksheet.getRow(startRow + 4);
-        weightRow.getCell(c(0)).value = "น้ำหนัก:";
-        weightRow.getCell(c(1)).value = order.crispyPorkWeight ? Number(order.crispyPorkWeight) : "";
-        weightRow.getCell(c(2)).value = "กก.";
-        weightRow.getCell(c(3)).value = "จำนวน :";
-        weightRow.getCell(c(4)).value = order.crispyPorkPiece ? Number(order.crispyPorkPiece) : "";
-        weightRow.getCell(c(5)).value = "แผ่น";
+        setCell(startRow + 1, c(0), "โทรศัพท์");
+        setCell(startRow + 1, c(1), phone);
+        worksheet.mergeCells(startRow + 1, c(1), startRow + 1, c(4));
+        worksheet.getRow(startRow + 1).height = 18;
 
-        setLabelRow(startRow + 5, "ประเภทขนส่ง", courierLabel);
+        setCell(startRow + 2, c(0), "ที่อยู่");
+        setCell(startRow + 2, c(1), address, { wrapText: true, vertical: "top" });
+        worksheet.mergeCells(startRow + 2, c(1), startRow + 6, c(4)); // 5 rows tall, like the source
+        for (let r = startRow + 2; r <= startRow + 6; r++) worksheet.getRow(r).height = 18;
 
-        const packRow = worksheet.getRow(startRow + 6);
-        packRow.getCell(c(0)).value = "ผู้แพ็ค:";
-        packRow.getCell(c(1)).value = PACKER_NAME;
-        packRow.getCell(c(3)).value = "วันที่:";
-        packRow.getCell(c(4)).value = dateLabel;
+        setCell(startRow + 7, c(0), "สินค้า");
+        setCell(startRow + 7, c(1), "หมูกรอบ");
+        worksheet.getRow(startRow + 7).height = 18;
 
-        // Thin border around the whole block as a print-cutting guide.
-        for (let r = startRow; r <= startRow + 6; r++) {
-          for (let col = c(0); col <= c(5); col++) {
-            worksheet.getCell(r, col).border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
-          }
-        }
+        setCell(startRow + 8, c(0), "น้ำหนัก:");
+        setCell(startRow + 8, c(1), order.crispyPorkWeight ? Number(order.crispyPorkWeight) : "");
+        setCell(startRow + 8, c(2), "กก.");
+        setCell(startRow + 8, c(3), "จำนวน :");
+        setCell(startRow + 8, c(4), order.crispyPorkPiece ? Number(order.crispyPorkPiece) : "");
+        setCell(startRow + 8, c(5), "แผ่น");
+        setCell(startRow + 8, c(6), courierLabel);
+        worksheet.getRow(startRow + 8).height = 18;
+
+        worksheet.getRow(startRow + 9).height = 18; // blank, matches the source
+
+        setCell(startRow + 10, c(0), "ช่องทางขาย");
+        worksheet.getRow(startRow + 10).height = 18;
+
+        for (let col = c(0); col <= c(4); col++) setCell(startRow + 11, col, CHECKBOX_TEXT);
+        worksheet.getRow(startRow + 11).height = 18;
+
+        worksheet.getRow(startRow + 12).height = 18; // blank, matches the source
+
+        setCell(startRow + 13, c(0), "ผู้แพ็ค:");
+        setCell(startRow + 13, c(1), PACKER_NAME);
+        setCell(startRow + 13, c(3), "วันที่:");
+        setCell(startRow + 13, c(4), dateLabel);
+        worksheet.getRow(startRow + 13).height = 18;
       };
 
       for (let i = 0; i < nimOrders.length; i += 2) {
-        const rowStart = 1 + (i / 2) * ROWS_PER_BLOCK;
+        const rowStart = 1 + (i / 2) * BLOCK_HEIGHT;
         writeLabel(rowStart, 1, nimOrders[i]);
         if (nimOrders[i + 1]) {
           writeLabel(rowStart, 8, nimOrders[i + 1]);
