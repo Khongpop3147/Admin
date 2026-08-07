@@ -49,6 +49,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             Dashboard
           </Link>
         )}
+        {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "HR") && (
+          <Link href="/hr-manage" className={`${styles.navItem} ${pathname === '/hr-manage' ? styles.active : ''}`}>
+            HR Manage
+          </Link>
+        )}
         {currentUser?.role !== "PACKING" && currentUser?.role !== "STOREFRONT" && currentUser?.role !== "HR" && (
           <Link href="/orders" className={`${styles.navItem} ${pathname === '/orders' ? styles.active : ''}`}>
             Order Details
