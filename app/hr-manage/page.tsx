@@ -39,6 +39,11 @@ export default function HrManagePage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
+  // When searching, results come from a separate all-dates fetch instead of
+  // filtering `orders` (which is scoped to selectedDate) — null means "not
+  // searching, show the selected date's orders instead".
+  const [searchResults, setSearchResults] = useState<Order[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Clicking a customer's name looks up their order history across every
   // date (not just the one selected above) — a separate fetch, not a
@@ -58,6 +63,26 @@ export default function HrManagePage() {
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, [selectedDate, canAccess]);
+
+  // Debounced — searching goes to the server (every date, not just
+  // selectedDate), so this shouldn't fire on every keystroke.
+  useEffect(() => {
+    if (!canAccess) return;
+    const term = customerSearch.trim();
+    if (!term) {
+      setSearchResults(null);
+      return;
+    }
+    setIsSearching(true);
+    const timeout = setTimeout(() => {
+      fetch(`${BASE_PATH}/api/orders?customerName=${encodeURIComponent(term)}`)
+        .then((res) => res.json())
+        .then((data) => setSearchResults(data.orders || []))
+        .catch(() => setSearchResults([]))
+        .finally(() => setIsSearching(false));
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [customerSearch, canAccess]);
 
   useEffect(() => {
     if (!selectedCustomer) return;
@@ -92,12 +117,12 @@ export default function HrManagePage() {
     if (u.nickname) nicknameByName[u.name] = u.nickname;
   });
 
-  const filteredOrders = customerSearch.trim()
-    ? orders.filter((o) => o.customerName.toLowerCase().includes(customerSearch.trim().toLowerCase()))
-    : orders;
+  const isSearchMode = searchResults !== null;
+  const activeOrders = isSearchMode ? searchResults : orders;
+  const displayLoading = isSearchMode ? isSearching : isLoading;
 
-  const adminGroups = groupOrdersForPrint<Order>(filteredOrders, nicknameByName);
-  const totalMissingTracking = orders.filter(isMissingTracking).length;
+  const adminGroups = groupOrdersForPrint<Order>(activeOrders, nicknameByName);
+  const totalMissingTracking = activeOrders.filter(isMissingTracking).length;
 
   return (
     <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
@@ -117,7 +142,7 @@ export default function HrManagePage() {
           />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>ค้นหาชื่อลูกค้า</label>
+          <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>ค้นหาชื่อลูกค้า (ทุกวันที่)</label>
           <input
             type="text"
             value={customerSearch}
@@ -126,6 +151,11 @@ export default function HrManagePage() {
             style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "white", fontSize: "14px", width: "220px" }}
           />
         </div>
+        {isSearchMode && (
+          <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+            🔍 กำลังค้นหา "{customerSearch.trim()}" จากทุกวันที่ — ไม่ใช่แค่วันที่เลือกไว้
+          </div>
+        )}
         {totalMissingTracking > 0 && (
           <div style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(255,107,107,0.15)", border: "1px solid rgba(255,107,107,0.4)", color: "#ff6b6b", fontSize: "14px", fontWeight: "bold" }}>
             ⚠️ EMS ที่ยังไม่มีเลข Tracking: {totalMissingTracking} รายการ
@@ -133,10 +163,10 @@ export default function HrManagePage() {
         )}
       </div>
 
-      {isLoading ? (
+      {displayLoading ? (
         <div style={{ textAlign: "center", padding: "60px", color: "var(--text-secondary)" }}>กำลังโหลด...</div>
       ) : adminGroups.length === 0 ? (
-        <div className={styles.emptyState}>{customerSearch.trim() ? "ไม่พบลูกค้าที่ตรงกับคำค้นหา" : "ยังไม่มีออเดอร์ในวันที่เลือก"}</div>
+        <div className={styles.emptyState}>{isSearchMode ? "ไม่พบลูกค้าที่ตรงกับคำค้นหา" : "ยังไม่มีออเดอร์ในวันที่เลือก"}</div>
       ) : (
         adminGroups.map((group) => {
           const missingInGroup = group.orders.filter(isMissingTracking).length;
@@ -177,6 +207,9 @@ export default function HrManagePage() {
                       >
                         {order.customerName}
                       </button>
+                      {isSearchMode && (
+                        <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>📅 {order.entryDate}</span>
+                      )}
                       <span style={{ color: "var(--text-secondary)" }}>{getShippingLabel(order)}</span>
                       <span style={{ color: "var(--text-secondary)" }}>{(order.orderStatus && STATUS_LABELS[order.orderStatus]) || "รอดำเนินการ"}</span>
                       {missing ? (
