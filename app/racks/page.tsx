@@ -139,6 +139,13 @@ export default function RacksPage() {
 
   // Central Inventory Distribute state
   const [selectedCentralRacks, setSelectedCentralRacks] = useState<Set<string>>(new Set());
+  // Running total for whatever's currently checked in the "เลือกทีละชิ้น"
+  // list below — shown before the distribute is actually confirmed, so the
+  // admin can see how many kg they're about to hand over.
+  const selectedCentralWeight = centralRacks.reduce(
+    (sum: number, r: any) => sum + (selectedCentralRacks.has(r.id) ? Number(r.remainingWeight) || 0 : 0),
+    0
+  );
   const [distributeTargetUserId, setDistributeTargetUserId] = useState("");
   const [distributeStartRack, setDistributeStartRack] = useState("");
   const [distributeEndRack, setDistributeEndRack] = useState("");
@@ -1398,7 +1405,7 @@ export default function RacksPage() {
 
             <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'end', background: 'rgba(255,172,51,0.05)', padding: '24px', borderRadius: '8px', border: '1px solid rgba(255,172,51,0.2)' }}>
               <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                <label className={styles.label}>เลือกแอดมินที่จะรับ {selectedCentralRacks.size} ชิ้น</label>
+                <label className={styles.label}>เลือกแอดมินที่จะรับ {selectedCentralRacks.size} ชิ้น ({selectedCentralWeight.toFixed(2)} กก.)</label>
                 <select
                   className={styles.input}
                   style={{ fontSize: '16px', padding: '12px' }}
