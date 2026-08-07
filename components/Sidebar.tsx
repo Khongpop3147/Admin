@@ -14,6 +14,7 @@ const ROLE_LABELS: Record<string, string> = {
   STOREFRONT: "หน้าร้าน",
   CENTRAL_INVENTORY: "คลังกลาง",
   DEV: "Dev",
+  HR: "HR",
 };
 
 interface SidebarProps {
@@ -44,14 +45,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       <nav className={styles.nav}>
         {currentUser?.role !== "PACKING" && currentUser?.role !== "STOREFRONT" && (
-          <>
-            <Link href="/dashboard" className={`${styles.navItem} ${pathname === '/dashboard' ? styles.active : ''}`}>
-              Dashboard
-            </Link>
-            <Link href="/orders" className={`${styles.navItem} ${pathname === '/orders' ? styles.active : ''}`}>
-              Order Details
-            </Link>
-          </>
+          <Link href="/dashboard" className={`${styles.navItem} ${pathname === '/dashboard' ? styles.active : ''}`}>
+            Dashboard
+          </Link>
+        )}
+        {currentUser?.role !== "PACKING" && currentUser?.role !== "STOREFRONT" && currentUser?.role !== "HR" && (
+          <Link href="/orders" className={`${styles.navItem} ${pathname === '/orders' ? styles.active : ''}`}>
+            Order Details
+          </Link>
         )}
         {isSuperAdminRole(currentUser?.role) && (
           <Link href="/private-clients" className={`${styles.navItem} ${pathname === '/private-clients' ? styles.active : ''}`}>

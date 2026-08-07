@@ -346,6 +346,10 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
       router.replace("/packing");
     } else if (currentUser?.role === "STOREFRONT") {
       router.replace("/storefront");
+    } else if (currentUser?.role === "HR") {
+      // HR only has access to the Dashboard's read-only company overview —
+      // no order entry or customer data.
+      router.replace("/dashboard");
     }
   }, [currentUser, router]);
 

@@ -329,7 +329,10 @@ export default function DashboardPage() {
   const [trendMetric, setTrendMetric] = useState<"sales" | "orders">("sales");
   const [isTrendLoading, setIsTrendLoading] = useState(false);
 
-  const isSuperAdmin = isSuperAdminRole(currentUser?.role);
+  // HR only ever sees this one page, so they get the same company-wide /
+  // per-admin view as a Super Admin here — they just can't reach anywhere
+  // else in the app.
+  const isSuperAdmin = isSuperAdminRole(currentUser?.role) || currentUser?.role === "HR";
 
   // The current month is capped at today (no point showing empty future
   // days); any other month — past or, in theory, future — shows in full.
@@ -528,7 +531,7 @@ export default function DashboardPage() {
 
   if (!currentUser || currentUser.role === "PACKING" || currentUser.role === "STOREFRONT") return null;
 
-  const adminOptions = users.filter((u) => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING" && u.id !== currentUser.id);
+  const adminOptions = users.filter((u) => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING" && u.role !== "HR" && u.id !== currentUser.id);
 
   const trendChartData = trendData.map((t) => ({ ...t, __value: trendMetric === "sales" ? t.sales : t.orderCount }));
   const trendFormatter = trendMetric === "sales" ? (n: number) => `฿${formatMoney(n)}` : (n: number) => `${n}`;

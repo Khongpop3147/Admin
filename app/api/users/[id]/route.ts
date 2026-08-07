@@ -21,7 +21,7 @@ if (globalForPrisma.prisma) {
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN", "PACKING", "STOREFRONT"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN", "PACKING", "STOREFRONT", "HR"];
 const ALLOWED_DEFAULT_PLATFORMS = ["Facebook", "Line", "TikTok", "Shopee", "Other"];
 
 function stripPassword<T extends { password?: string | null }>(user: T) {

@@ -15,6 +15,7 @@ const ROLE_LABELS: Record<string, string> = {
   PACKING: "แพ็คของ",
   STOREFRONT: "หน้าร้าน",
   CENTRAL_INVENTORY: "คลังกลาง",
+  HR: "HR",
 };
 
 const ROLE_ICONS: Record<string, string> = {
@@ -23,6 +24,7 @@ const ROLE_ICONS: Record<string, string> = {
   PACKING: "📦",
   STOREFRONT: "🏪",
   CENTRAL_INVENTORY: "🏭",
+  HR: "🗂️",
 };
 
 const DEFAULT_PLATFORM_OPTIONS = ["Facebook", "Line", "TikTok", "Shopee", "Other"];
@@ -440,6 +442,7 @@ export default function UsersPage() {
                       <option value="ADMIN">แอดมิน</option>
                       <option value="PACKING">แพ็คของ</option>
                       <option value="STOREFRONT">หน้าร้าน</option>
+                      <option value="HR">HR (ดูได้แค่ Dashboard)</option>
                     </select>
                     <select
                       className={styles.input}
@@ -758,6 +761,7 @@ export default function UsersPage() {
                 <option value="SUPER_ADMIN">Super Admin</option>
                 <option value="PACKING">แพ็คของ</option>
                 <option value="STOREFRONT">หน้าร้าน</option>
+                <option value="HR">HR (ดูได้แค่ Dashboard)</option>
               </select>
             </div>
 

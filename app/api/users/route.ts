@@ -58,7 +58,7 @@ export async function GET() {
 
 // "DEV" is intentionally excluded — that role can only be set directly in
 // the database, never through this API, no matter who's calling it.
-const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN", "PACKING", "STOREFRONT"];
+const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN", "PACKING", "STOREFRONT", "HR"];
 
 export async function POST(req: Request) {
   try {
