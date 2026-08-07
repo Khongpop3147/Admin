@@ -107,6 +107,15 @@ export default function UsersPage() {
   const [isClearing, setIsClearing] = useState(false);
   const [clearMsg, setClearMsg] = useState("");
 
+  // --- Fix order date state ---
+  const [moveDateViewDate, setMoveDateViewDate] = useState("");
+  const [moveDateOrders, setMoveDateOrders] = useState<any[]>([]);
+  const [isLoadingMoveDateOrders, setIsLoadingMoveDateOrders] = useState(false);
+  const [moveDateSelected, setMoveDateSelected] = useState<Set<string>>(new Set());
+  const [moveDateTarget, setMoveDateTarget] = useState("");
+  const [isMovingDate, setIsMovingDate] = useState(false);
+  const [moveDateMsg, setMoveDateMsg] = useState("");
+
   // --- Audit log state ---
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -390,6 +399,63 @@ export default function UsersPage() {
     }
   };
 
+  const fetchMoveDateOrders = async (date: string) => {
+    if (!date) {
+      setMoveDateOrders([]);
+      return;
+    }
+    setIsLoadingMoveDateOrders(true);
+    setMoveDateSelected(new Set());
+    try {
+      const res = await fetch(`${BASE_PATH}/api/orders?entryDate=${date}`);
+      const data = await res.json();
+      const list = (data.orders || []).slice().sort((a: any, b: any) => (a.orderNo || 0) - (b.orderNo || 0));
+      setMoveDateOrders(list);
+    } catch (e) {
+      setMoveDateOrders([]);
+    } finally {
+      setIsLoadingMoveDateOrders(false);
+    }
+  };
+
+  const handleMoveDate = async () => {
+    if (moveDateSelected.size === 0) {
+      setMoveDateMsg("กรุณาเลือกออเดอร์อย่างน้อย 1 รายการ");
+      return;
+    }
+    if (!moveDateTarget) {
+      setMoveDateMsg("กรุณาเลือกวันที่ปลายทาง");
+      return;
+    }
+    if (moveDateTarget === moveDateViewDate) {
+      setMoveDateMsg("วันที่ปลายทางต้องต่างจากวันที่ต้นทาง");
+      return;
+    }
+    if (!confirm(`ยืนยันย้ายออเดอร์ ${moveDateSelected.size} รายการ จากวันที่ ${moveDateViewDate} ไปวันที่ ${moveDateTarget}?`)) return;
+
+    setIsMovingDate(true);
+    setMoveDateMsg("");
+    try {
+      const res = await fetch(`${BASE_PATH}/api/orders/move-date`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds: Array.from(moveDateSelected), newEntryDate: moveDateTarget }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMoveDateMsg(data.error || "เกิดข้อผิดพลาด");
+        return;
+      }
+      setMoveDateMsg(`✅ ย้ายไปวันที่ ${moveDateTarget} แล้ว เป็นเลข #${data.destRange[0]}-${data.destRange[1]}`);
+      await fetchMoveDateOrders(moveDateViewDate);
+      if (isLogOpen) fetchAuditLog();
+    } catch (e) {
+      setMoveDateMsg("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setIsMovingDate(false);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -654,6 +720,65 @@ export default function UsersPage() {
           </button>
         </div>
         {exportMsg && <div style={{ fontSize: "13px", color: "#ff6b6b", marginTop: "12px" }}>{exportMsg}</div>}
+      </SectionCard>
+
+      {/* ===== Fix order date ===== */}
+      <SectionCard title="🗓️ แก้วันที่ออเดอร์" subtitle="ย้ายออเดอร์ที่แอดมินลงผิดวันไปวันที่ถูกต้อง — เลขออเดอร์ของทั้งสองวันจะถูกเรียงใหม่ให้ต่อเนื่องอัตโนมัติ">
+        <div className={styles.formGroup} style={{ maxWidth: "220px", marginBottom: "16px" }}>
+          <label className={styles.label}>ดูออเดอร์ของวันที่</label>
+          <input
+            type="date"
+            className={styles.input}
+            value={moveDateViewDate}
+            onChange={(e) => {
+              setMoveDateViewDate(e.target.value);
+              setMoveDateMsg("");
+              fetchMoveDateOrders(e.target.value);
+            }}
+          />
+        </div>
+
+        {isLoadingMoveDateOrders ? (
+          <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>กำลังโหลด...</div>
+        ) : moveDateViewDate && moveDateOrders.length === 0 ? (
+          <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ไม่มีออเดอร์ในวันที่เลือก</div>
+        ) : moveDateOrders.length > 0 ? (
+          <>
+            <div style={{ border: "1px solid var(--border-color)", borderRadius: "8px", maxHeight: "280px", overflowY: "auto", marginBottom: "16px" }}>
+              {moveDateOrders.map((o) => (
+                <label
+                  key={o.id}
+                  style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", borderBottom: "1px solid var(--border-color)", cursor: "pointer", fontSize: "13px" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={moveDateSelected.has(o.id)}
+                    onChange={(e) => {
+                      const next = new Set(moveDateSelected);
+                      if (e.target.checked) next.add(o.id); else next.delete(o.id);
+                      setMoveDateSelected(next);
+                    }}
+                  />
+                  <span style={{ fontWeight: "bold", minWidth: "32px" }}>#{o.orderNo}</span>
+                  <span style={{ flex: "1 1 160px" }}>{o.customerName}</span>
+                  <span style={{ color: "var(--text-secondary)" }}>{o.sellerName || "-"}</span>
+                </label>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "end" }}>
+              <div className={styles.formGroup} style={{ maxWidth: "220px", marginBottom: 0 }}>
+                <label className={styles.label}>ย้ายที่เลือก ({moveDateSelected.size}) ไปวันที่</label>
+                <input type="date" className={styles.input} value={moveDateTarget} onChange={(e) => setMoveDateTarget(e.target.value)} />
+              </div>
+              <button className={styles.button} style={{ marginTop: 0 }} onClick={handleMoveDate} disabled={isMovingDate || moveDateSelected.size === 0}>
+                {isMovingDate ? "กำลังย้าย..." : "ย้ายออเดอร์ที่เลือก"}
+              </button>
+            </div>
+          </>
+        ) : null}
+
+        {moveDateMsg && <div style={{ fontSize: "13px", color: moveDateMsg.startsWith("✅") ? "var(--accent-green)" : "#ff6b6b", marginTop: "12px" }}>{moveDateMsg}</div>}
       </SectionCard>
 
       {/* ===== Database tools ===== */}
