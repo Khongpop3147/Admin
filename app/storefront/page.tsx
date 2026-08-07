@@ -35,9 +35,17 @@ interface Piece {
 }
 
 export default function StorefrontPage() {
-  const { currentUser } = useUser();
+  const { currentUser, users } = useUser();
 
   const canAccess = !!currentUser && (isSuperAdminRole(currentUser.role) || currentUser.role === "STOREFRONT" || !!currentUser.canAccessStorefront);
+
+  // The counter has one shared pork stock, owned by the "Storefront" account
+  // itself — anyone else here (Super Admin browsing in, or a canAccessStorefront
+  // grant like an HR helping out) sells from that same shared stock, not an
+  // empty personal one. The literal Storefront account still just uses its own.
+  const storefrontAccount = users.find((u) => u.role === "STOREFRONT");
+  const usingSharedInventory = currentUser?.role !== "STOREFRONT";
+  const inventorySource = usingSharedInventory ? storefrontAccount : currentUser;
 
   // Every storefront sale is an anonymous walk-in — no customer name to
   // type. Storefront sales are just a stock deduction for now, not a priced
@@ -54,10 +62,10 @@ export default function StorefrontPage() {
   const [saleMsg, setSaleMsg] = useState("");
 
   useEffect(() => {
-    if (currentUser?.racks) {
-      setPieces((currentUser.racks as any[]).filter((r) => !r.isUsedUp));
+    if (inventorySource?.racks) {
+      setPieces((inventorySource.racks as any[]).filter((r) => !r.isUsedUp));
     }
-  }, [currentUser]);
+  }, [inventorySource]);
 
   const totalWeight = Number(selected.reduce((sum, p) => sum + p.remainingWeight, 0).toFixed(2));
 
@@ -68,7 +76,7 @@ export default function StorefrontPage() {
   const handleSubmitSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selected.length === 0) {
-      setSaleMsg("กรุณาเลือกชิ้นหมูที่ขายจากคลังหมูของฉัน");
+      setSaleMsg(`กรุณาเลือกชิ้นหมูที่ขายจาก${usingSharedInventory ? "คลังหมูหน้าร้าน" : "คลังหมูของฉัน"}`);
       return;
     }
 
@@ -221,7 +229,7 @@ export default function StorefrontPage() {
           <div style={{ background: "rgba(255,255,255,0.05)", padding: "16px", borderRadius: "8px", marginBottom: "16px" }}>
             <label className={styles.label} style={{ display: "block", marginBottom: "8px" }}>หมูที่ขาย</label>
             {selected.length === 0 ? (
-              <p style={{ fontSize: "13px", color: "#ff6b6b", margin: 0 }}>⚠️ ยังไม่ได้เลือกชิ้นที่ขาย — เลือกจากรายการ "คลังหมูของฉัน" ด้านขวา</p>
+              <p style={{ fontSize: "13px", color: "#ff6b6b", margin: 0 }}>⚠️ ยังไม่ได้เลือกชิ้นที่ขาย — เลือกจากรายการ "{usingSharedInventory ? "คลังหมูหน้าร้าน" : "คลังหมูของฉัน"}" ด้านขวา</p>
             ) : (
               <>
                 <p style={{ fontSize: "20px", fontWeight: "bold", color: "var(--accent-green)", margin: "4px 0 0 0" }}>
@@ -254,7 +262,7 @@ export default function StorefrontPage() {
 
         <div className={`glass-panel ${styles.sfPanel}`} style={{ flex: "1 1 280px", borderRadius: "16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-            <h2 style={{ fontSize: "1.1rem", marginBottom: 0 }}>📦 คลังหมูของฉัน</h2>
+            <h2 style={{ fontSize: "1.1rem", marginBottom: 0 }}>📦 {usingSharedInventory ? "คลังหมูหน้าร้าน" : "คลังหมูของฉัน"}</h2>
             <button
               type="button"
               onClick={() => {
