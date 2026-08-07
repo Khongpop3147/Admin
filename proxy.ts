@@ -3,11 +3,13 @@ import type { NextRequest } from "next/server";
 import { verifySession } from "./lib/session";
 
 // Paths that work without being logged in at all.
-// /icon.png is Next.js's file-convention favicon route — the matcher below
-// only excludes a literal "favicon.ico" (which doesn't exist in this app),
-// so without this the browser's favicon request got 307'd to /login on
-// every unauthenticated load, meaning the tab icon never actually rendered.
-const PUBLIC_PATHS = ["/login", "/icon.png"];
+// /icon.png and /apple-icon.png are Next.js's file-convention favicon/iOS
+// home-screen icon routes — the matcher below only excludes a literal
+// "favicon.ico" (which doesn't exist in this app), so without this the
+// browser's (or iOS's "Add to Home Screen") icon request got 307'd to
+// /login on every unauthenticated load, meaning the icon never actually
+// rendered.
+const PUBLIC_PATHS = ["/login", "/icon.png", "/apple-icon.png"];
 const PUBLIC_API_PREFIXES = ["/api/auth/"];
 // Uploaded slip images must stay reachable without login — Thunder's
 // slip-verification API fetches the URL directly from its own servers (no
