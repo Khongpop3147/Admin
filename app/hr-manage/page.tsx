@@ -12,6 +12,8 @@ interface Order extends PrintableOrder {
   customerName: string;
   orderStatus: string | null;
   trackingNumber: string | null;
+  entryDate: string;
+  crispyPorkWeight: string | null;
 }
 
 function todayStr(): string {
@@ -36,6 +38,14 @@ export default function HrManagePage() {
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+
+  // Clicking a customer's name looks up their order history across every
+  // date (not just the one selected above) — a separate fetch, not a
+  // client-side filter of `orders`, since that's scoped to selectedDate only.
+  const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
+  const [customerHistory, setCustomerHistory] = useState<Order[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   const canAccess = !!currentUser && (isSuperAdminRole(currentUser.role) || currentUser.role === "HR");
 
@@ -48,6 +58,23 @@ export default function HrManagePage() {
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, [selectedDate, canAccess]);
+
+  useEffect(() => {
+    if (!selectedCustomer) return;
+    setIsHistoryLoading(true);
+    fetch(`${BASE_PATH}/api/orders?customerName=${encodeURIComponent(selectedCustomer)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        // The API's customerName filter is a substring match (so it can
+        // power the search box above) — narrow to an exact match here so
+        // e.g. clicking "ลูกค้า 1" doesn't also pull in "ลูกค้า 10", "ลูกค้า 11"...
+        const list: Order[] = (data.orders || []).filter((o: Order) => o.customerName === selectedCustomer);
+        list.sort((a, b) => (b.entryDate || "").localeCompare(a.entryDate || ""));
+        setCustomerHistory(list);
+      })
+      .catch(() => {})
+      .finally(() => setIsHistoryLoading(false));
+  }, [selectedCustomer]);
 
   if (!currentUser) return null;
 
@@ -65,7 +92,11 @@ export default function HrManagePage() {
     if (u.nickname) nicknameByName[u.name] = u.nickname;
   });
 
-  const adminGroups = groupOrdersForPrint<Order>(orders, nicknameByName);
+  const filteredOrders = customerSearch.trim()
+    ? orders.filter((o) => o.customerName.toLowerCase().includes(customerSearch.trim().toLowerCase()))
+    : orders;
+
+  const adminGroups = groupOrdersForPrint<Order>(filteredOrders, nicknameByName);
   const totalMissingTracking = orders.filter(isMissingTracking).length;
 
   return (
@@ -85,6 +116,16 @@ export default function HrManagePage() {
             style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "white", fontSize: "14px" }}
           />
         </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>ค้นหาชื่อลูกค้า</label>
+          <input
+            type="text"
+            value={customerSearch}
+            onChange={(e) => setCustomerSearch(e.target.value)}
+            placeholder="พิมพ์ชื่อลูกค้า..."
+            style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "white", fontSize: "14px", width: "220px" }}
+          />
+        </div>
         {totalMissingTracking > 0 && (
           <div style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(255,107,107,0.15)", border: "1px solid rgba(255,107,107,0.4)", color: "#ff6b6b", fontSize: "14px", fontWeight: "bold" }}>
             ⚠️ EMS ที่ยังไม่มีเลข Tracking: {totalMissingTracking} รายการ
@@ -95,7 +136,7 @@ export default function HrManagePage() {
       {isLoading ? (
         <div style={{ textAlign: "center", padding: "60px", color: "var(--text-secondary)" }}>กำลังโหลด...</div>
       ) : adminGroups.length === 0 ? (
-        <div className={styles.emptyState}>ยังไม่มีออเดอร์ในวันที่เลือก</div>
+        <div className={styles.emptyState}>{customerSearch.trim() ? "ไม่พบลูกค้าที่ตรงกับคำค้นหา" : "ยังไม่มีออเดอร์ในวันที่เลือก"}</div>
       ) : (
         adminGroups.map((group) => {
           const missingInGroup = group.orders.filter(isMissingTracking).length;
@@ -130,7 +171,12 @@ export default function HrManagePage() {
                       }}
                     >
                       <span style={{ fontWeight: "bold", minWidth: "36px" }}>#{order.orderNo || "?"}</span>
-                      <span style={{ flex: "1 1 160px" }}>{order.customerName}</span>
+                      <button
+                        onClick={() => setSelectedCustomer(order.customerName)}
+                        style={{ flex: "1 1 160px", textAlign: "left", background: "none", border: "none", padding: 0, color: "var(--accent-blue)", cursor: "pointer", fontSize: "13px", textDecoration: "underline" }}
+                      >
+                        {order.customerName}
+                      </button>
                       <span style={{ color: "var(--text-secondary)" }}>{getShippingLabel(order)}</span>
                       <span style={{ color: "var(--text-secondary)" }}>{(order.orderStatus && STATUS_LABELS[order.orderStatus]) || "รอดำเนินการ"}</span>
                       {missing ? (
@@ -145,6 +191,42 @@ export default function HrManagePage() {
             </div>
           );
         })
+      )}
+
+      {selectedCustomer && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ background: '#1a1a1a', width: '100%', maxWidth: '500px', maxHeight: '80vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid #333' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>ประวัติออเดอร์: {selectedCustomer}</h2>
+              <button onClick={() => { setSelectedCustomer(null); setCustomerHistory([]); }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+            </div>
+
+            <div style={{ padding: '24px', overflowY: 'auto' }}>
+              {isHistoryLoading ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>กำลังโหลด...</div>
+              ) : customerHistory.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>ไม่พบประวัติออเดอร์</div>
+              ) : (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {customerHistory.map((o) => (
+                    <li key={o.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '12px 14px', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: 'bold' }}>{o.entryDate}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>#{o.orderNo || '?'}</span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        {o.crispyPorkWeight ? `${o.crispyPorkWeight} กก.` : 'ไม่ระบุน้ำหนัก'} · {getShippingLabel(o)} · {(o.orderStatus && STATUS_LABELS[o.orderStatus]) || 'รอดำเนินการ'}
+                      </div>
+                      {o.sellerName && (
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>โดย: {nicknameByName[o.sellerName] || o.sellerName}</div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
