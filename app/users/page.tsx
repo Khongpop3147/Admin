@@ -6,6 +6,7 @@ import { useUser } from "../../components/UserProvider";
 import { useSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
+import { previousDayStr } from "../../lib/packingCutoff";
 import PasswordField from "../../components/PasswordField";
 import styles from "../page.module.css";
 
@@ -399,15 +400,21 @@ export default function UsersPage() {
     }
   };
 
-  const fetchMoveDateOrders = async (date: string) => {
-    if (!date) {
+  // The date pickers in this section are all "วันที่จัดส่ง" (shipping day,
+  // same thing Packing's own date picker means) since that's how admins
+  // actually think about and refer to an order — "ส่งวันที่ 8" — not the
+  // underlying entryDate (always shipping day minus 1) they'd otherwise have
+  // to compute by hand every time. Convert at the boundary; the API itself
+  // still deals in entryDate, same as every other order endpoint.
+  const fetchMoveDateOrders = async (shippingDate: string) => {
+    if (!shippingDate) {
       setMoveDateOrders([]);
       return;
     }
     setIsLoadingMoveDateOrders(true);
     setMoveDateSelected(new Set());
     try {
-      const res = await fetch(`${BASE_PATH}/api/orders?entryDate=${date}`);
+      const res = await fetch(`${BASE_PATH}/api/orders?entryDate=${previousDayStr(shippingDate)}`);
       const data = await res.json();
       const list = (data.orders || []).slice().sort((a: any, b: any) => (a.orderNo || 0) - (b.orderNo || 0));
       setMoveDateOrders(list);
@@ -424,14 +431,14 @@ export default function UsersPage() {
       return;
     }
     if (!moveDateTarget) {
-      setMoveDateMsg("กรุณาเลือกวันที่ปลายทาง");
+      setMoveDateMsg("กรุณาเลือกวันที่จัดส่งปลายทาง");
       return;
     }
     if (moveDateTarget === moveDateViewDate) {
-      setMoveDateMsg("วันที่ปลายทางต้องต่างจากวันที่ต้นทาง");
+      setMoveDateMsg("วันที่จัดส่งปลายทางต้องต่างจากวันที่ต้นทาง");
       return;
     }
-    if (!confirm(`ยืนยันย้ายออเดอร์ ${moveDateSelected.size} รายการ จากวันที่ ${moveDateViewDate} ไปวันที่ ${moveDateTarget}?`)) return;
+    if (!confirm(`ยืนยันย้ายออเดอร์ ${moveDateSelected.size} รายการ จากส่งวันที่ ${moveDateViewDate} ไปส่งวันที่ ${moveDateTarget}?`)) return;
 
     setIsMovingDate(true);
     setMoveDateMsg("");
@@ -439,14 +446,14 @@ export default function UsersPage() {
       const res = await fetch(`${BASE_PATH}/api/orders/move-date`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds: Array.from(moveDateSelected), newEntryDate: moveDateTarget }),
+        body: JSON.stringify({ orderIds: Array.from(moveDateSelected), newEntryDate: previousDayStr(moveDateTarget) }),
       });
       const data = await res.json();
       if (!res.ok) {
         setMoveDateMsg(data.error || "เกิดข้อผิดพลาด");
         return;
       }
-      setMoveDateMsg(`✅ ย้ายไปวันที่ ${moveDateTarget} แล้ว เป็นเลข #${data.destRange[0]}-${data.destRange[1]}`);
+      setMoveDateMsg(`✅ ย้ายไปส่งวันที่ ${moveDateTarget} แล้ว เป็นเลข #${data.destRange[0]}-${data.destRange[1]}`);
       await fetchMoveDateOrders(moveDateViewDate);
       if (isLogOpen) fetchAuditLog();
     } catch (e) {
@@ -723,9 +730,9 @@ export default function UsersPage() {
       </SectionCard>
 
       {/* ===== Fix order date ===== */}
-      <SectionCard title="🗓️ แก้วันที่ออเดอร์" subtitle="ย้ายออเดอร์ที่แอดมินลงผิดวันไปวันที่ถูกต้อง — เลขออเดอร์ของทั้งสองวันจะถูกเรียงใหม่ให้ต่อเนื่องอัตโนมัติ">
+      <SectionCard title="🗓️ แก้วันที่จัดส่งออเดอร์" subtitle="ย้ายออเดอร์ที่แอดมินลงผิดวันไปวันที่จัดส่งที่ถูกต้อง — เลขออเดอร์ของทั้งสองวันจะถูกเรียงใหม่ให้ต่อเนื่องอัตโนมัติ">
         <div className={styles.formGroup} style={{ maxWidth: "220px", marginBottom: "16px" }}>
-          <label className={styles.label}>ดูออเดอร์ของวันที่</label>
+          <label className={styles.label}>ดูออเดอร์ที่จะจัดส่งวันที่</label>
           <input
             type="date"
             className={styles.input}
@@ -741,7 +748,7 @@ export default function UsersPage() {
         {isLoadingMoveDateOrders ? (
           <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>กำลังโหลด...</div>
         ) : moveDateViewDate && moveDateOrders.length === 0 ? (
-          <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ไม่มีออเดอร์ในวันที่เลือก</div>
+          <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ไม่มีออเดอร์ที่จะจัดส่งวันที่เลือก</div>
         ) : moveDateOrders.length > 0 ? (
           <>
             <div style={{ border: "1px solid var(--border-color)", borderRadius: "8px", maxHeight: "280px", overflowY: "auto", marginBottom: "16px" }}>
@@ -768,7 +775,7 @@ export default function UsersPage() {
 
             <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "end" }}>
               <div className={styles.formGroup} style={{ maxWidth: "220px", marginBottom: 0 }}>
-                <label className={styles.label}>ย้ายที่เลือก ({moveDateSelected.size}) ไปวันที่</label>
+                <label className={styles.label}>ย้ายที่เลือก ({moveDateSelected.size}) ไปจัดส่งวันที่</label>
                 <input type="date" className={styles.input} value={moveDateTarget} onChange={(e) => setMoveDateTarget(e.target.value)} />
               </div>
               <button className={styles.button} style={{ marginTop: 0 }} onClick={handleMoveDate} disabled={isMovingDate || moveDateSelected.size === 0}>
