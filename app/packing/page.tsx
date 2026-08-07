@@ -63,6 +63,7 @@ export default function PackingPage() {
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [viewingRacks, setViewingRacks] = useState<Order | null>(null);
+  const [nicknameByName, setNicknameByName] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const codFileInputRef = useRef<HTMLInputElement>(null);
   // Tracks which date the most recently *fired* fetch was for, so that if the
@@ -87,6 +88,19 @@ export default function PackingPage() {
   useEffect(() => {
     fetchOrders();
   }, [selectedDate]);
+
+  useEffect(() => {
+    fetch(`${BASE_PATH}/api/users`)
+      .then(res => res.json())
+      .then(data => {
+        const map: Record<string, string> = {};
+        (data.users || []).forEach((u: any) => {
+          if (u.nickname) map[u.name] = u.nickname;
+        });
+        setNicknameByName(map);
+      })
+      .catch(() => {});
+  }, []);
 
   // Returns the freshly-fetched list (not just setting state) so callers
   // that need to act on the result right away — like checking for orders
@@ -863,7 +877,7 @@ export default function PackingPage() {
                       </div>
                     )}
                     {order.adminNote && <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '4px' }}>หมายเหตุ: {order.adminNote}</div>}
-                    {order.sellerName && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>โดย: {order.sellerName}</div>}
+                    {order.sellerName && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>โดย: {nicknameByName[order.sellerName] || order.sellerName}</div>}
                   </td>
                   <td style={{ padding: '16px', verticalAlign: 'top' }}>
                     <select
