@@ -71,6 +71,7 @@ export default function UsersPage() {
   const [newNickname, setNewNickname] = useState("");
   const [newRole, setNewRole] = useState("ADMIN");
   const [newPassword, setNewPassword] = useState("");
+  const [newCanAccessStorefront, setNewCanAccessStorefront] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function UsersPage() {
   const [editRole, setEditRole] = useState("ADMIN");
   const [editPassword, setEditPassword] = useState("");
   const [editDefaultPlatform, setEditDefaultPlatform] = useState("");
+  const [editCanAccessStorefront, setEditCanAccessStorefront] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -141,7 +143,7 @@ export default function UsersPage() {
       const res = await fetch(`${BASE_PATH}/api/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, nickname: newNickname.trim(), role: newRole, password: newPassword }),
+        body: JSON.stringify({ name, nickname: newNickname.trim(), role: newRole, password: newPassword, canAccessStorefront: newCanAccessStorefront }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -153,6 +155,7 @@ export default function UsersPage() {
       setNewNickname("");
       setNewRole("ADMIN");
       setNewPassword("");
+      setNewCanAccessStorefront(false);
       setIsAddOpen(false);
     } catch (e) {
       setErrorMsg("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
@@ -168,6 +171,7 @@ export default function UsersPage() {
     setEditRole(u.role);
     setEditPassword("");
     setEditDefaultPlatform((u as any).defaultPlatform || "");
+    setEditCanAccessStorefront(!!(u as any).canAccessStorefront);
     setErrorMsg("");
   };
 
@@ -189,7 +193,7 @@ export default function UsersPage() {
     setIsSaving(true);
     setErrorMsg("");
     try {
-      const body: any = { name, role: editRole, nickname: editNickname.trim(), defaultPlatform: editDefaultPlatform };
+      const body: any = { name, role: editRole, nickname: editNickname.trim(), defaultPlatform: editDefaultPlatform, canAccessStorefront: editCanAccessStorefront };
       if (editPassword) body.password = editPassword;
       const res = await fetch(`${BASE_PATH}/api/users/${id}`, {
         method: "PATCH",
@@ -444,6 +448,16 @@ export default function UsersPage() {
                       <option value="STOREFRONT">หน้าร้าน</option>
                       <option value="HR">HR (ดูได้แค่ Dashboard)</option>
                     </select>
+                    {editRole !== "STOREFRONT" && editRole !== "SUPER_ADMIN" && (
+                      <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-secondary)" }}>
+                        <input
+                          type="checkbox"
+                          checked={editCanAccessStorefront}
+                          onChange={(e) => setEditCanAccessStorefront(e.target.checked)}
+                        />
+                        ให้สิทธิ์เข้า Store Front เพิ่มเติม
+                      </label>
+                    )}
                     <select
                       className={styles.input}
                       style={{ padding: "8px 12px", fontSize: "14px" }}
@@ -495,6 +509,7 @@ export default function UsersPage() {
                     </div>
                     <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                       {ROLE_LABELS[u.role] || u.role}
+                      {(u as any).canAccessStorefront && u.role !== "STOREFRONT" && u.role !== "SUPER_ADMIN" && " · + สิทธิ์ Store Front"}
                       {(u as any).nickname && ` · ชื่อเล่น: ${(u as any).nickname}`}
                       {(u as any).defaultPlatform && ` · ช่องทางเริ่มต้น: ${PLATFORM_LABELS[(u as any).defaultPlatform] || (u as any).defaultPlatform}`}
                       {u.role !== "SUPER_ADMIN" && u.racks && u.racks.length > 0 && ` · ชิ้นหมู ${u.racks.length} รายการ`}
@@ -764,6 +779,19 @@ export default function UsersPage() {
                 <option value="HR">HR (ดูได้แค่ Dashboard)</option>
               </select>
             </div>
+
+            {newRole !== "STOREFRONT" && newRole !== "SUPER_ADMIN" && (
+              <div className={styles.formGroup} style={{ marginBottom: "16px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px" }}>
+                  <input
+                    type="checkbox"
+                    checked={newCanAccessStorefront}
+                    onChange={(e) => setNewCanAccessStorefront(e.target.checked)}
+                  />
+                  ให้สิทธิ์เข้า Store Front เพิ่มเติม
+                </label>
+              </div>
+            )}
 
             <div className={styles.formGroup} style={{ marginBottom: "8px" }}>
               <label className={styles.label}>รหัสผ่าน</label>

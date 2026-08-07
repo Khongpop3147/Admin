@@ -9,6 +9,7 @@ export interface User {
   nickname?: string | null;
   defaultPlatform?: string | null;
   role: string;
+  canAccessStorefront?: boolean;
   hasPassword?: boolean;
   racks: { id: string; rackNo: string; userId: string; remainingWeight?: number; initialWeight?: number; isUsedUp?: boolean }[];
 }

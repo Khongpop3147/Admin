@@ -87,6 +87,9 @@ export async function PATCH(
       }
       updateData.defaultPlatform = defaultPlatform || null;
     }
+    if (body.canAccessStorefront !== undefined) {
+      updateData.canAccessStorefront = !!body.canAccessStorefront;
+    }
 
     const user = await prisma.$transaction(async (tx) => {
       if (mustKeepOneSuperAdmin) {

@@ -69,7 +69,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             Packing & Export
           </Link>
         )}
-        {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "STOREFRONT") && (
+        {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "STOREFRONT" || currentUser?.canAccessStorefront) && (
           <Link href="/storefront" className={`${styles.navItem} ${pathname === '/storefront' ? styles.active : ''}`}>
             Store Front
           </Link>

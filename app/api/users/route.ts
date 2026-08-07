@@ -72,6 +72,7 @@ export async function POST(req: Request) {
     const nickname = (body.nickname || "").trim();
     const role = body.role;
     const password = body.password || "";
+    const canAccessStorefront = !!body.canAccessStorefront;
 
     if (!name) {
       return NextResponse.json({ error: "กรุณาใส่ชื่อ" }, { status: 400 });
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
-      data: { name, nickname: nickname || null, role, password: hashedPassword },
+      data: { name, nickname: nickname || null, role, password: hashedPassword, canAccessStorefront },
       include: { racks: true },
     });
     return NextResponse.json({ user: stripPassword(user) }, { status: 201 });

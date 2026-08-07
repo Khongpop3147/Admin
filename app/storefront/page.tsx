@@ -37,7 +37,7 @@ interface Piece {
 export default function StorefrontPage() {
   const { currentUser } = useUser();
 
-  const canAccess = !!currentUser && (isSuperAdminRole(currentUser.role) || currentUser.role === "STOREFRONT");
+  const canAccess = !!currentUser && (isSuperAdminRole(currentUser.role) || currentUser.role === "STOREFRONT" || !!currentUser.canAccessStorefront);
 
   // Every storefront sale is an anonymous walk-in — no customer name to
   // type. Storefront sales are just a stock deduction for now, not a priced

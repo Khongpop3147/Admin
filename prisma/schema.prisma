@@ -63,7 +63,11 @@ model User {
   name           String
   nickname       String? // shown instead of `name` on the per-admin pork slip sections
   defaultPlatform String? // pre-selects this sales channel in Order Entry for this admin; null = no default
-  role           String  @default("ADMIN") // "SUPER_ADMIN" | "ADMIN" | "PACKING" | "CENTRAL_INVENTORY" | "DEV"
+  role           String  @default("ADMIN") // "SUPER_ADMIN" | "ADMIN" | "PACKING" | "CENTRAL_INVENTORY" | "DEV" | "HR" | "STOREFRONT"
+  // Grants Storefront page access on top of whatever `role` already allows —
+  // for a non-STOREFRONT account (e.g. HR) that also needs to run the
+  // counter, without giving up their primary role's own access.
+  canAccessStorefront Boolean @default(false)
   password       String? // bcrypt hash; null = login not set up yet for this account
   sessionVersion Int     @default(0) // bumped to force-invalidate every existing login for this user
   racks          RackAssignment[]
