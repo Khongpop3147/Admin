@@ -1210,8 +1210,24 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 )}
               </div>
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
-                <label className={styles.label}>วันที่ลงออเดอร์ <span style={{ fontWeight: 'normal', color: 'var(--text-secondary)' }}>(ไม่เลือก = วันนี้)</span></label>
-                <input type="date" name="entryDate" value={formData.entryDate} onChange={handleChange} className={styles.input} />
+                <label className={styles.label}>วันที่จะจัดส่ง <span style={{ fontWeight: 'normal', color: 'var(--text-secondary)' }}>(ไม่เลือก = พรุ่งนี้)</span></label>
+                <input
+                  type="date"
+                  name="shippingDate"
+                  // formData.entryDate is still what actually gets submitted
+                  // (and is what every downstream consumer — Packing, this
+                  // same order's own record — expects) — this field just
+                  // displays/edits it one day ahead, in the shipping-date
+                  // terms an admin actually thinks in. Blank stays blank
+                  // (server defaults it to today, i.e. ships tomorrow,
+                  // unchanged from before).
+                  value={formData.entryDate ? nextDayStr(formData.entryDate) : ""}
+                  onChange={(e) => {
+                    const shippingDate = e.target.value;
+                    setFormData((prev) => ({ ...prev, entryDate: shippingDate ? previousDayStr(shippingDate) : "" }));
+                  }}
+                  className={styles.input}
+                />
               </div>
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
                 <label className={styles.label}>ช่องทางการขาย <span style={{ color: '#ff6b6b' }}>*</span></label>
