@@ -11,6 +11,7 @@ import { calculateCodAmount, AppSettings, computeVatAmount, computeActualReceive
 import { calculateShippingCost } from "../lib/shipping";
 import { computeRackAllocation } from "../lib/rackAllocate";
 import { sumUsableSlipAmounts, isTotalAmountMatched, hasAnySlipIssue } from "../lib/slipVerification";
+import { nextDayStr, previousDayStr } from "../lib/packingCutoff";
 
 interface Order {
   id: string;
@@ -319,10 +320,17 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   }, []);
 
   const [filterAdminName, setFilterAdminName] = useState("");
+  // Order Details' date filter means "วันที่จะจัดส่ง" (shipping date, same
+  // framing Packing uses) — an order entered today ships tomorrow, so this
+  // defaults to tomorrow too, matching what Packing's own picker defaults
+  // to for that same freshly-entered batch. Private Clients (mode="walkin")
+  // keeps the old createdAt-based "today" filter — those are same-day
+  // pickup/counter sales with no real next-day shipping concept.
   const [filterDate, setFilterDate] = useState(() => {
     const today = new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" });
     const d = new Date(today);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return mode === "normal" ? nextDayStr(todayStr) : todayStr;
   });
   const [customerSearchInput, setCustomerSearchInput] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -435,7 +443,13 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     try {
       const params = new URLSearchParams();
       if (adminName) params.set("sellerName", adminName);
-      if (date) params.set("date", date);
+      if (date) {
+        // filterDate is a shipping date in mode="normal" — convert to the
+        // entryDate it actually maps to (shipping day minus 1), same
+        // conversion Packing's own date picker does.
+        if (mode === "normal") params.set("entryDate", previousDayStr(date));
+        else params.set("date", date);
+      }
       if (customerNameSearch) params.set("customerName", customerNameSearch);
       // Each page's own order list only shows what it's responsible for —
       // Private Clients sees only its own PrivateClient-platform walk-in
@@ -1798,6 +1812,11 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 กำลังค้นหาทุกวันที่ (ไม่จำกัดตามวันที่เลือกไว้)
               </div>
             )}
+            {!customerSearch && mode === "normal" && (
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                📅 กรองตามวันที่จะจัดส่ง (ลงออเดอร์วันนี้ = จัดส่งพรุ่งนี้)
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
               {currentUser && isSuperAdminRole(currentUser.role) && (
@@ -1823,6 +1842,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 value={filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
                 disabled={!!customerSearch}
+                title={mode === "normal" ? "วันที่จะจัดส่ง" : undefined}
               />
               {filterDate && (
                 <button
