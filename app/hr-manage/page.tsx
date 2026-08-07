@@ -5,6 +5,7 @@ import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { groupOrdersForPrint, getShippingLabel, PrintableOrder } from "../../lib/porkSlip";
+import { nextDayStr, previousDayStr } from "../../lib/packingCutoff";
 import styles from "../page.module.css";
 
 interface Order extends PrintableOrder {
@@ -35,7 +36,11 @@ const isMissingTracking = (o: Order) => o.shippingMethod === "EMS" && !o.trackin
 
 export default function HrManagePage() {
   const { currentUser, users } = useUser();
-  const [selectedDate, setSelectedDate] = useState(todayStr);
+  // selectedDate means "วันที่จะจัดส่ง" (shipping date), same framing
+  // Packing/Order Details use — defaults to tomorrow (today's entries ship
+  // tomorrow), and gets converted to the underlying entryDate at the fetch
+  // boundary via previousDayStr, same conversion those pages do.
+  const [selectedDate, setSelectedDate] = useState(() => nextDayStr(todayStr()));
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
@@ -57,7 +62,7 @@ export default function HrManagePage() {
   useEffect(() => {
     if (!canAccess) return;
     setIsLoading(true);
-    fetch(`${BASE_PATH}/api/orders?entryDate=${selectedDate}`)
+    fetch(`${BASE_PATH}/api/orders?entryDate=${previousDayStr(selectedDate)}`)
       .then((res) => res.json())
       .then((data) => setOrders(data.orders || []))
       .catch(() => {})
@@ -133,7 +138,7 @@ export default function HrManagePage() {
 
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "center", marginBottom: "24px" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>วันที่</label>
+          <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>วันที่จะจัดส่ง</label>
           <input
             type="date"
             value={selectedDate}
@@ -208,7 +213,7 @@ export default function HrManagePage() {
                         {order.customerName}
                       </button>
                       {isSearchMode && (
-                        <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>📅 {order.entryDate}</span>
+                        <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>📅 ส่ง {nextDayStr(order.entryDate)}</span>
                       )}
                       <span style={{ color: "var(--text-secondary)" }}>{getShippingLabel(order)}</span>
                       <span style={{ color: "var(--text-secondary)" }}>{(order.orderStatus && STATUS_LABELS[order.orderStatus]) || "รอดำเนินการ"}</span>
@@ -244,7 +249,7 @@ export default function HrManagePage() {
                   {customerHistory.map((o) => (
                     <li key={o.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '12px 14px', borderRadius: '8px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <span style={{ fontWeight: 'bold' }}>{o.entryDate}</span>
+                        <span style={{ fontWeight: 'bold' }}>ส่ง {nextDayStr(o.entryDate)}</span>
                         <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>#{o.orderNo || '?'}</span>
                       </div>
                       <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
