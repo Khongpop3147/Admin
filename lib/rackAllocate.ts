@@ -22,7 +22,7 @@ export interface RackAllocation {
 // its direction's window is never chosen, even as a last resort. If nothing
 // available lands within tolerance either way, the function returns nothing
 // at all (an empty allocation) rather than force a mismatched amount.
-export const MAX_OVER_DEVIATION_KG = 0.2;
+export const MAX_OVER_DEVIATION_KG = 0.1;
 export const MIN_UNDER_DEVIATION_KG = 0.17;
 export const MAX_UNDER_DEVIATION_KG = 0.4;
 

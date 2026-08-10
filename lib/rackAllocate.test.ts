@@ -14,25 +14,25 @@ describe("computeRackAllocation", () => {
 
   it("prefers a slight over-shoot over an under-shoot within the under-band", () => {
     // No combo hits 3.0 exactly: 2.8 (under by 0.2, inside the [0.17,0.4]
-    // under-band) vs 3.2 (over by 0.2, inside the over-cap) — the over-shoot
-    // must still win regardless of which is numerically closer.
-    const racks = [rack("a", 2.8), rack("b", 3.2)];
+    // under-band) vs 3.1 (over by 0.1, right at the over-cap) — the
+    // over-shoot must still win, tier priority beats numeric distance.
+    const racks = [rack("a", 2.8), rack("b", 3.1)];
     const result = computeRackAllocation(racks, 3);
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
   it("prefers an over-target candidate even when an under-target one is numerically closer", () => {
     // Target 1.4: a=1.35 (under by only 0.05 — inside the "too close" dead
-    // zone below the 0.17kg floor, so disqualified anyway) vs b=1.55 (over
-    // by 0.15). Over wins either way.
-    const racks = [rack("a", 1.35), rack("b", 1.55)];
+    // zone below the 0.17kg floor, so disqualified anyway) vs b=1.45 (over
+    // by 0.05). Over wins either way.
+    const racks = [rack("a", 1.35), rack("b", 1.45)];
     const result = computeRackAllocation(racks, 1.4);
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
-  it("caps the acceptable overage at MAX_OVER_DEVIATION_KG (0.2kg) — beyond that, falls back to an in-band under-shoot", () => {
-    // 3.5 (over by 0.5) is well past the 0.2kg over-cap. 2.9 (under by 0.1)
-    // is closer numerically but falls inside the new "too close" dead zone
+  it("caps the acceptable overage at MAX_OVER_DEVIATION_KG (0.1kg) — beyond that, falls back to an in-band under-shoot", () => {
+    // 3.5 (over by 0.5) is well past the 0.1kg over-cap. 2.9 (under by 0.1)
+    // is closer numerically but falls inside the "too close" dead zone
     // (below the 0.17kg floor), so it's disqualified too — nothing qualifies.
     const racks = [rack("a", 2.9), rack("b", 3.5)];
     const result = computeRackAllocation(racks, 3);
@@ -85,16 +85,16 @@ describe("computeRackAllocation", () => {
   });
 
   it("still rounds up right at the over-cap boundary, even though the under-shoot is also now in-band", () => {
-    // a=2.7 (under by 0.3) now falls inside the widened [0.17,0.4] band, but
-    // b=3.2 (over by 0.2, within the over-cap) still wins on tier priority.
-    const racks = [rack("a", 2.7), rack("b", 3.2)];
+    // a=2.7 (under by 0.3) falls inside the [0.17,0.4] under-band, but
+    // b=3.1 (over by 0.1, right at the over-cap) still wins on tier priority.
+    const racks = [rack("a", 2.7), rack("b", 3.1)];
     const result = computeRackAllocation(racks, 3);
     expect(result.map((r) => r.assignmentId)).toEqual(["b"]);
   });
 
   it("returns nothing rather than break the tolerance, when the only pieces available are all too far over", () => {
     // The user's own example: asked for 1.4kg, only a 1.7kg piece exists
-    // (0.3kg over — past the 0.2kg tolerance) and there's no smaller piece
+    // (0.3kg over — past the 0.1kg tolerance) and there's no smaller piece
     // to fall back to. Better to give nothing (flagged as fully short
     // upstream) than force a badly-mismatched piece on the order.
     const racks = [rack("a", 1.7)];
@@ -108,14 +108,14 @@ describe("computeRackAllocation", () => {
     expect(result).toEqual([]);
   });
 
-  it("matches the user's own example: 3kg target lands on ~3.2, not under", () => {
-    const racks = [rack("a", 1.5), rack("b", 1.7), rack("c", 0.8)];
-    // 1.5+1.7=3.2 (over by 0.2, within tolerance) is the only combo inside
-    // ±0.2kg of the target — every other combo is either too far under or
-    // too far over.
+  it("matches the user's own example: 3kg target lands on ~3.05, not under", () => {
+    const racks = [rack("a", 1.5), rack("b", 1.55), rack("c", 0.8)];
+    // 1.5+1.55=3.05 (over by 0.05, within the 0.1kg over-cap) is the only
+    // combo within tolerance of the target — every other combo is either
+    // too far under (past the 0.4kg under-cap) or too far over.
     const result = computeRackAllocation(racks, 3);
     const total = result.reduce((sum, r) => sum + r.weight, 0);
-    expect(total).toBeCloseTo(3.2, 5);
+    expect(total).toBeCloseTo(3.05, 5);
     expect(total).toBeGreaterThanOrEqual(3);
   });
 
