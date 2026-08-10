@@ -32,9 +32,9 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const { 
-      customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price, 
-      shippingMethod, additionalShippingCost, codAmount, actualReceivedAmount, 
-      transferSlip, paymentStatus, customerAddress, orderStatus, rackDetails, sellerName, trackingNumber,
+      customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price,
+      shippingMethod, additionalShippingCost, codAmount, actualReceivedAmount,
+      transferSlip, paymentStatus, customerAddress, customerPhone, customerZip, orderStatus, rackDetails, sellerName, trackingNumber,
       bypassDuplicateCheck, adminNote, entryDate, extraSlipUrls
     } = body;
 
@@ -137,6 +137,8 @@ export async function POST(req: Request) {
           transferSlip,
           paymentStatus,
           customerAddress,
+          customerPhone,
+          customerZip,
           orderStatus,
           rackDetails, // Store the JSON string directly
           sellerName,

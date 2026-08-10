@@ -31,16 +31,27 @@ model Order {
   transferSlip          String?
   paymentStatus         String?
   customerAddress       String?
+  // Entered as their own fields (not parsed out of customerAddress) so an
+  // admin can fill them independently — validated client-side as exactly 10
+  // digits / exactly 5 digits (lib/addressParse.ts's isValidPhone/isValidZip)
+  // but not enforced server-side, since order entry deliberately allows
+  // saving with an incomplete number rather than blocking the sale. Postone
+  // export prefers these when valid, falling back to parseAddressBlock's
+  // regex extraction from customerAddress for orders entered before this
+  // existed.
+  customerPhone         String?
+  customerZip           String?
   orderStatus           String?
   rackDetails           String?
   sellerName            String?
   trackingNumber        String?
   adminNote             String?
-  // Piece count per physical box, in order — e.g. "[12,8]" for an order
-  // shipped in 2 boxes, 12 pieces in the first and 8 in the second. Only
-  // meaningful once an order's weight exceeds the ~29kg single-box cap (see
-  // computeBoxCount in lib/shipping.ts); null/empty otherwise. Packing fills
-  // this in box-by-box as it's actually packed, not auto-split.
+  // Piece count per physical box (box 2, 3, ...), each an array of indices
+  // into rackDetails identifying which specific pork pieces go in that box.
+  // Box 1 is never stored — it's always whatever pieces aren't claimed by
+  // another box, computed fresh (see getBox1Indices in app/packing/page.tsx).
+  // Only meaningful once an order's weight exceeds the per-box cap (see
+  // computeBoxCount in lib/shipping.ts); null/empty otherwise.
   boxPieceCounts        String?
   // The Bangkok-local "YYYY-MM-DD" this order counts as for order numbering
   // and the Packing view — normally today, but an admin can back/forward-date

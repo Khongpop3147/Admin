@@ -12,6 +12,7 @@ import { calculateShippingCost, computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from ".
 import { computeRackAllocation } from "../lib/rackAllocate";
 import { sumUsableSlipAmounts, isTotalAmountMatched, hasAnySlipIssue } from "../lib/slipVerification";
 import { nextDayStr, previousDayStr } from "../lib/packingCutoff";
+import { isValidPhone, isValidZip } from "../lib/addressParse";
 import { formatMoney, getOrderStatusInfo, DetailSection, DetailRow } from "./OrderDetailShared";
 
 interface Order {
@@ -232,6 +233,8 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     transferSlip: "",
     paymentStatus: mode === "walkin" ? "Paid" : "",
     customerAddress: "",
+    customerPhone: "",
+    customerZip: "",
     orderStatus: "",
     sellerName: "",
     trackingNumber: "",
@@ -851,6 +854,8 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
         body: JSON.stringify({
           customerName: editOrderData.customerName,
           customerAddress: editOrderData.customerAddress,
+          customerPhone: editOrderData.customerPhone,
+          customerZip: editOrderData.customerZip,
           price: editOrderData.price,
           crispyPorkWeight: editOrderData.crispyPorkWeight,
           crispyPorkPiece: editOrderData.crispyPorkPiece,
@@ -1235,7 +1240,21 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
               </div>
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
                 <label className={styles.label}>ที่อยู่จัดส่ง</label>
-                <textarea name="customerAddress" value={formData.customerAddress} onChange={handleChange} className={styles.textarea} placeholder="กรอกที่อยู่ลูกค้าสำหรับจัดส่ง"></textarea>
+                <textarea name="customerAddress" value={formData.customerAddress} onChange={handleChange} className={styles.textarea} placeholder="กรอกที่อยู่ลูกค้าสำหรับจัดส่ง (ไม่ต้องใส่เบอร์โทร/รหัสไปรษณีย์ มีช่องแยกด้านล่าง)"></textarea>
+              </div>
+              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
+                <label className={styles.label}>เบอร์โทร</label>
+                <input type="text" name="customerPhone" value={formData.customerPhone} onChange={handleChange} className={styles.input} placeholder="เช่น 0812345678" maxLength={10} />
+                {!isValidPhone(formData.customerPhone) && (
+                  <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ เบอร์โทรต้องมี 10 หลัก</div>
+                )}
+              </div>
+              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
+                <label className={styles.label}>รหัสไปรษณีย์</label>
+                <input type="text" name="customerZip" value={formData.customerZip} onChange={handleChange} className={styles.input} placeholder="เช่น 10110" maxLength={5} />
+                {!isValidZip(formData.customerZip) && (
+                  <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ รหัสไปรษณีย์ต้องมี 5 หลัก</div>
+                )}
               </div>
             </div>
 
@@ -2013,6 +2032,22 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                       <label className={styles.label}>ที่อยู่</label>
                       <textarea className={styles.textarea} value={editOrderData.customerAddress || ''} onChange={e => setEditOrderData({ ...editOrderData, customerAddress: e.target.value })}></textarea>
                     </div>
+                    <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                        <label className={styles.label}>เบอร์โทร</label>
+                        <input type="text" className={styles.input} value={editOrderData.customerPhone || ''} onChange={e => setEditOrderData({ ...editOrderData, customerPhone: e.target.value })} maxLength={10} placeholder="เช่น 0812345678" />
+                        {!isValidPhone(editOrderData.customerPhone) && (
+                          <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ เบอร์โทรต้องมี 10 หลัก</div>
+                        )}
+                      </div>
+                      <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                        <label className={styles.label}>รหัสไปรษณีย์</label>
+                        <input type="text" className={styles.input} value={editOrderData.customerZip || ''} onChange={e => setEditOrderData({ ...editOrderData, customerZip: e.target.value })} maxLength={5} placeholder="เช่น 10110" />
+                        {!isValidZip(editOrderData.customerZip) && (
+                          <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ รหัสไปรษณีย์ต้องมี 5 หลัก</div>
+                        )}
+                      </div>
+                    </div>
                     <div className={styles.mobileStackGrid} style={{ display: editOrderData.platform === "Storefront" && editOrderData.customerName === "วางขายหน้าร้าน" ? 'none' : 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                         <label className={styles.label}>ราคาสินค้า (บาท)</label>
@@ -2177,6 +2212,8 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                       <DetailRow label="ช่องทาง" value={selectedOrder.platform || '-'} />
                       <DetailRow label="ชื่อบัญชี" value={selectedOrder.socialMediaName || '-'} />
                       <DetailRow label="ที่อยู่" value={selectedOrder.customerAddress || '-'} />
+                      <DetailRow label="เบอร์โทร" value={selectedOrder.customerPhone || '-'} />
+                      <DetailRow label="รหัสไปรษณีย์" value={selectedOrder.customerZip || '-'} />
                     </DetailSection>
 
                     <DetailSection title="สินค้า">

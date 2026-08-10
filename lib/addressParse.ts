@@ -53,3 +53,38 @@ export function parseAddressBlock(rawAddress: string | null | undefined): Parsed
 
   return { phone, zip, address };
 }
+
+// Thai mobile numbers are exactly 10 digits, postal codes exactly 5 —
+// shared by the Order Entry/Details form's inline validation warning and
+// the Postone export's fallback logic below, so both agree on what counts
+// as "a real phone/zip" the same way.
+export function isValidPhone(phone: string | null | undefined): boolean {
+  return /^\d{10}$/.test(phone || "");
+}
+
+export function isValidZip(zip: string | null | undefined): boolean {
+  return /^\d{5}$/.test(zip || "");
+}
+
+// Prefers an order's own explicit customerPhone/customerZip fields (entered
+// separately by an admin, see Order Entry/Details) over the regex-based
+// extraction above — falls back to parsing customerAddress only for orders
+// that predate those fields, or that still have one/both left blank. Used
+// by the Postone and NIM shipping-label exports so both stay consistent.
+export function getShippingContact(order: {
+  customerAddress?: string | null;
+  customerPhone?: string | null;
+  customerZip?: string | null;
+}): ParsedAddress {
+  const parsed = parseAddressBlock(order.customerAddress);
+  const phone = isValidPhone(order.customerPhone) ? order.customerPhone! : parsed.phone;
+  const zip = isValidZip(order.customerZip) ? order.customerZip! : parsed.zip;
+  // Always use the regex-stripped address, even when the explicit fields are
+  // valid — an order entered before this feature existed can have its phone/
+  // zip filled in separately later without anyone going back to clean the
+  // old combined text out of customerAddress, so it could still be sitting
+  // in there. Stripping is a no-op for an address that was never mixed with
+  // a phone/zip in the first place, so this is safe either way.
+  const address = parsed.address;
+  return { phone, zip, address };
+}

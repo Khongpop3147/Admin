@@ -11,7 +11,7 @@ import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { nextDayStr, previousDayStr } from "../../lib/packingCutoff";
-import { parseAddressBlock } from "../../lib/addressParse";
+import { getShippingContact } from "../../lib/addressParse";
 import { formatDateDDMMYY_BE } from "../../lib/thaiDate";
 import { computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from "../../lib/shipping";
 import styles from "../page.module.css";
@@ -27,6 +27,8 @@ interface Order {
   orderNo: number;
   customerName: string;
   customerAddress: string;
+  customerPhone: string | null;
+  customerZip: string | null;
   shippingMethod: string;
   isCod: boolean;
   codAmount: number;
@@ -326,7 +328,7 @@ export default function PackingPage() {
     let rowIndex = 0; // across the whole file, not per-order — "first row" (sender info) means the very first row only
 
     orderList.forEach((order) => {
-      const { phone, zip, address } = parseAddressBlock(order.customerAddress);
+      const { phone, zip, address } = getShippingContact(order);
 
       // adminNote (internal packing/admin remarks) is deliberately left out of
       // this column — it's for staff, not something that should go out on the
@@ -545,7 +547,7 @@ export default function PackingPage() {
       };
 
       const writeLabel = (startRow: number, colOffset: number, order: (typeof nimOrders)[number]) => {
-        const { phone, address } = parseAddressBlock(order.customerAddress);
+        const { phone, address } = getShippingContact(order);
         const boxCount = computeBoxCount(Number(order.crispyPorkWeight) || 0);
         const courierLabel = (Number(order.codAmount) > 0 ? "NIM COD" : "NIM") + (boxCount > 1 ? ` 📦x${boxCount}` : "");
         const c = (n: number) => colOffset + n; // 0-based offset into this label's own 7 columns (A-G / H-N)
@@ -690,6 +692,9 @@ export default function PackingPage() {
         // customer name didn't match closely enough to the courier's sheet.
         const missingEms = (freshOrders || []).filter((o) => o.shippingMethod === "EMS" && !o.trackingNumber);
         let message = `อัปเดต Tracking สำเร็จ ${result.successCount} รายการ`;
+        if (result.ambiguousCount > 0) {
+          message += `\n\n⚠️ ชื่อกำกวม ตรงกับหลายออเดอร์พร้อมกัน — ต้องกรอกเลข Tracking เองให้ (${result.ambiguousCount} รายการ):\n${(result.ambiguousNames || []).map((n: string) => `- ${n}`).join("\n")}`;
+        }
         if (missingEms.length > 0) {
           message += `\n\n⚠️ ออเดอร์ EMS ที่ยังไม่ได้เลข Tracking (${missingEms.length} รายการ):\n${missingEms.map((o) => `- ${o.orderNo || "?"} ${o.customerName}`).join("\n")}`;
         }
