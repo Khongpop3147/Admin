@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { getSessionUser } from "../../../../lib/session";
 import { isSuperAdminRole } from "../../../../lib/roles";
+import { findNameMatch } from "../../../../lib/nameMatch";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 
@@ -62,14 +63,13 @@ export async function PATCH(request: Request) {
     let successCount = 0;
     let notFoundCount = 0;
     const notFoundNames: string[] = [];
-
-    // Helper to normalize names for matching
-    const normalizeName = (name: string) => {
-      return name
-        .replace(/^คุณ\s*/, '') // Remove "คุณ " prefix
-        .replace(/\s+/g, '') // Remove all whitespace
-        .toLowerCase();
-    };
+    // A short/generic name (e.g. "มล") can textually match several
+    // unrelated orders ("กมล", "มลคร", ...) — findNameMatch refuses to
+    // guess in that case rather than silently attaching the tracking
+    // number to whichever one happened to come first, so these need a
+    // human to resolve by typing the tracking number in manually.
+    let ambiguousCount = 0;
+    const ambiguousNames: string[] = [];
 
     // An order over ~27kg ships in multiple boxes, each with its own
     // tracking number — the courier's export sheet then has more than one
@@ -82,34 +82,33 @@ export async function PATCH(request: Request) {
     const matchedByOrderId = new Map<string, { customerName: string; trackingNumbers: string[] }>();
 
     for (const update of updates) {
-      const excelName = normalizeName(update.customerName);
-
       // A second (or third) row for a customer already matched earlier in
       // this same batch — append to that order instead of re-searching
       // activeOrders (which no longer has it) and wrongly reporting it as
       // not found.
-      let alreadyMatchedId: string | undefined;
-      for (const [orderId, entry] of matchedByOrderId) {
-        const orderName = normalizeName(entry.customerName);
-        if (orderName === excelName || orderName.includes(excelName) || excelName.includes(orderName)) {
-          alreadyMatchedId = orderId;
-          break;
-        }
-      }
+      const alreadyMatchedCandidates = Array.from(matchedByOrderId.entries()).map(([orderId, entry]) => ({
+        id: orderId,
+        name: entry.customerName,
+      }));
+      const alreadyMatchedResult = findNameMatch(update.customerName, alreadyMatchedCandidates);
 
-      if (alreadyMatchedId) {
-        matchedByOrderId.get(alreadyMatchedId)!.trackingNumbers.push(update.trackingNumber);
+      if (alreadyMatchedResult.status === "matched") {
+        matchedByOrderId.get(alreadyMatchedResult.id)!.trackingNumbers.push(update.trackingNumber);
         successCount++;
+        continue;
+      }
+      if (alreadyMatchedResult.status === "ambiguous") {
+        ambiguousCount++;
+        ambiguousNames.push(update.customerName);
         continue;
       }
 
       // Find matching order in active orders
-      const matchedOrder = activeOrders.find(order => {
-        const orderName = normalizeName(order.customerName);
-        return orderName === excelName || orderName.includes(excelName) || excelName.includes(orderName);
-      });
+      const activeCandidates = activeOrders.map((o) => ({ id: o.id, name: o.customerName }));
+      const result = findNameMatch(update.customerName, activeCandidates);
 
-      if (matchedOrder) {
+      if (result.status === "matched") {
+        const matchedOrder = activeOrders.find((o) => o.id === result.id)!;
         const existing = (matchedOrder.trackingNumber || '').trim();
         const seed = existing ? existing.split(',').map((s) => s.trim()).filter(Boolean) : [];
         matchedByOrderId.set(matchedOrder.id, {
@@ -124,6 +123,9 @@ export async function PATCH(request: Request) {
         }
 
         successCount++;
+      } else if (result.status === "ambiguous") {
+        ambiguousCount++;
+        ambiguousNames.push(update.customerName);
       } else {
         notFoundCount++;
         notFoundNames.push(update.customerName);
@@ -148,7 +150,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({
       successCount,
       notFoundCount,
-      notFoundNames
+      notFoundNames,
+      ambiguousCount,
+      ambiguousNames
     });
 
   } catch (error) {
