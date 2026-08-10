@@ -15,9 +15,9 @@ export interface RecentOrderForDuplicateCheck {
 }
 
 // Only flag as a risky duplicate when BOTH the name AND the pork weight
-// match an existing order placed within the last 3 days (the caller pre-
+// match an existing order placed within the last 7 days (the caller pre-
 // filters recentOrders to that window) — same name + weight showing up
-// again on day 4+ is treated as a legitimate repeat order, not an
+// again on day 8+ is treated as a legitimate repeat order, not an
 // accidental double-submit.
 export function findDuplicateOrder<T extends RecentOrderForDuplicateCheck>(
   newCustomerName: string,

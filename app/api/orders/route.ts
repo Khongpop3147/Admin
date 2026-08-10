@@ -47,10 +47,10 @@ export async function POST(req: Request) {
 
     if (!bypassDuplicateCheck) {
       // Only flag as a risky duplicate when BOTH the name AND the pork weight
-      // match an existing order placed within the last 3 days — same name +
-      // weight showing up again on day 4+ is treated as a legitimate repeat
+      // match an existing order placed within the last 7 days — same name +
+      // weight showing up again on day 8+ is treated as a legitimate repeat
       // order, not an accidental double-submit.
-      const duplicateWindowCutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      const duplicateWindowCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const recentOrders = await prisma.order.findMany({
         where: {
           createdAt: {
