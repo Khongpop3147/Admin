@@ -1089,13 +1089,50 @@ export default function PackingPage() {
                     </select>
                   </td>
                   <td style={{ padding: '16px', verticalAlign: 'top' }}>
-                    <input
-                      type="text"
-                      defaultValue={order.trackingNumber || ""}
-                      onBlur={(e) => updateTracking(order.id, e.target.value)}
-                      placeholder="เลขพัสดุ..."
-                      style={{ padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', color: 'white', width: '120px' }}
-                    />
+                    {(() => {
+                      const trackingBoxCount = computeBoxCount(Number(order.crispyPorkWeight) || 0);
+                      if (trackingBoxCount <= 1) {
+                        return (
+                          <input
+                            type="text"
+                            defaultValue={order.trackingNumber || ""}
+                            onBlur={(e) => updateTracking(order.id, e.target.value)}
+                            placeholder="เลขพัสดุ..."
+                            style={{ padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', color: 'white', width: '120px' }}
+                          />
+                        );
+                      }
+                      // One field per box (from computeBoxCount), instead of
+                      // one field the admin has to comma-separate by hand —
+                      // matches the box-split warning shown in this row's
+                      // product-details column. Deliberately no key tied to
+                      // order.trackingNumber here — that would remount this
+                      // group (wiping whatever's mid-typed in the other
+                      // fields) every time any single field's own blur saves
+                      // and changes that same value.
+                      const existingParts = (order.trackingNumber || '').split(',').map(s => s.trim()).filter(Boolean);
+                      const saveTrackingGroup = (e: React.FocusEvent<HTMLInputElement>) => {
+                        const container = e.currentTarget.parentElement;
+                        if (!container) return;
+                        const inputs = Array.from(container.querySelectorAll('input'));
+                        const joined = inputs.map((el) => (el as HTMLInputElement).value.trim()).filter(Boolean).join(',');
+                        updateTracking(order.id, joined);
+                      };
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {Array.from({ length: trackingBoxCount }).map((_, i) => (
+                            <input
+                              key={i}
+                              type="text"
+                              defaultValue={existingParts[i] || ''}
+                              onBlur={saveTrackingGroup}
+                              placeholder={`เลขพัสดุ กล่อง ${i + 1}`}
+                              style={{ padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', color: 'white', width: '120px' }}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td style={{ padding: '16px', verticalAlign: 'top' }}>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
