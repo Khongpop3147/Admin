@@ -12,6 +12,7 @@ import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { nextDayStr, previousDayStr } from "../../lib/packingCutoff";
 import { getShippingContact } from "../../lib/addressParse";
+import { findShipDateInRows } from "../../lib/trackingImport";
 import { formatDateDDMMYY_BE } from "../../lib/thaiDate";
 import { computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from "../../lib/shipping";
 import styles from "../page.module.css";
@@ -650,9 +651,25 @@ export default function PackingPage() {
     setIsLoading(true);
     try {
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
+      const workbook = XLSX.read(data, { cellDates: true });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(firstSheet);
+
+      // The file's own "กำหนดส่ง" (scheduled ship date) column is the only
+      // way to know which day a courier export is actually for — the match
+      // itself is scoped to whatever date is selected below, so importing
+      // the wrong day's file while viewing a different day could otherwise
+      // silently hand a same-named customer someone else's tracking number.
+      // Skips the check (rather than blocking) when the column's missing or
+      // unparseable, since that's not something this can actually verify.
+      const fileShipDate = findShipDateInRows(rows as Record<string, unknown>[]);
+      if (fileShipDate && fileShipDate !== selectedDate) {
+        alert(
+          `ไฟล์นี้เป็นของวันที่ส่ง ${fileShipDate} แต่หน้าจอนี้กำลังดูวันที่ ${selectedDate} — ` +
+          `เปลี่ยนวันที่ในหน้าจอให้ตรงกับไฟล์ก่อน แล้วค่อยนำเข้าใหม่อีกครั้ง (กันเลข Tracking เข้าผิดวัน)`
+        );
+        return;
+      }
 
       const updates: { customerName: string; trackingNumber: string }[] = [];
 
