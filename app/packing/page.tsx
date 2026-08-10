@@ -1010,14 +1010,25 @@ export default function PackingPage() {
               </tr>
             </thead>
             <tbody>
-              {sortOrders(orders.filter(o => matchesStatusFilter(o) && matchesShippingFilter(o))).map(order => (
+              {sortOrders(orders.filter(o => matchesStatusFilter(o) && matchesShippingFilter(o))).map(order => {
+                // Packing was mixing up NIM Express and EMS rows in the
+                // combined view — outline (not border, so it never fights
+                // with the box-split cell's own red border above) every
+                // cell in a NIM row so it reads as one blue-framed row at a
+                // glance, regardless of sort/filter order.
+                const isNim = order.shippingMethod === "NIM Express";
+                const nimCellStyle: React.CSSProperties = isNim
+                  ? { outline: '2px solid #4facfe', outlineOffset: '-2px' }
+                  : {};
+                return (
                 <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)', background: order.isReturned ? 'rgba(255,107,107,0.06)' : undefined, opacity: order.isReturned ? 0.75 : 1 }}>
-                  <td style={{ padding: '16px', verticalAlign: 'top' }}>
+                  <td style={{ padding: '16px', verticalAlign: 'top', ...nimCellStyle }}>
                     <div style={{ fontWeight: 'bold' }}>{order.orderNo || "?"} - {order.customerName}</div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '250px' }}>{order.customerAddress}</div>
                   </td>
                   <td style={{
                     padding: '16px', verticalAlign: 'top',
+                    ...nimCellStyle,
                     ...(computeBoxCount(Number(order.crispyPorkWeight) || 0) > 1
                       ? { background: 'rgba(255,0,0,0.18)', border: '2px solid #ff3b3b', borderRadius: '6px' }
                       : {}),
@@ -1091,7 +1102,7 @@ export default function PackingPage() {
                     {order.adminNote && <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '4px' }}>หมายเหตุ: {order.adminNote}</div>}
                     {order.sellerName && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>โดย: {nicknameByName[order.sellerName] || order.sellerName}</div>}
                   </td>
-                  <td style={{ padding: '16px', verticalAlign: 'top' }}>
+                  <td style={{ padding: '16px', verticalAlign: 'top', ...nimCellStyle }}>
                     <select
                       value={order.orderStatus || "Pending"}
                       onChange={(e) => updateOrderStatus(order.id, e.target.value)}
@@ -1115,7 +1126,7 @@ export default function PackingPage() {
                       <option value="Shipped" style={{ color: '#000' }}>จัดส่งแล้ว</option>
                     </select>
                   </td>
-                  <td style={{ padding: '16px', verticalAlign: 'top' }}>
+                  <td style={{ padding: '16px', verticalAlign: 'top', ...nimCellStyle }}>
                     {(() => {
                       const trackingBoxCount = computeBoxCount(Number(order.crispyPorkWeight) || 0);
                       if (trackingBoxCount <= 1) {
@@ -1161,7 +1172,7 @@ export default function PackingPage() {
                       );
                     })()}
                   </td>
-                  <td style={{ padding: '16px', verticalAlign: 'top' }}>
+                  <td style={{ padding: '16px', verticalAlign: 'top', ...nimCellStyle }}>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       <button
                         onClick={() => setViewingRacks(order)}
@@ -1204,7 +1215,8 @@ export default function PackingPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {orders.filter(o => matchesStatusFilter(o) && matchesShippingFilter(o)).length === 0 && (
                 <tr>
                   <td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
