@@ -9,7 +9,7 @@ import { isSuperAdminRole } from "../lib/roles";
 import { BASE_PATH } from "../lib/basePath";
 import { calculateCodAmount, AppSettings, computeVatAmount, computeActualReceivedAmount } from "../lib/money";
 import { calculateShippingCost, computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from "../lib/shipping";
-import { computeRackAllocation } from "../lib/rackAllocate";
+import { computeRackAllocation, MAX_OVER_DEVIATION_KG, MIN_UNDER_DEVIATION_KG, MAX_UNDER_DEVIATION_KG } from "../lib/rackAllocate";
 import { sumUsableSlipAmounts, isTotalAmountMatched, hasAnySlipIssue } from "../lib/slipVerification";
 import { nextDayStr, previousDayStr } from "../lib/packingCutoff";
 import { isValidPhone, isValidZip } from "../lib/addressParse";
@@ -945,11 +945,39 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   // once to add the piece, click again to take it back out.
   const handleTogglePieceInOrder = (piece: any) => {
     const exists = rackDetails.some(r => r.assignmentId === piece.id);
-    const updated = exists
-      ? rackDetails.filter(r => r.assignmentId !== piece.id)
-      : [...rackDetails, { assignmentId: piece.id, rackNo: piece.rackNo, weight: piece.remainingWeight }];
+
+    if (exists) {
+      // Removing always falls back to the normal "derive weight/price from
+      // whatever's actually selected" behavior, same as any other manual edit.
+      const updated = rackDetails.filter(r => r.assignmentId !== piece.id);
+      setRackDetails(updated);
+      syncFormDataToRackTotal(updated);
+      return;
+    }
+
+    const updated = [...rackDetails, { assignmentId: piece.id, rackNo: piece.rackNo, weight: piece.remainingWeight }];
     setRackDetails(updated);
-    syncFormDataToRackTotal(updated);
+
+    // Picking a piece off the "หาชิ้นหมูใกล้เคียงน้ำหนัก" search results is
+    // choosing "close enough" on purpose, not a request to bill the customer
+    // for whatever that specific piece happens to weigh — pin the order's
+    // weight/price to the number that was searched for instead of the real
+    // piece total. targetWeight then no longer equals totalAllocated, which
+    // is exactly what makes the derivedAdminNote/derivedWarning block below
+    // (already comparing those two) surface "เกินมา/ขาดอีก X กก." for
+    // Packing on its own — nothing extra to do here for that part.
+    const searchTarget = parseFloat(weightSearch);
+    const hasActiveSearch = weightSearch !== "" && !isNaN(searchTarget) && searchTarget > 0;
+
+    if (hasActiveSearch) {
+      setFormData(prev => ({
+        ...prev,
+        crispyPorkPiece: updated.length.toString(),
+        ...computeWeightDerivedFields(prev.promotion, prev.isCod, prev.shippingMethod, String(searchTarget), settings),
+      }));
+    } else {
+      syncFormDataToRackTotal(updated);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent, bypassDuplicateCheck = false) => {
@@ -1098,7 +1126,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     }
   } else if (targetWeight > 0 && rackDetails.length === 0) {
     derivedAdminNote = `ไม่มีชิ้นหมูที่ใกล้เคียงพอ ขาดอีก ${targetWeight} กก.`;
-    derivedWarning = `⚠️ ไม่มีชิ้นหมูในคลังที่น้ำหนักใกล้เคียงกับที่ต้องการมากพอ (ต้องเกินไม่เกิน 0.2 กก. หรือขาดอยู่ในช่วง 0.17-0.4 กก.) — กรุณาเลือกชิ้นหมูเองด้านล่าง หรือปรับน้ำหนักที่ต้องการ`;
+    derivedWarning = `⚠️ ไม่มีชิ้นหมูในคลังที่น้ำหนักใกล้เคียงกับที่ต้องการมากพอ (ต้องเกินไม่เกิน ${MAX_OVER_DEVIATION_KG} กก. หรือขาดอยู่ในช่วง ${MIN_UNDER_DEVIATION_KG}-${MAX_UNDER_DEVIATION_KG} กก.) — กรุณาเลือกชิ้นหมูเองด้านล่าง หรือปรับน้ำหนักที่ต้องการ`;
   }
 
   if (currentUser?.role === "PACKING" || currentUser?.role === "STOREFRONT") return null;
