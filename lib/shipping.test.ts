@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateShippingCost } from "./shipping";
+import { calculateShippingCost, computeBoxCount } from "./shipping";
 
 describe("calculateShippingCost", () => {
   it("returns the minimum tier cost at or below 2kg", () => {
@@ -36,5 +36,25 @@ describe("calculateShippingCost", () => {
     expect(calculateShippingCost("ส่งในพื้นที่", 1)).toBe(200);
     expect(calculateShippingCost("ส่งในพื้นที่", 20)).toBe(200);
     expect(calculateShippingCost("ส่งในพื้นที่", 0)).toBe(200);
+  });
+});
+
+describe("computeBoxCount", () => {
+  it("is 1 box for anything at or under the 27kg cap", () => {
+    expect(computeBoxCount(1)).toBe(1);
+    expect(computeBoxCount(27)).toBe(1);
+  });
+
+  it("rounds up to the next box the moment weight exceeds a multiple of 27kg", () => {
+    expect(computeBoxCount(27.01)).toBe(2);
+    expect(computeBoxCount(54)).toBe(2);
+    expect(computeBoxCount(54.01)).toBe(3);
+    expect(computeBoxCount(60)).toBe(3);
+  });
+
+  it("treats zero/negative/missing weight as 1 box, not 0", () => {
+    expect(computeBoxCount(0)).toBe(1);
+    expect(computeBoxCount(-5)).toBe(1);
+    expect(computeBoxCount(NaN)).toBe(1);
   });
 });

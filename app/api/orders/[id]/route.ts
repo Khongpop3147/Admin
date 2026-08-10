@@ -34,6 +34,7 @@ const FIELD_LABELS: Record<string, string> = {
   isReturned: "ตีกลับ",
   codConfirmed: "ยืนยันรับ COD",
   actualReceivedAmount: "ยอดรับจริง",
+  boxPieceCounts: "จำนวนชิ้นต่อกล่อง",
 };
 
 export async function PATCH(
@@ -79,6 +80,7 @@ export async function PATCH(
     if (body.paymentStatus !== undefined) updateData.paymentStatus = body.paymentStatus;
     if (body.transferSlip !== undefined) updateData.transferSlip = body.transferSlip;
     if (body.isReturned !== undefined) updateData.isReturned = !!body.isReturned;
+    if (body.boxPieceCounts !== undefined) updateData.boxPieceCounts = body.boxPieceCounts;
 
     // actualReceivedAmount is never sent by any client — it's derived once
     // at order creation as round((price + shipping) * 1.07 + codAmount) and

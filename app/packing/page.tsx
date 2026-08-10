@@ -13,6 +13,7 @@ import { BASE_PATH } from "../../lib/basePath";
 import { nextDayStr, previousDayStr } from "../../lib/packingCutoff";
 import { parseAddressBlock } from "../../lib/addressParse";
 import { formatDateDDMMYY_BE } from "../../lib/thaiDate";
+import { computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from "../../lib/shipping";
 import styles from "../page.module.css";
 
 function formatMoney(value: unknown): string {
@@ -42,6 +43,7 @@ interface Order {
   additionalShippingCost: number;
   actualReceivedAmount: number;
   rackDetails: string;
+  boxPieceCounts: string | null;
 }
 
 export default function PackingPage() {
@@ -170,6 +172,99 @@ export default function PackingPage() {
     }
   };
 
+  interface RackPiece { assignmentId: string; rackNo: string; weight: number }
+
+  // The individual pork pieces this order actually pulled from the rack —
+  // same source data the "ถาดที่ใช้" modal reads. Each entry's index here is
+  // what a box's index list (below) refers to.
+  const getOrderPieces = (order: Order): RackPiece[] => {
+    if (!order.rackDetails) return [];
+    try {
+      const parsed = JSON.parse(order.rackDetails);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  // boxPieceCounts only ever stores the EXTRA boxes (box 2, 3, ...), each as
+  // a list of indices into getOrderPieces(order) — exactly which physical
+  // pork pieces the packer ticked into that box. Box 1 is never entered by
+  // hand, it's always just "whatever's left" (every piece not claimed by
+  // another box), computed fresh by getBox1Indices below rather than stored.
+  const getExtraBoxes = (order: Order): number[][] => {
+    if (!order.boxPieceCounts) return [];
+    try {
+      const parsed = JSON.parse(order.boxPieceCounts);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((arr: unknown): arr is number[] => Array.isArray(arr) && arr.every((n) => typeof n === 'number'));
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const getBox1Indices = (order: Order): number[] => {
+    const total = getOrderPieces(order).length;
+    const used = new Set(getExtraBoxes(order).flat());
+    const result: number[] = [];
+    for (let i = 0; i < total; i++) if (!used.has(i)) result.push(i);
+    return result;
+  };
+
+  // Exact sum of the real per-piece weights for the given rack-piece indices
+  // — since the packer ticks the actual pieces going in each box, this is a
+  // real total, not a proportional estimate.
+  const getBoxWeight = (order: Order, indices: number[]): number => {
+    const pieces = getOrderPieces(order);
+    const sum = indices.reduce((s, i) => s + (Number(pieces[i]?.weight) || 0), 0);
+    return Math.round(sum * 100) / 100;
+  };
+
+  const saveBoxes = async (order: Order, extraBoxes: number[][]) => {
+    const value = extraBoxes.length > 0 ? JSON.stringify(extraBoxes) : null;
+    setOrders(orders.map(o => o.id === order.id ? { ...o, boxPieceCounts: value } : o));
+    try {
+      const res = await fetch(`${BASE_PATH}/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ boxPieceCounts: value, editedBy: currentUser?.name })
+      });
+      if (!res.ok) {
+        // Revert on failure so the screen doesn't lie about what's saved.
+        setOrders(orders.map(o => o.id === order.id ? { ...o, boxPieceCounts: order.boxPieceCounts } : o));
+      }
+    } catch (e) {
+      console.error(e);
+      setOrders(orders.map(o => o.id === order.id ? { ...o, boxPieceCounts: order.boxPieceCounts } : o));
+    }
+  };
+
+  // Which order (by id) currently has the "tick pork pieces for a new box"
+  // popup open — only one at a time. pickedIndices holds the in-progress
+  // selection inside that popup before it's confirmed.
+  const [boxPickerForId, setBoxPickerForId] = useState<string | null>(null);
+  const [pickedIndices, setPickedIndices] = useState<number[]>([]);
+
+  const openBoxPicker = (order: Order) => {
+    setBoxPickerForId(order.id);
+    setPickedIndices([]);
+  };
+
+  const togglePickedIndex = (i: number) => {
+    setPickedIndices((prev) => prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i]);
+  };
+
+  const confirmBoxPicker = (order: Order) => {
+    if (pickedIndices.length === 0) return;
+    saveBoxes(order, [...getExtraBoxes(order), pickedIndices]);
+    setBoxPickerForId(null);
+    setPickedIndices([]);
+  };
+
+  const removeBox = (order: Order, index: number) => {
+    saveBoxes(order, getExtraBoxes(order).filter((_, i) => i !== index));
+  };
+
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingOrder) return;
@@ -222,38 +317,83 @@ export default function PackingPage() {
   // always relative to whatever list is actually going into one file.
   const buildPostoneRows = (orderList: Order[]) => {
     const SENDER_NAME = "หมูกรอบอีซี่ l หมูกรอบ EASY";
-    const SENDER_PHONE = "0971622755";
+    const SENDER_PHONE = "0999818018";
     const SENDER_ADDRESS = "153, ตำบล สมอแข อำเภอเมืองพิษณุโลก พิษณุโลก";
     const SENDER_ZIP = "65000";
     const COD_ACCOUNT = "0644177042";
 
-    return orderList.map((order, index) => {
+    const rows: (string | number)[][] = [];
+    let rowIndex = 0; // across the whole file, not per-order — "first row" (sender info) means the very first row only
+
+    orderList.forEach((order) => {
       const { phone, zip, address } = parseAddressBlock(order.customerAddress);
 
       // adminNote (internal packing/admin remarks) is deliberately left out of
       // this column — it's for staff, not something that should go out on the
       // shipping label.
-      const note = `หมูกรอบ ชิ้น: ${order.crispyPorkPiece || '-'} น้ำหนัก: ${order.crispyPorkWeight || '-'}kg`;
-
-      const isFirstRow = index === 0;
+      const boxCount = computeBoxCount(Number(order.crispyPorkWeight) || 0);
+      const extraBoxes = getExtraBoxes(order);
+      const box1Count = getBox1Indices(order).length;
+      // Each box ships as its own physical parcel and gets its own tracking
+      // number from the courier — so it needs its own row here too, not one
+      // combined row with a note. Only splits once every extra box has
+      // actually been recorded and box 1's remainder is still positive
+      // (checked before export ever calls this); otherwise falls back to a
+      // single row, same as before.
+      const useBoxSplit = boxCount > 1 && extraBoxes.length === boxCount - 1 && box1Count > 0;
+      const boxesForRows: (number | null)[] = useBoxSplit ? [box1Count, ...extraBoxes.map((b) => b.length)] : [null];
 
       // The COD column has to be the FULL amount the courier collects in
       // cash from the customer (product + shipping + COD fee) — not just
       // the small COD service fee alone, or Postone would only ever get
-      // back a fraction of what's actually owed.
+      // back a fraction of what's actually owed. Only the first box's row
+      // carries it — the courier collects once per delivery, not per box.
       const isCodOrder = Number(order.codAmount) > 0;
       const codTotal = isCodOrder ? (Number(order.actualReceivedAmount) || Number(order.codAmount)) : "";
 
-      return [
-        isFirstRow ? SENDER_NAME : "",
-        isFirstRow ? SENDER_PHONE : "",
-        isFirstRow ? SENDER_ADDRESS : "",
-        isFirstRow ? SENDER_ZIP : "",
-        "E", "", COD_ACCOUNT,
-        codTotal, note,
-        order.customerName, phone, address, zip
-      ];
+      boxesForRows.forEach((pieces, boxIdx) => {
+        const isFirstRow = rowIndex === 0;
+        const note = useBoxSplit
+          ? `หมูกรอบ ชิ้น: ${pieces} (กล่อง ${boxIdx + 1}/${boxesForRows.length})`
+          : `หมูกรอบ ชิ้น: ${order.crispyPorkPiece || '-'} น้ำหนัก: ${order.crispyPorkWeight || '-'}kg`
+            + (boxCount > 1 ? ` (แบ่ง ${boxCount} กล่อง)` : "");
+
+        rows.push([
+          isFirstRow ? SENDER_NAME : "",
+          isFirstRow ? SENDER_PHONE : "",
+          isFirstRow ? SENDER_ADDRESS : "",
+          isFirstRow ? SENDER_ZIP : "",
+          "E", "", isCodOrder ? COD_ACCOUNT : "",
+          boxIdx === 0 ? codTotal : "",
+          note,
+          order.customerName, phone, address, zip
+        ]);
+        rowIndex++;
+      });
     });
+
+    return rows;
+  };
+
+  // Blocks export until every order needing more than 1 box has a complete
+  // box breakdown recorded via "+ เพิ่มกล่อง" — otherwise Postone/NIM can't
+  // know how many pieces go on each box's own row/label, and a box's
+  // tracking number would have nowhere correct to land on import.
+  const confirmBoxBreakdownComplete = (orderList: Order[]): boolean => {
+    const incomplete = orderList.filter((order) => {
+      const boxCount = computeBoxCount(Number(order.crispyPorkWeight) || 0);
+      if (boxCount <= 1) return false;
+      const extraBoxes = getExtraBoxes(order);
+      // Box 1 isn't entered by hand — it's the remainder — but that
+      // remainder still has to be a real, positive count of pieces.
+      return extraBoxes.length !== boxCount - 1 || getBox1Indices(order).length <= 0;
+    });
+    if (incomplete.length === 0) return true;
+    alert(
+      `ยังแบ่งกล่องไม่ครบ ${incomplete.length} ออเดอร์ — กด "+ เพิ่มกล่อง" ในตารางให้ครบก่อน export:\n\n` +
+      incomplete.map((o) => `- ${o.customerName} (${o.crispyPorkWeight} กก. ต้องการ ${computeBoxCount(Number(o.crispyPorkWeight) || 0)} กล่อง)`).join('\n')
+    );
+    return false;
   };
 
   // NIM Express ships via its own separate export (see handleExportNim),
@@ -262,11 +402,6 @@ export default function PackingPage() {
   const getPostoneEligibleOrders = () =>
     sortOrders(orders.filter(o => matchesStatusFilter(o) && o.shippingMethod !== "NIM Express" && o.shippingMethod !== "ส่งในพื้นที่"));
 
-  const generateExportData = () => {
-    const exportOrders = getPostoneEligibleOrders();
-    if (exportOrders.length === 0) return null;
-    return buildPostoneRows(exportOrders);
-  };
 
   // Fills the real Postone template with a given set of data rows — shared
   // by the single combined export and each per-admin file in the ZIP, so
@@ -297,21 +432,24 @@ export default function PackingPage() {
   };
 
   const handlePreview = () => {
-    const data = generateExportData();
-    if (!data) {
+    const exportOrders = getPostoneEligibleOrders();
+    if (exportOrders.length === 0) {
       alert("ไม่มีออเดอร์ให้แสดงตัวอย่าง");
       return;
     }
-    setPreviewData(data);
+    if (!confirmBoxBreakdownComplete(exportOrders)) return;
+    setPreviewData(buildPostoneRows(exportOrders));
     setShowPreview(true);
   };
 
   const handleExportPostone = async () => {
-    const dataRows = generateExportData();
-    if (!dataRows) {
+    const exportOrders = getPostoneEligibleOrders();
+    if (exportOrders.length === 0) {
       alert("ไม่มีออเดอร์ให้ส่งออก");
       return;
     }
+    if (!confirmBoxBreakdownComplete(exportOrders)) return;
+    const dataRows = buildPostoneRows(exportOrders);
 
     try {
       const buffer = await fillPostoneTemplate(dataRows);
@@ -340,6 +478,7 @@ export default function PackingPage() {
       alert("ไม่มีออเดอร์ให้ส่งออก");
       return;
     }
+    if (!confirmBoxBreakdownComplete(exportOrders)) return;
 
     const bySeller = new Map<string, Order[]>();
     for (const order of exportOrders) {
@@ -407,7 +546,8 @@ export default function PackingPage() {
 
       const writeLabel = (startRow: number, colOffset: number, order: (typeof nimOrders)[number]) => {
         const { phone, address } = parseAddressBlock(order.customerAddress);
-        const courierLabel = Number(order.codAmount) > 0 ? "NIM COD" : "NIM";
+        const boxCount = computeBoxCount(Number(order.crispyPorkWeight) || 0);
+        const courierLabel = (Number(order.codAmount) > 0 ? "NIM COD" : "NIM") + (boxCount > 1 ? ` 📦x${boxCount}` : "");
         const c = (n: number) => colOffset + n; // 0-based offset into this label's own 7 columns (A-G / H-N)
 
         const setCell = (r: number, col: number, value: string | number, align?: Partial<ExcelJS.Alignment>) => {
@@ -849,8 +989,53 @@ export default function PackingPage() {
                     <div style={{ fontWeight: 'bold' }}>{order.orderNo || "?"} - {order.customerName}</div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '250px' }}>{order.customerAddress}</div>
                   </td>
-                  <td style={{ padding: '16px', verticalAlign: 'top' }}>
+                  <td style={{
+                    padding: '16px', verticalAlign: 'top',
+                    ...(computeBoxCount(Number(order.crispyPorkWeight) || 0) > 1
+                      ? { background: 'rgba(255,0,0,0.18)', border: '2px solid #ff3b3b', borderRadius: '6px' }
+                      : {}),
+                  }}>
                     <div>{order.crispyPorkPiece ? `${order.crispyPorkPiece} ชิ้น` : '-'} / {order.crispyPorkWeight ? `${order.crispyPorkWeight} กก.` : '-'}</div>
+                    {computeBoxCount(Number(order.crispyPorkWeight) || 0) > 1 && (
+                      <div style={{ marginTop: '4px' }}>
+                        <div style={{ fontSize: '12px', color: '#ff3b3b', fontWeight: 'bold' }}>
+                          📦 เกิน {MAX_WEIGHT_PER_BOX_KG} กก. — แบ่ง {computeBoxCount(Number(order.crispyPorkWeight) || 0)} กล่อง
+                        </div>
+
+                        {getExtraBoxes(order).length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '6px' }}>
+                            {(() => {
+                              const box1Indices = getBox1Indices(order);
+                              return (
+                                <div style={{ fontSize: '12px', color: box1Indices.length > 0 ? '#fff' : '#ff8080' }}>
+                                  📦 กล่อง 1: {box1Indices.length} ชิ้น (≈{getBoxWeight(order, box1Indices)} กก.) <span style={{ color: 'var(--text-secondary)' }}>(เหลืออัตโนมัติ)</span>
+                                  {box1Indices.length <= 0 && ' ⚠️ ติดลบ/หมด — ลบกล่องอื่นออกบ้าง'}
+                                </div>
+                              );
+                            })()}
+                            {getExtraBoxes(order).map((indices, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#fff' }}>
+                                <span>📦 กล่อง {i + 2}: {indices.length} ชิ้น (≈{getBoxWeight(order, indices)} กก.)</span>
+                                <button
+                                  onClick={() => removeBox(order, i)}
+                                  title="ลบกล่องนี้"
+                                  style={{ background: 'none', border: 'none', color: '#ff8080', cursor: 'pointer', fontSize: '11px', padding: 0 }}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => openBoxPicker(order)}
+                          style={{ marginTop: '6px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', cursor: 'pointer', padding: '4px 10px', borderRadius: '4px', fontSize: '12px' }}
+                        >
+                          + เพิ่มกล่อง
+                        </button>
+                      </div>
+                    )}
                     <div style={{ fontSize: '12px', marginTop: '6px', color: '#a0a0a0', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
                       หมู: ฿{formatMoney(order.price)} | ส่ง: ฿{formatMoney(order.additionalShippingCost)} | COD: {order.codAmount > 0 ? `฿${formatMoney(order.codAmount)}` : '-'} | <strong style={{ color: 'white' }}>รวม: ฿{
                         (() => {
@@ -1107,6 +1292,66 @@ export default function PackingPage() {
           </div>
         </div>
       )}
+
+      {/* Box Piece Picker Modal — tick which pork pieces from box 1's
+          remaining pool go into a new box */}
+      {boxPickerForId && (() => {
+        const pickerOrder = orders.find(o => o.id === boxPickerForId);
+        if (!pickerOrder) return null;
+        const pieces = getOrderPieces(pickerOrder);
+        const availableIndices = getBox1Indices(pickerOrder);
+        const pickedWeight = getBoxWeight(pickerOrder, pickedIndices);
+        return (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+            <div style={{ background: '#1a1a1a', width: '100%', maxWidth: '420px', maxHeight: '80vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid #333' }}>
+              <div style={{ padding: '16px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>เลือกชิ้นหมูใส่กล่องใหม่</h2>
+                <button onClick={() => { setBoxPickerForId(null); setPickedIndices([]); }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+              </div>
+
+              <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1 }}>
+                {availableIndices.length === 0 ? (
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                    {pieces.length === 0
+                      ? 'ไม่มีข้อมูลชิ้นหมูของออเดอร์นี้ (อาจเป็นออเดอร์เก่าที่ไม่ได้ผูกกับถาด)'
+                      : 'ไม่มีชิ้นเหลือในกล่อง 1 ให้ย้ายแล้ว'}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {availableIndices.map((i) => {
+                      const piece = pieces[i];
+                      const checked = pickedIndices.includes(i);
+                      return (
+                        <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: checked ? 'rgba(63,185,80,0.15)' : 'rgba(255,255,255,0.05)', border: checked ? '1px solid var(--accent-green)' : '1px solid transparent', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={checked} onChange={() => togglePickedIndex(i)} />
+                          <span style={{ fontWeight: 'bold' }}>{piece?.rackNo || 'ไม่ทราบถาด'}</span>
+                          <span style={{ marginLeft: 'auto', color: 'var(--accent-green)' }}>{Number(piece?.weight || 0).toFixed(2)} กก.</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding: '16px 24px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  เลือกแล้ว {pickedIndices.length} ชิ้น ({pickedWeight} กก.)
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => { setBoxPickerForId(null); setPickedIndices([]); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #333', background: 'transparent', color: 'white', cursor: 'pointer' }}>ยกเลิก</button>
+                  <button
+                    onClick={() => confirmBoxPicker(pickerOrder)}
+                    disabled={pickedIndices.length === 0}
+                    style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: pickedIndices.length === 0 ? '#444' : 'var(--accent-green)', color: pickedIndices.length === 0 ? '#888' : 'black', fontWeight: 'bold', cursor: pickedIndices.length === 0 ? 'not-allowed' : 'pointer' }}
+                  >
+                    ยืนยัน
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

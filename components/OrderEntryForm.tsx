@@ -8,7 +8,7 @@ import { useSettings } from "./SettingsProvider";
 import { isSuperAdminRole } from "../lib/roles";
 import { BASE_PATH } from "../lib/basePath";
 import { calculateCodAmount, AppSettings, computeVatAmount, computeActualReceivedAmount } from "../lib/money";
-import { calculateShippingCost } from "../lib/shipping";
+import { calculateShippingCost, computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from "../lib/shipping";
 import { computeRackAllocation } from "../lib/rackAllocate";
 import { sumUsableSlipAmounts, isTotalAmountMatched, hasAnySlipIssue } from "../lib/slipVerification";
 import { nextDayStr, previousDayStr } from "../lib/packingCutoff";
@@ -1300,6 +1300,11 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 {derivedWarning && (
                   <div style={{ color: '#ffac33', fontSize: '12px', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span style={{ fontSize: '14px' }}>⚠️</span> {derivedWarning}
+                  </div>
+                )}
+                {computeBoxCount(parseFloat(formData.crispyPorkWeight) || 0) > 1 && (
+                  <div style={{ color: '#ffac33', fontSize: '12px', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '14px' }}>📦</span> น้ำหนักเกิน {MAX_WEIGHT_PER_BOX_KG} กก. ต่อกล่อง — ต้องแบ่งเป็น {computeBoxCount(parseFloat(formData.crispyPorkWeight) || 0)} กล่อง (แต่ละกล่องได้เลข track แยกกัน)
                   </div>
                 )}
               </div>

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { BASE_PATH } from "../../../lib/basePath";
 import { groupOrdersForPrint, getShippingLabel, getRackDisplay, extractShortageNote, AdminGroup as AdminGroupType, PrintableOrder } from "../../../lib/porkSlip";
 import { previousDayStr } from "../../../lib/packingCutoff";
+import { computeBoxCount } from "../../../lib/shipping";
 
 interface Order extends PrintableOrder {
   id: string;
@@ -130,6 +131,11 @@ function PrintSlipContent() {
                     </td>
                     <td style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' }}>
                       {rackData.totalWeight > 0 ? `${rackData.totalWeight.toFixed(2)} kg` : "-"}
+                      {computeBoxCount(rackData.totalWeight) > 1 && (
+                        <div style={{ fontSize: '13px', color: '#a00', fontWeight: 'bold', marginTop: '4px' }}>
+                          📦 แบ่ง {computeBoxCount(rackData.totalWeight)} กล่อง
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

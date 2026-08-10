@@ -21,6 +21,17 @@ export const SHIPPING_RATES_NIM = [
 // pricing at all — it's always this flat rate regardless of weight.
 export const LOCAL_DELIVERY_FLAT_RATE = 200;
 
+// A courier caps a single parcel at ~27kg — an order heavier than that has
+// to physically ship in more than one box, each staying under the cap.
+// This only decides HOW MANY boxes are needed; which rack pieces actually
+// go in which box is still the packer's own call on the floor.
+export const MAX_WEIGHT_PER_BOX_KG = 27;
+
+export function computeBoxCount(weight: number): number {
+  if (!weight || weight <= 0) return 1;
+  return Math.ceil(weight / MAX_WEIGHT_PER_BOX_KG);
+}
+
 export function calculateShippingCost(method: string, weight: number): number {
   if (method === "ส่งในพื้นที่") return LOCAL_DELIVERY_FLAT_RATE;
   const rates = method === "EMS" ? SHIPPING_RATES_EMS : SHIPPING_RATES_NIM;

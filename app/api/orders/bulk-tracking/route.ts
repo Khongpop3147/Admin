@@ -71,11 +71,38 @@ export async function PATCH(request: Request) {
         .toLowerCase();
     };
 
-    const updatePromises = [];
+    // An order over ~27kg ships in multiple boxes, each with its own
+    // tracking number — the courier's export sheet then has more than one
+    // row for the same customer. Collect every matched row per order (keyed
+    // by order id) instead of updating on the first match and losing every
+    // row after it, so all of that order's tracking numbers survive,
+    // comma-joined. Also seeds from whatever trackingNumber the order
+    // already had (e.g. a first box imported in an earlier run), so a later
+    // import for the second box appends rather than overwrites it.
+    const matchedByOrderId = new Map<string, { customerName: string; trackingNumbers: string[] }>();
 
     for (const update of updates) {
       const excelName = normalizeName(update.customerName);
-      
+
+      // A second (or third) row for a customer already matched earlier in
+      // this same batch — append to that order instead of re-searching
+      // activeOrders (which no longer has it) and wrongly reporting it as
+      // not found.
+      let alreadyMatchedId: string | undefined;
+      for (const [orderId, entry] of matchedByOrderId) {
+        const orderName = normalizeName(entry.customerName);
+        if (orderName === excelName || orderName.includes(excelName) || excelName.includes(orderName)) {
+          alreadyMatchedId = orderId;
+          break;
+        }
+      }
+
+      if (alreadyMatchedId) {
+        matchedByOrderId.get(alreadyMatchedId)!.trackingNumbers.push(update.trackingNumber);
+        successCount++;
+        continue;
+      }
+
       // Find matching order in active orders
       const matchedOrder = activeOrders.find(order => {
         const orderName = normalizeName(order.customerName);
@@ -83,29 +110,35 @@ export async function PATCH(request: Request) {
       });
 
       if (matchedOrder) {
-        // Prepare the update promise
-        updatePromises.push(
-          prisma.order.update({
-            where: { id: matchedOrder.id },
-            data: {
-              trackingNumber: update.trackingNumber,
-              orderStatus: 'Shipped' // Automatically change status to Shipped
-            }
-          })
-        );
-        
+        const existing = (matchedOrder.trackingNumber || '').trim();
+        const seed = existing ? existing.split(',').map((s) => s.trim()).filter(Boolean) : [];
+        matchedByOrderId.set(matchedOrder.id, {
+          customerName: matchedOrder.customerName,
+          trackingNumbers: [...seed, update.trackingNumber],
+        });
+
         // Remove from activeOrders so we don't match it again if there are duplicates
         const index = activeOrders.findIndex(o => o.id === matchedOrder.id);
         if (index > -1) {
           activeOrders.splice(index, 1);
         }
-        
+
         successCount++;
       } else {
         notFoundCount++;
         notFoundNames.push(update.customerName);
       }
     }
+
+    const updatePromises = Array.from(matchedByOrderId.entries()).map(([orderId, entry]) =>
+      prisma.order.update({
+        where: { id: orderId },
+        data: {
+          trackingNumber: entry.trackingNumbers.join(','),
+          orderStatus: 'Shipped' // Automatically change status to Shipped
+        }
+      })
+    );
 
     // Execute all updates in a transaction for atomicity and speed
     if (updatePromises.length > 0) {

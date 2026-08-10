@@ -36,6 +36,12 @@ model Order {
   sellerName            String?
   trackingNumber        String?
   adminNote             String?
+  // Piece count per physical box, in order — e.g. "[12,8]" for an order
+  // shipped in 2 boxes, 12 pieces in the first and 8 in the second. Only
+  // meaningful once an order's weight exceeds the ~29kg single-box cap (see
+  // computeBoxCount in lib/shipping.ts); null/empty otherwise. Packing fills
+  // this in box-by-box as it's actually packed, not auto-split.
+  boxPieceCounts        String?
   // The Bangkok-local "YYYY-MM-DD" this order counts as for order numbering
   // and the Packing view — normally today, but an admin can back/forward-date
   // it at entry time. Deliberately separate from createdAt (the real
