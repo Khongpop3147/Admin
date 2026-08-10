@@ -225,6 +225,11 @@ export async function GET(req: Request) {
     const platform = searchParams.get("platform");
     const excludePlatform = searchParams.get("excludePlatform"); // comma-separated, e.g. "Storefront,PrivateClient"
     const customerName = searchParams.get("customerName");
+    // Broader lookup for HR Manage's search box — same substring match as
+    // customerName above, but also checks trackingNumber and customerPhone,
+    // so a courier tracking number or a customer's phone digits can find the
+    // order too, not just their name.
+    const search = searchParams.get("search");
 
     let whereClause: any = sellerName ? { sellerName } : {};
     if (id) {
@@ -249,6 +254,13 @@ export async function GET(req: Request) {
     if (customerName) {
       whereClause.customerName = { contains: customerName, mode: "insensitive" };
     }
+    if (search) {
+      whereClause.OR = [
+        { customerName: { contains: search, mode: "insensitive" } },
+        { trackingNumber: { contains: search, mode: "insensitive" } },
+        { customerPhone: { contains: search, mode: "insensitive" } },
+      ];
+    }
 
     if (entryDateStr) {
       whereClause.entryDate = entryDateStr;
@@ -271,7 +283,7 @@ export async function GET(req: Request) {
     // Any explicit, scoped filter (date, platform, or a name search) means the
     // caller wants everything matching, not a "give me something recent"
     // sample — only cap the truly unscoped call.
-    const isScoped = Boolean(id || dateStr || dateFrom || dateTo || entryDateStr || platform || excludePlatform || customerName);
+    const isScoped = Boolean(id || dateStr || dateFrom || dateTo || entryDateStr || platform || excludePlatform || customerName || search);
 
     const orders = await prisma.order.findMany({
       where: whereClause,

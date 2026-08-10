@@ -54,7 +54,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             HR Manage
           </Link>
         )}
-        {currentUser?.role !== "PACKING" && currentUser?.role !== "STOREFRONT" && currentUser?.role !== "HR" && (
+        {currentUser?.role !== "PACKING" && currentUser?.role !== "STOREFRONT" && (
           <Link href="/orders" className={`${styles.navItem} ${pathname === '/orders' ? styles.active : ''}`}>
             Order Details
           </Link>

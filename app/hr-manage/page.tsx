@@ -98,7 +98,7 @@ export default function HrManagePage() {
     }
     setIsSearching(true);
     const timeout = setTimeout(() => {
-      fetch(`${BASE_PATH}/api/orders?customerName=${encodeURIComponent(term)}`)
+      fetch(`${BASE_PATH}/api/orders?search=${encodeURIComponent(term)}`)
         .then((res) => res.json())
         .then((data) => setSearchResults(data.orders || []))
         .catch(() => setSearchResults([]))
@@ -216,12 +216,12 @@ export default function HrManagePage() {
           />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>ค้นหาชื่อลูกค้า (ทุกวันที่)</label>
+          <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>ค้นหาชื่อ/เบอร์โทร/เลขพัสดุ (ทุกวันที่)</label>
           <input
             type="text"
             value={customerSearch}
             onChange={(e) => setCustomerSearch(e.target.value)}
-            placeholder="พิมพ์ชื่อลูกค้า..."
+            placeholder="พิมพ์ชื่อลูกค้า, เบอร์โทร หรือเลขพัสดุ..."
             style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "white", fontSize: "14px", width: "220px" }}
           />
         </div>
