@@ -11,7 +11,7 @@ import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { nextDayStr, previousDayStr } from "../../lib/packingCutoff";
-import { getShippingContact } from "../../lib/addressParse";
+import { getShippingContact, isValidPhone, isValidZip } from "../../lib/addressParse";
 import { findShipDateInRows } from "../../lib/trackingImport";
 import { formatDateDDMMYY_BE } from "../../lib/thaiDate";
 import { computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from "../../lib/shipping";
@@ -279,6 +279,8 @@ export default function PackingPage() {
         body: JSON.stringify({
           customerName: editingOrder.customerName,
           customerAddress: editingOrder.customerAddress,
+          customerPhone: editingOrder.customerPhone,
+          customerZip: editingOrder.customerZip,
           codAmount: editingOrder.codAmount,
           crispyPorkPiece: editingOrder.crispyPorkPiece,
           crispyPorkWeight: editingOrder.crispyPorkWeight,
@@ -660,15 +662,18 @@ export default function PackingPage() {
       // itself is scoped to whatever date is selected below, so importing
       // the wrong day's file while viewing a different day could otherwise
       // silently hand a same-named customer someone else's tracking number.
-      // Skips the check (rather than blocking) when the column's missing or
-      // unparseable, since that's not something this can actually verify.
+      // Only a warning, not a hard block — Packing sometimes legitimately
+      // ships an order a day early, so a mismatch isn't always a mistake.
+      // Skips the check entirely (no prompt at all) when the column's
+      // missing or unparseable, since that's not something this can verify.
       const fileShipDate = findShipDateInRows(rows as Record<string, unknown>[]);
       if (fileShipDate && fileShipDate !== selectedDate) {
-        alert(
+        const proceed = confirm(
           `ไฟล์นี้เป็นของวันที่ส่ง ${fileShipDate} แต่หน้าจอนี้กำลังดูวันที่ ${selectedDate} — ` +
-          `เปลี่ยนวันที่ในหน้าจอให้ตรงกับไฟล์ก่อน แล้วค่อยนำเข้าใหม่อีกครั้ง (กันเลข Tracking เข้าผิดวัน)`
+          `ถ้าไม่ได้ตั้งใจส่งวันนี้เร็วกว่ากำหนด กด "ยกเลิก" แล้วไปเปลี่ยนวันที่ในหน้าจอก่อน\n\n` +
+          `ดำเนินการนำเข้าต่อเลยไหม?`
         );
-        return;
+        if (!proceed) return;
       }
 
       const updates: { customerName: string; trackingNumber: string }[] = [];
@@ -1266,8 +1271,25 @@ export default function PackingPage() {
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>ที่อยู่ลูกค้า (รวมเบอร์โทรและรหัสไปรษณีย์)</label>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>ที่อยู่ลูกค้า</label>
                 <textarea value={editingOrder.customerAddress} onChange={e => setEditingOrder({...editingOrder, customerAddress: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white', minHeight: '80px' }} required />
+              </div>
+
+              <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>เบอร์โทร</label>
+                  <input type="text" value={editingOrder.customerPhone || ''} onChange={e => setEditingOrder({...editingOrder, customerPhone: e.target.value})} maxLength={10} placeholder="เช่น 0812345678" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  {!isValidPhone(editingOrder.customerPhone) && (
+                    <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ เบอร์โทรต้องมี 10 หลัก</div>
+                  )}
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>รหัสไปรษณีย์</label>
+                  <input type="text" value={editingOrder.customerZip || ''} onChange={e => setEditingOrder({...editingOrder, customerZip: e.target.value})} maxLength={5} placeholder="เช่น 10110" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  {!isValidZip(editingOrder.customerZip) && (
+                    <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ รหัสไปรษณีย์ต้องมี 5 หลัก</div>
+                  )}
+                </div>
               </div>
 
               <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
