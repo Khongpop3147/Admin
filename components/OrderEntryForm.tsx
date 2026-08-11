@@ -63,6 +63,18 @@ function computeWeightDerivedFields(
   return updates;
 }
 
+// Strips everything but digits (dashes, spaces, parens from a pasted "099-
+//999-9999"-style number, or any other stray character) and caps at maxLen —
+// done here instead of via the input's own maxLength attribute, since
+// maxLength truncates a pasted value by raw character count (dashes
+// included) before this ever runs, which would cut real digits off the end
+// of a dash-formatted paste.
+function cleanDigitsInput(value: string, maxLen: number): string {
+  return value.replace(/\D/g, "").slice(0, maxLen);
+}
+const cleanPhoneInput = (value: string) => cleanDigitsInput(value, 10);
+const cleanZipInput = (value: string) => cleanDigitsInput(value, 5);
+
 // Simplified inline brand marks for the sales-channel picker — self-contained
 // SVGs so there's no dependency on an external icon CDN.
 function FacebookIcon() {
@@ -1268,14 +1280,14 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
               </div>
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
                 <label className={styles.label}>เบอร์โทร</label>
-                <input type="text" name="customerPhone" value={formData.customerPhone} onChange={handleChange} className={styles.input} placeholder="เช่น 0812345678" maxLength={10} />
+                <input type="text" name="customerPhone" value={formData.customerPhone} onChange={(e) => setFormData(prev => ({ ...prev, customerPhone: cleanPhoneInput(e.target.value) }))} className={styles.input} placeholder="เช่น 0812345678" />
                 {!isValidPhone(formData.customerPhone) && (
                   <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ เบอร์โทรต้องมี 10 หลัก</div>
                 )}
               </div>
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
                 <label className={styles.label}>รหัสไปรษณีย์</label>
-                <input type="text" name="customerZip" value={formData.customerZip} onChange={handleChange} className={styles.input} placeholder="เช่น 10110" maxLength={5} />
+                <input type="text" name="customerZip" value={formData.customerZip} onChange={(e) => setFormData(prev => ({ ...prev, customerZip: cleanZipInput(e.target.value) }))} className={styles.input} placeholder="เช่น 10110" />
                 {!isValidZip(formData.customerZip) && (
                   <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ รหัสไปรษณีย์ต้องมี 5 หลัก</div>
                 )}
@@ -2059,14 +2071,14 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                     <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                         <label className={styles.label}>เบอร์โทร</label>
-                        <input type="text" className={styles.input} value={editOrderData.customerPhone || ''} onChange={e => setEditOrderData({ ...editOrderData, customerPhone: e.target.value })} maxLength={10} placeholder="เช่น 0812345678" />
+                        <input type="text" className={styles.input} value={editOrderData.customerPhone || ''} onChange={e => setEditOrderData({ ...editOrderData, customerPhone: cleanPhoneInput(e.target.value) })} placeholder="เช่น 0812345678" />
                         {!isValidPhone(editOrderData.customerPhone) && (
                           <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ เบอร์โทรต้องมี 10 หลัก</div>
                         )}
                       </div>
                       <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                         <label className={styles.label}>รหัสไปรษณีย์</label>
-                        <input type="text" className={styles.input} value={editOrderData.customerZip || ''} onChange={e => setEditOrderData({ ...editOrderData, customerZip: e.target.value })} maxLength={5} placeholder="เช่น 10110" />
+                        <input type="text" className={styles.input} value={editOrderData.customerZip || ''} onChange={e => setEditOrderData({ ...editOrderData, customerZip: cleanZipInput(e.target.value) })} placeholder="เช่น 10110" />
                         {!isValidZip(editOrderData.customerZip) && (
                           <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ รหัสไปรษณีย์ต้องมี 5 หลัก</div>
                         )}
