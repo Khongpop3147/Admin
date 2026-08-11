@@ -1506,7 +1506,10 @@ export default function RacksPage() {
                   เลือก rack น้อยไปมาก
                 </button>
                 <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  เลือกแล้ว {selectedAssignmentRacks.size} ชิ้น
+                  เลือกแล้ว {selectedAssignmentRacks.size} ชิ้น ({currentAdminPiecesWithGaps
+                    .filter((r: any) => selectedAssignmentRacks.has(r.id))
+                    .reduce((sum: number, r: any) => sum + (r.remainingWeight || 0), 0)
+                    .toFixed(2)} กก.)
                 </span>
                 <select
                   className={styles.input}
