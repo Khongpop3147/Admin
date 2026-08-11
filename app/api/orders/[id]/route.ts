@@ -27,6 +27,7 @@ const FIELD_LABELS: Record<string, string> = {
   customerAddress: "ที่อยู่",
   customerPhone: "เบอร์โทร",
   customerZip: "รหัสไปรษณีย์",
+  needsTaxInvoice: "ใบกำกับภาษี",
   crispyPorkPiece: "จำนวนชิ้น",
   crispyPorkWeight: "น้ำหนัก",
   codAmount: "ยอด COD",
@@ -77,6 +78,7 @@ export async function PATCH(
     if (body.customerAddress !== undefined) updateData.customerAddress = body.customerAddress;
     if (body.customerPhone !== undefined) updateData.customerPhone = body.customerPhone;
     if (body.customerZip !== undefined) updateData.customerZip = body.customerZip;
+    if (body.needsTaxInvoice !== undefined) updateData.needsTaxInvoice = !!body.needsTaxInvoice;
     if (body.crispyPorkPiece !== undefined) updateData.crispyPorkPiece = body.crispyPorkPiece;
     if (body.crispyPorkWeight !== undefined) updateData.crispyPorkWeight = body.crispyPorkWeight;
     if (body.codAmount !== undefined) updateData.codAmount = Number(body.codAmount) || 0;

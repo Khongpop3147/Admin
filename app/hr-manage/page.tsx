@@ -25,6 +25,7 @@ interface Order extends PrintableOrder {
   entryDate: string;
   crispyPorkWeight: string | null;
   crispyPorkPiece: string | null;
+  needsTaxInvoice: boolean;
 }
 
 function todayStr(): string {
@@ -244,6 +245,7 @@ export default function HrManagePage() {
       ) : (
         adminGroups.map((group) => {
           const missingInGroup = group.orders.filter(isMissingTracking).length;
+          const taxInvoiceInGroup = group.orders.filter((o) => o.needsTaxInvoice).length;
           return (
             <div key={group.sellerName} className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "20px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
@@ -252,6 +254,9 @@ export default function HrManagePage() {
                   <span>{group.orders.length} ออเดอร์</span>
                   {missingInGroup > 0 && (
                     <span style={{ color: "#ff6b6b", fontWeight: "bold" }}>⚠️ ไม่มีเลข track {missingInGroup} รายการ</span>
+                  )}
+                  {taxInvoiceInGroup > 0 && (
+                    <span style={{ color: "#ffac33", fontWeight: "bold" }}>🧾 ใบกำกับภาษี {taxInvoiceInGroup} รายการ</span>
                   )}
                 </div>
               </div>
@@ -291,6 +296,11 @@ export default function HrManagePage() {
                       ) : order.trackingNumber ? (
                         <span style={{ color: "var(--accent-green)" }}>track: {order.trackingNumber}</span>
                       ) : null}
+                      {order.needsTaxInvoice && (
+                        <span style={{ color: "#ffac33", fontWeight: "bold", background: "rgba(255,172,51,0.12)", border: "1px solid rgba(255,172,51,0.4)", borderRadius: "999px", padding: "2px 10px", fontSize: "12px" }}>
+                          🧾 ใบกำกับภาษี
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -451,6 +461,7 @@ export default function HrManagePage() {
                     <DetailRow label="ช่องทาง" value={viewingOrder.platform || '-'} />
                     <DetailRow label="ชื่อบัญชี" value={viewingOrder.socialMediaName || '-'} />
                     <DetailRow label="ที่อยู่" value={viewingOrder.customerAddress || '-'} />
+                    <DetailRow label="ใบกำกับภาษี" value={viewingOrder.needsTaxInvoice ? <span style={{ color: '#ffac33', fontWeight: 'bold' }}>🧾 ต้องการ</span> : 'ไม่ต้องการ'} />
                   </DetailSection>
 
                   <DetailSection title="สินค้า">

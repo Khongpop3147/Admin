@@ -247,6 +247,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     customerAddress: "",
     customerPhone: "",
     customerZip: "",
+    needsTaxInvoice: false,
     orderStatus: "",
     sellerName: "",
     trackingNumber: "",
@@ -864,6 +865,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
           customerAddress: editOrderData.customerAddress,
           customerPhone: editOrderData.customerPhone,
           customerZip: editOrderData.customerZip,
+          needsTaxInvoice: editOrderData.needsTaxInvoice,
           price: editOrderData.price,
           crispyPorkWeight: editOrderData.crispyPorkWeight,
           crispyPorkPiece: editOrderData.crispyPorkPiece,
@@ -1291,6 +1293,12 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 {!isValidZip(formData.customerZip) && (
                   <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ รหัสไปรษณีย์ต้องมี 5 หลัก</div>
                 )}
+              </div>
+              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input type="checkbox" name="needsTaxInvoice" checked={formData.needsTaxInvoice} onChange={handleChange} />
+                  <span className={styles.label} style={{ margin: 0 }}>🧾 ต้องการใบกำกับภาษี</span>
+                </label>
               </div>
             </div>
 
@@ -2084,6 +2092,12 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                         )}
                       </div>
                     </div>
+                    <div className={styles.formGroup}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={!!editOrderData.needsTaxInvoice} onChange={e => setEditOrderData({ ...editOrderData, needsTaxInvoice: e.target.checked })} />
+                        <span className={styles.label} style={{ margin: 0 }}>🧾 ต้องการใบกำกับภาษี</span>
+                      </label>
+                    </div>
                     <div className={styles.mobileStackGrid} style={{ display: editOrderData.platform === "Storefront" && editOrderData.customerName === "วางขายหน้าร้าน" ? 'none' : 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                         <label className={styles.label}>ราคาสินค้า (บาท)</label>
@@ -2250,6 +2264,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                       <DetailRow label="ที่อยู่" value={selectedOrder.customerAddress || '-'} />
                       <DetailRow label="เบอร์โทร" value={selectedOrder.customerPhone || '-'} />
                       <DetailRow label="รหัสไปรษณีย์" value={selectedOrder.customerZip || '-'} />
+                      <DetailRow label="ใบกำกับภาษี" value={selectedOrder.needsTaxInvoice ? <span style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>🧾 ต้องการ</span> : 'ไม่ต้องการ'} />
                     </DetailSection>
 
                     <DetailSection title="สินค้า">

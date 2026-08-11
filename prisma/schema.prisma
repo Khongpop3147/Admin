@@ -41,6 +41,11 @@ model Order {
   // existed.
   customerPhone         String?
   customerZip           String?
+  // Whether the customer asked for a tax invoice (ใบกำกับภาษี) — set from
+  // Order Details, surfaced as a badge on the order's row in HR Manage so
+  // whoever prepares invoices can see which orders need one without opening
+  // each order individually.
+  needsTaxInvoice       Boolean  @default(false)
   orderStatus           String?
   rackDetails           String?
   sellerName            String?
