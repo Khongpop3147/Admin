@@ -15,6 +15,7 @@ interface Order extends PrintableOrder {
   orderStatus: string;
   paymentStatus?: string;
   adminNote?: string;
+  needsTaxInvoice?: boolean;
 }
 
 type AdminGroup = AdminGroupType<Order>;
@@ -108,6 +109,9 @@ function PrintSlipContent() {
                     <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>{order.orderNo || "?"}</td>
                     <td style={{ border: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '18px' }}>
                       {order.customerName}
+                      {order.needsTaxInvoice && (
+                        <div style={{ fontWeight: 'bold', fontSize: '14px', marginTop: '4px', color: '#cc9900' }}>🧾 ต้องการใบกำกับภาษี</div>
+                      )}
                       {order.customerAddress && (
                         <div style={{ fontWeight: 'normal', fontSize: '13px', marginTop: '4px', color: '#333' }}>{order.customerAddress}</div>
                       )}
