@@ -473,6 +473,29 @@ export default function PackingPage() {
     }
   };
 
+  // Same Postone template/eligibility as the combined export, narrowed
+  // further to orders that still have no tracking number at all — a
+  // re-sendable "what's Postone still missing" file, instead of having to
+  // eyeball the full combined export for blank Tracking rows.
+  const handleExportMissingTracking = async () => {
+    const exportOrders = getPostoneEligibleOrders().filter((o) => !o.trackingNumber);
+    if (exportOrders.length === 0) {
+      alert("ไม่มีออเดอร์ที่ยังไม่มีเลข Tracking");
+      return;
+    }
+    if (!confirmBoxBreakdownComplete(exportOrders)) return;
+    const dataRows = buildPostoneRows(exportOrders);
+
+    try {
+      const buffer = await fillPostoneTemplate(dataRows);
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, `Postone_MissingTracking_${selectedDate}.xlsx`);
+    } catch (error) {
+      console.error("Error exporting excel:", error);
+      alert("ส่งออกไฟล์ Excel ไม่สำเร็จ");
+    }
+  };
+
   // One Postone-template file per admin, zipped together — same eligible
   // orders and same template-filling logic as the combined export, just
   // grouped by sellerName first so each admin's own sheet is self-contained
@@ -659,18 +682,20 @@ export default function PackingPage() {
 
       // The file's own "กำหนดส่ง" (scheduled ship date) column is the only
       // way to know which day a courier export is actually for — the match
-      // itself is scoped to whatever date is selected below, so importing
-      // the wrong day's file while viewing a different day could otherwise
+      // itself is scoped to whatever date is selected below, so importing a
+      // stale/old file while viewing a different day could otherwise
       // silently hand a same-named customer someone else's tracking number.
-      // Only a warning, not a hard block — Packing sometimes legitimately
-      // ships an order a day early, so a mismatch isn't always a mistake.
+      // Only warns when the file is OLDER than the selected date — Packing
+      // legitimately ships some orders a day (or more) ahead of schedule, so
+      // a file for today or later while viewing an earlier date is normal,
+      // not a mistake; only a stale file lagging behind is worth a prompt.
       // Skips the check entirely (no prompt at all) when the column's
       // missing or unparseable, since that's not something this can verify.
       const fileShipDate = findShipDateInRows(rows as Record<string, unknown>[]);
-      if (fileShipDate && fileShipDate !== selectedDate) {
+      if (fileShipDate && fileShipDate < selectedDate) {
         const proceed = confirm(
-          `ไฟล์นี้เป็นของวันที่ส่ง ${fileShipDate} แต่หน้าจอนี้กำลังดูวันที่ ${selectedDate} — ` +
-          `ถ้าไม่ได้ตั้งใจส่งวันนี้เร็วกว่ากำหนด กด "ยกเลิก" แล้วไปเปลี่ยนวันที่ในหน้าจอก่อน\n\n` +
+          `ไฟล์นี้เป็นของวันที่ส่ง ${fileShipDate} ซึ่งเก่ากว่าวันที่ ${selectedDate} ที่กำลังดูอยู่ — ` +
+          `เผลอหยิบไฟล์เก่ามาใส่หรือเปล่า? กด "ยกเลิก" ถ้าไม่แน่ใจ\n\n` +
           `ดำเนินการนำเข้าต่อเลยไหม?`
         );
         if (!proceed) return;
@@ -924,6 +949,15 @@ export default function PackingPage() {
           </button>
 
           <button
+            onClick={handleExportMissingTracking}
+            className={styles.toolbarBtn}
+            style={{ background: 'rgba(255,107,107,0.15)', border: '1px solid #ff6b6b', color: '#ff6b6b' }}
+            title="Export เฉพาะออเดอร์ EMS ที่ยังไม่มีเลข Tracking (เทมเพลต Postone เดิม)"
+          >
+            📋 Export ที่ยังไม่มี Track
+          </button>
+
+          <button
             onClick={handleExportNim}
             className={styles.toolbarBtn}
             style={{ background: '#f39c12', color: '#000' }}
@@ -1025,6 +1059,17 @@ export default function PackingPage() {
                   <td style={{ padding: '16px', verticalAlign: 'top', ...nimCellStyle }}>
                     <div style={{ fontWeight: 'bold' }}>{order.orderNo || "?"} - {order.customerName}</div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '250px' }}>{order.customerAddress}</div>
+                    {(() => {
+                      const { phone, zip } = getShippingContact(order);
+                      if (!phone && !zip) return null;
+                      return (
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                          {phone && <span>📞 {phone}</span>}
+                          {phone && zip && <span> · </span>}
+                          {zip && <span>📮 {zip}</span>}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td style={{
                     padding: '16px', verticalAlign: 'top',
