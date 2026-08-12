@@ -1001,6 +1001,17 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
       alert("กรุณาเลือกช่องทางการขายก่อนบันทึกออเดอร์");
       return;
     }
+    if (!isStorefrontMode) {
+      const phoneInvalid = !isValidPhone(formData.customerPhone);
+      const zipInvalid = !isValidZip(formData.customerZip);
+      if (phoneInvalid || zipInvalid) {
+        const problems = [];
+        if (phoneInvalid) problems.push("เบอร์โทร (ต้องมี 10 หลัก)");
+        if (zipInvalid) problems.push("รหัสไปรษณีย์ (ต้องมี 5 หลัก)");
+        alert(`กรุณากรอก ${problems.join(" และ ")} ให้ครบก่อนบันทึกออเดอร์`);
+        return;
+      }
+    }
     if (combinedHasSlipIssue && !slipIssueReason) {
       alert("สลิปมีปัญหา กรุณาเลือกเหตุผลก่อนบันทึกออเดอร์");
       return;
