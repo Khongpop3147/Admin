@@ -12,7 +12,7 @@ import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { nextDayStr, previousDayStr } from "../../lib/packingCutoff";
 import { getShippingContact, isValidPhone, isValidZip } from "../../lib/addressParse";
-import { findShipDateInRows } from "../../lib/trackingImport";
+import { findShipDateInRows, filterTrackingRowsToClosestDate, extractCellDateStr, TrackingRow } from "../../lib/trackingImport";
 import { formatDateDDMMYY_BE } from "../../lib/thaiDate";
 import { computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from "../../lib/shipping";
 import styles from "../page.module.css";
@@ -701,25 +701,36 @@ export default function PackingPage() {
         if (!proceed) return;
       }
 
-      const updates: { customerName: string; trackingNumber: string }[] = [];
+      const rawRows: TrackingRow[] = [];
 
       rows.forEach((row: any) => {
         // The column names might vary slightly, but according to user it's "ชื่อผู้รับ" and "Tracking"
         const name = row["ชื่อผู้รับ"] || row["ชื่อ-สกุล"] || row["Customer Name"];
         const tracking = row["Tracking"] || row["tracking"] || row["Tracking Number"];
-        
+
         if (name && tracking) {
-          updates.push({
+          rawRows.push({
             customerName: String(name).trim(),
-            trackingNumber: String(tracking).trim()
+            trackingNumber: String(tracking).trim(),
+            rowDate: extractCellDateStr(row["กำหนดส่ง"]),
           });
         }
       });
 
-      if (updates.length === 0) {
+      if (rawRows.length === 0) {
         alert("ไม่พบข้อมูลชื่อผู้รับหรือ Tracking ในไฟล์ที่อัปโหลด กรุณาตรวจสอบหัวคอลัมน์");
         return;
       }
+
+      // A cumulative courier export can carry a repeat customer's rows from
+      // several earlier ship dates alongside today's — without this, a
+      // stale row gets comma-joined onto today's tracking number right
+      // alongside the real one (see lib/trackingImport.ts). Keep only the
+      // row(s) closest to the date actually being packed.
+      const updates = filterTrackingRowsToClosestDate(rawRows, selectedDate).map(({ customerName, trackingNumber }) => ({
+        customerName,
+        trackingNumber,
+      }));
 
       const res = await fetch(`${BASE_PATH}/api/orders/bulk-tracking`, {
         method: "PATCH",
