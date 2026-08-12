@@ -150,6 +150,7 @@ export default function HrManagePage() {
           codAmount: editViewOrderData.codAmount,
           crispyPorkWeight: editViewOrderData.crispyPorkWeight,
           crispyPorkPiece: editViewOrderData.crispyPorkPiece,
+          needsTaxInvoice: editViewOrderData.needsTaxInvoice,
           trackingNumber: editViewOrderData.trackingNumber,
           paymentStatus: editViewOrderData.paymentStatus,
           adminNote: editViewOrderData.adminNote,
@@ -404,6 +405,12 @@ export default function HrManagePage() {
                         <label className={styles.label}>จำนวนชิ้น</label>
                         <input type="text" className={styles.input} value={editViewOrderData.crispyPorkPiece || ''} onChange={(e) => setEditViewOrderData({ ...editViewOrderData, crispyPorkPiece: e.target.value })} />
                       </div>
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={!!editViewOrderData.needsTaxInvoice} onChange={(e) => setEditViewOrderData({ ...editViewOrderData, needsTaxInvoice: e.target.checked })} />
+                        <span className={styles.label} style={{ margin: 0 }}>🧾 ต้องการใบกำกับภาษี</span>
+                      </label>
                     </div>
                     <div className={styles.formGroup}>
                       <label className={styles.label}>เลขพัสดุ</label>
