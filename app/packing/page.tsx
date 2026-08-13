@@ -726,11 +726,10 @@ export default function PackingPage() {
       // several earlier ship dates alongside today's — without this, a
       // stale row gets comma-joined onto today's tracking number right
       // alongside the real one (see lib/trackingImport.ts). Keep only the
-      // row(s) closest to the date actually being packed.
-      const updates = filterTrackingRowsToClosestDate(rawRows, selectedDate).map(({ customerName, trackingNumber }) => ({
-        customerName,
-        trackingNumber,
-      }));
+      // row(s) closest to the date actually being packed. rowDate is kept
+      // (not stripped) so the server can still flag a lone, unmatched row
+      // whose date doesn't line up with shipDate — see bulk-tracking route.
+      const updates = filterTrackingRowsToClosestDate(rawRows, selectedDate);
 
       const res = await fetch(`${BASE_PATH}/api/orders/bulk-tracking`, {
         method: "PATCH",
@@ -739,7 +738,7 @@ export default function PackingPage() {
         // Packing date — same entryDate shift fetchOrders() itself uses —
         // so a same-named customer on a different (still-open) day never
         // gets matched by mistake.
-        body: JSON.stringify({ updates, entryDate: previousDayStr(selectedDate) })
+        body: JSON.stringify({ updates, entryDate: previousDayStr(selectedDate), shipDate: selectedDate })
       });
 
       const result = await res.json();

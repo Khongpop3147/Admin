@@ -5,6 +5,7 @@ import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { groupOrdersForPrint, getShippingLabel, PrintableOrder } from "../../lib/porkSlip";
+import { hasTrackDateMismatchNote } from "../../lib/trackingImport";
 import { nextDayStr, previousDayStr } from "../../lib/packingCutoff";
 import { formatMoney, getOrderStatusInfo, DetailSection, DetailRow } from "../../components/OrderDetailShared";
 import styles from "../page.module.css";
@@ -44,6 +45,13 @@ const STATUS_LABELS: Record<string, string> = {
 // rule Packing's own post-import warning uses (see bulk-tracking import),
 // so this page flags exactly the orders Packing would also flag.
 const isMissingTracking = (o: Order) => o.shippingMethod === "EMS" && !o.trackingNumber;
+
+// Set by the bulk-tracking import when a tracking row got matched to this
+// order even though its own date didn't line up with the ship date it was
+// imported under — see lib/trackingImport.ts. Not necessarily wrong (a
+// legitimate "pack ahead of schedule" order looks the same), just worth a
+// human glancing at it.
+const hasTrackDateMismatch = (o: Order) => hasTrackDateMismatchNote(o.adminNote);
 
 export default function HrManagePage() {
   const { currentUser, users } = useUser();
@@ -199,6 +207,7 @@ export default function HrManagePage() {
 
   const adminGroups = groupOrdersForPrint<Order>(activeOrders, nicknameByName);
   const totalMissingTracking = activeOrders.filter(isMissingTracking).length;
+  const totalTrackDateMismatch = activeOrders.filter(hasTrackDateMismatch).length;
 
   return (
     <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
@@ -237,6 +246,11 @@ export default function HrManagePage() {
             ⚠️ EMS ที่ยังไม่มีเลข Tracking: {totalMissingTracking} รายการ
           </div>
         )}
+        {totalTrackDateMismatch > 0 && (
+          <div style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(255,172,51,0.15)", border: "1px solid rgba(255,172,51,0.4)", color: "#ffac33", fontSize: "14px", fontWeight: "bold" }}>
+            📅 Track วันที่ไม่ตรงกำหนดส่ง: {totalTrackDateMismatch} รายการ
+          </div>
+        )}
       </div>
 
       {displayLoading ? (
@@ -247,6 +261,7 @@ export default function HrManagePage() {
         adminGroups.map((group) => {
           const missingInGroup = group.orders.filter(isMissingTracking).length;
           const taxInvoiceInGroup = group.orders.filter((o) => o.needsTaxInvoice).length;
+          const trackDateMismatchInGroup = group.orders.filter(hasTrackDateMismatch).length;
           return (
             <div key={group.sellerName} className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "20px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
@@ -258,6 +273,9 @@ export default function HrManagePage() {
                   )}
                   {taxInvoiceInGroup > 0 && (
                     <span style={{ color: "#ffac33", fontWeight: "bold" }}>🧾 ใบกำกับภาษี {taxInvoiceInGroup} รายการ</span>
+                  )}
+                  {trackDateMismatchInGroup > 0 && (
+                    <span style={{ color: "#ffac33", fontWeight: "bold" }}>📅 Track วันที่ไม่ตรง {trackDateMismatchInGroup} รายการ</span>
                   )}
                 </div>
               </div>
@@ -300,6 +318,11 @@ export default function HrManagePage() {
                       {order.needsTaxInvoice && (
                         <span style={{ color: "#ffac33", fontWeight: "bold", background: "rgba(255,172,51,0.12)", border: "1px solid rgba(255,172,51,0.4)", borderRadius: "999px", padding: "2px 10px", fontSize: "12px" }}>
                           🧾 ใบกำกับภาษี
+                        </span>
+                      )}
+                      {hasTrackDateMismatch(order) && (
+                        <span style={{ color: "#ffac33", fontWeight: "bold", background: "rgba(255,172,51,0.12)", border: "1px solid rgba(255,172,51,0.4)", borderRadius: "999px", padding: "2px 10px", fontSize: "12px" }}>
+                          📅 Track วันที่ไม่ตรงกำหนดส่ง
                         </span>
                       )}
                     </div>

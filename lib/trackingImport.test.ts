@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { extractCellDateStr, findShipDateInRows, filterTrackingRowsToClosestDate, TrackingRow } from "./trackingImport";
+import {
+  extractCellDateStr,
+  findShipDateInRows,
+  filterTrackingRowsToClosestDate,
+  buildTrackDateMismatchNote,
+  hasTrackDateMismatchNote,
+  TrackingRow,
+} from "./trackingImport";
 
 describe("extractCellDateStr", () => {
   it("reads a Date object via UTC getters, not local ones", () => {
@@ -107,5 +114,32 @@ describe("filterTrackingRowsToClosestDate", () => {
 
   it("returns an empty array for an empty input", () => {
     expect(filterTrackingRowsToClosestDate([], "2026-10-10")).toEqual([]);
+  });
+});
+
+describe("buildTrackDateMismatchNote", () => {
+  it("formats the row date and ship date into a bracketed tag", () => {
+    expect(buildTrackDateMismatchNote("2026-10-08", "2026-10-10")).toBe(
+      "[Track วันที่ 2026-10-08 ไม่ตรงกำหนดส่ง 2026-10-10]"
+    );
+  });
+});
+
+describe("hasTrackDateMismatchNote", () => {
+  it("detects the tag on its own", () => {
+    expect(hasTrackDateMismatchNote("[Track วันที่ 2026-10-08 ไม่ตรงกำหนดส่ง 2026-10-10]")).toBe(true);
+  });
+
+  it("detects the tag combined with other adminNote content", () => {
+    const combined = "หมูในคลังไม่พอดี ขาดอีก 0.3 กก. [Track วันที่ 2026-10-08 ไม่ตรงกำหนดส่ง 2026-10-10]";
+    expect(hasTrackDateMismatchNote(combined)).toBe(true);
+  });
+
+  it("returns false for unrelated notes or empty input", () => {
+    expect(hasTrackDateMismatchNote("ลูกค้าขอให้ห่อพิเศษ")).toBe(false);
+    expect(hasTrackDateMismatchNote("[หมายเหตุสลิป: สลิปไม่มี QR โค้ด]")).toBe(false);
+    expect(hasTrackDateMismatchNote(null)).toBe(false);
+    expect(hasTrackDateMismatchNote(undefined)).toBe(false);
+    expect(hasTrackDateMismatchNote("")).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import { getSessionUser } from "../../../../lib/session";
 import { isSuperAdminRole } from "../../../../lib/roles";
 import { findNameMatch } from "../../../../lib/nameMatch";
+import { buildTrackDateMismatchNote } from "../../../../lib/trackingImport";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 
@@ -27,7 +28,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
 
-    const { updates, entryDate } = await request.json();
+    const { updates, entryDate, shipDate } = await request.json();
 
     if (!Array.isArray(updates)) {
       return NextResponse.json({ error: 'Invalid updates format' }, { status: 400 });
@@ -79,7 +80,18 @@ export async function PATCH(request: Request) {
     // comma-joined. Also seeds from whatever trackingNumber the order
     // already had (e.g. a first box imported in an earlier run), so a later
     // import for the second box appends rather than overwrites it.
-    const matchedByOrderId = new Map<string, { customerName: string; trackingNumbers: string[] }>();
+    // mismatchDates/originalAdminNote support the date-mismatch note below:
+    // filterTrackingRowsToClosestDate (run client-side before this request)
+    // only ever compares a customer against their OWN other rows in the same
+    // file — a lone row with no same-name competitor row still gets matched
+    // here even if its date doesn't line up with shipDate. Rather than
+    // blocking (which would break legitimate "pack ahead of schedule"
+    // imports), stamp a reviewable note onto adminNote so it surfaces on HR
+    // Manage.
+    const matchedByOrderId = new Map<
+      string,
+      { customerName: string; trackingNumbers: string[]; mismatchDates: Set<string>; originalAdminNote: string | null }
+    >();
 
     for (const update of updates) {
       // A second (or third) row for a customer already matched earlier in
@@ -93,7 +105,11 @@ export async function PATCH(request: Request) {
       const alreadyMatchedResult = findNameMatch(update.customerName, alreadyMatchedCandidates);
 
       if (alreadyMatchedResult.status === "matched") {
-        matchedByOrderId.get(alreadyMatchedResult.id)!.trackingNumbers.push(update.trackingNumber);
+        const entry = matchedByOrderId.get(alreadyMatchedResult.id)!;
+        entry.trackingNumbers.push(update.trackingNumber);
+        if (update.rowDate && shipDate && update.rowDate !== shipDate) {
+          entry.mismatchDates.add(update.rowDate);
+        }
         successCount++;
         continue;
       }
@@ -111,9 +127,15 @@ export async function PATCH(request: Request) {
         const matchedOrder = activeOrders.find((o) => o.id === result.id)!;
         const existing = (matchedOrder.trackingNumber || '').trim();
         const seed = existing ? existing.split(',').map((s) => s.trim()).filter(Boolean) : [];
+        const mismatchDates = new Set<string>();
+        if (update.rowDate && shipDate && update.rowDate !== shipDate) {
+          mismatchDates.add(update.rowDate);
+        }
         matchedByOrderId.set(matchedOrder.id, {
           customerName: matchedOrder.customerName,
           trackingNumbers: [...seed, update.trackingNumber],
+          mismatchDates,
+          originalAdminNote: matchedOrder.adminNote,
         });
 
         // Remove from activeOrders so we don't match it again if there are duplicates
@@ -132,15 +154,27 @@ export async function PATCH(request: Request) {
       }
     }
 
-    const updatePromises = Array.from(matchedByOrderId.entries()).map(([orderId, entry]) =>
-      prisma.order.update({
+    const updatePromises = Array.from(matchedByOrderId.entries()).map(([orderId, entry]) => {
+      // Only ever ADD notes, never dedupe-remove — if a note for this exact
+      // rowDate/shipDate pair is already there (e.g. the same file gets
+      // re-imported), skip re-appending it, but leave anything already
+      // present alone.
+      const newNotes = Array.from(entry.mismatchDates)
+        .map((rowDate) => buildTrackDateMismatchNote(rowDate, shipDate))
+        .filter((note) => !(entry.originalAdminNote || "").includes(note));
+      const adminNote = newNotes.length > 0
+        ? [entry.originalAdminNote, ...newNotes].filter(Boolean).join(" ")
+        : undefined;
+
+      return prisma.order.update({
         where: { id: orderId },
         data: {
           trackingNumber: entry.trackingNumbers.join(','),
-          orderStatus: 'Shipped' // Automatically change status to Shipped
+          orderStatus: 'Shipped', // Automatically change status to Shipped
+          ...(adminNote !== undefined ? { adminNote } : {}),
         }
-      })
-    );
+      });
+    });
 
     // Execute all updates in a transaction for atomicity and speed
     if (updatePromises.length > 0) {

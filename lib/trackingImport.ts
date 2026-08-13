@@ -81,3 +81,22 @@ export function filterTrackingRowsToClosestDate(rows: TrackingRow[], targetDateS
   }
   return result;
 }
+
+// filterTrackingRowsToClosestDate only ever compares a customer AGAINST
+// THEMSELVES within one file — a lone row (no same-name competitor row in
+// that particular import) is never filtered even when its own date doesn't
+// match the ship date, since there's nothing to pick "closest" from. That's
+// intentional: blocking it would break legitimate "แพ็คล่วงหน้า" (pack
+// ahead of schedule) imports. Instead, this stamps a reviewable note onto
+// the order's adminNote so it stays visible on HR Manage rather than
+// silently slipping through. Uses the same bracketed-tag convention as
+// extractShortageNote's "[หมายเหตุสลิป: ...]" in lib/porkSlip.ts.
+export function buildTrackDateMismatchNote(rowDate: string, shipDateStr: string): string {
+  return `[Track วันที่ ${rowDate} ไม่ตรงกำหนดส่ง ${shipDateStr}]`;
+}
+
+const TRACK_DATE_MISMATCH_RE = /\[Track วันที่ [\d-]+ ไม่ตรงกำหนดส่ง [\d-]+\]/;
+
+export function hasTrackDateMismatchNote(adminNote: string | null | undefined): boolean {
+  return !!adminNote && TRACK_DATE_MISMATCH_RE.test(adminNote);
+}
