@@ -24,8 +24,8 @@ export interface ProductTypeConfig {
 // other, at a glance.
 export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
   PORK: { code: "PORK", label: "หมูกรอบ", format: "classic" },
-  PORK_LOIN: { code: "PORK_LOIN", label: "หมูกรอบสันนอก", format: "prefixed", codePrefix: "L-" },
-  PORK_HIP: { code: "PORK_HIP", label: "หมูกรอบสะโพก", format: "prefixed", codePrefix: "LF-" },
+  PORK_LOIN: { code: "PORK_LOIN", label: "หมูกรอบสันนอก (Lean)", format: "prefixed", codePrefix: "L-" },
+  PORK_HIP: { code: "PORK_HIP", label: "หมูกรอบสะโพก (Low fat)", format: "prefixed", codePrefix: "LF-" },
 };
 
 export const DEFAULT_PRODUCT_TYPE = "PORK";
