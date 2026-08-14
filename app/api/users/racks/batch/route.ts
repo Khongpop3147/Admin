@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { getSessionUser } from "../../../../../lib/session";
 import { isSuperAdminRole } from "../../../../../lib/roles";
+import { DEFAULT_PRODUCT_TYPE } from "../../../../../lib/rackCode";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -26,7 +27,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
 
-    const { userId, racks } = await req.json();
+    const { userId, racks, productType: rawProductType } = await req.json();
+    const productType = rawProductType || DEFAULT_PRODUCT_TYPE;
 
     if (!userId || !racks || !Array.isArray(racks)) {
       return NextResponse.json({ error: "User ID and an array of racks are required" }, { status: 400 });
@@ -61,6 +63,7 @@ export async function POST(req: Request) {
             rackNo: rack.rackNo,
             initialWeight: rack.weight,
             remainingWeight: rack.weight,
+            productType,
           },
         });
         created.push(assignment);

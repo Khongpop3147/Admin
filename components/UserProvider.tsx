@@ -11,7 +11,7 @@ export interface User {
   role: string;
   canAccessStorefront?: boolean;
   hasPassword?: boolean;
-  racks: { id: string; rackNo: string; userId: string; remainingWeight?: number; initialWeight?: number; isUsedUp?: boolean }[];
+  racks: { id: string; rackNo: string; userId: string; remainingWeight?: number; initialWeight?: number; isUsedUp?: boolean; productType?: string }[];
 }
 
 interface UserContextType {

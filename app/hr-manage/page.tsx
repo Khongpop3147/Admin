@@ -154,10 +154,14 @@ export default function HrManagePage() {
         body: JSON.stringify({
           customerName: editViewOrderData.customerName,
           customerAddress: editViewOrderData.customerAddress,
-          price: editViewOrderData.price,
+          // A multi-line order's price/weight/piece can only be edited from
+          // Order Entry (see the disabled inputs above) — omit them here so
+          // this save never trips the server's multi-item guard just from
+          // touching an unrelated field like tracking number.
+          ...((editViewOrderData.items?.length ?? 0) > 1
+            ? {}
+            : { price: editViewOrderData.price, crispyPorkWeight: editViewOrderData.crispyPorkWeight, crispyPorkPiece: editViewOrderData.crispyPorkPiece }),
           codAmount: editViewOrderData.codAmount,
-          crispyPorkWeight: editViewOrderData.crispyPorkWeight,
-          crispyPorkPiece: editViewOrderData.crispyPorkPiece,
           needsTaxInvoice: editViewOrderData.needsTaxInvoice,
           trackingNumber: editViewOrderData.trackingNumber,
           paymentStatus: editViewOrderData.paymentStatus,
@@ -409,10 +413,15 @@ export default function HrManagePage() {
                       <label className={styles.label}>ที่อยู่</label>
                       <textarea className={styles.textarea} value={editViewOrderData.customerAddress || ''} onChange={(e) => setEditViewOrderData({ ...editViewOrderData, customerAddress: e.target.value })}></textarea>
                     </div>
+                    {(editViewOrderData.items?.length ?? 0) > 1 && (
+                      <div style={{ fontSize: '12px', color: '#ffac33', background: 'rgba(255,172,51,0.1)', border: '1px solid rgba(255,172,51,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
+                        ⚠️ ออเดอร์นี้มีหลายรายการสินค้า — แก้ไขรายละเอียดสินค้าได้ที่หน้า Order Entry เท่านั้น
+                      </div>
+                    )}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                         <label className={styles.label}>ราคาสินค้า (บาท)</label>
-                        <input type="number" step="0.01" className={styles.input} value={editViewOrderData.price ?? ''} onChange={(e) => setEditViewOrderData({ ...editViewOrderData, price: e.target.value })} />
+                        <input type="number" step="0.01" className={styles.input} value={editViewOrderData.price ?? ''} onChange={(e) => setEditViewOrderData({ ...editViewOrderData, price: e.target.value })} disabled={(editViewOrderData.items?.length ?? 0) > 1} style={(editViewOrderData.items?.length ?? 0) > 1 ? { opacity: 0.5 } : undefined} />
                       </div>
                       <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                         <label className={styles.label}>เก็บปลายทาง (บาท)</label>
@@ -422,11 +431,11 @@ export default function HrManagePage() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                         <label className={styles.label}>น้ำหนัก (กก.)</label>
-                        <input type="text" className={styles.input} value={editViewOrderData.crispyPorkWeight || ''} onChange={(e) => setEditViewOrderData({ ...editViewOrderData, crispyPorkWeight: e.target.value })} />
+                        <input type="text" className={styles.input} value={editViewOrderData.crispyPorkWeight || ''} onChange={(e) => setEditViewOrderData({ ...editViewOrderData, crispyPorkWeight: e.target.value })} disabled={(editViewOrderData.items?.length ?? 0) > 1} style={(editViewOrderData.items?.length ?? 0) > 1 ? { opacity: 0.5 } : undefined} />
                       </div>
                       <div className={styles.formGroup} style={{ marginBottom: 0 }}>
                         <label className={styles.label}>จำนวนชิ้น</label>
-                        <input type="text" className={styles.input} value={editViewOrderData.crispyPorkPiece || ''} onChange={(e) => setEditViewOrderData({ ...editViewOrderData, crispyPorkPiece: e.target.value })} />
+                        <input type="text" className={styles.input} value={editViewOrderData.crispyPorkPiece || ''} onChange={(e) => setEditViewOrderData({ ...editViewOrderData, crispyPorkPiece: e.target.value })} disabled={(editViewOrderData.items?.length ?? 0) > 1} style={(editViewOrderData.items?.length ?? 0) > 1 ? { opacity: 0.5 } : undefined} />
                       </div>
                     </div>
                     <div className={styles.formGroup}>

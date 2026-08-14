@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getBaseRackKeyAuto } from "../../../lib/rackCode";
 
 interface Piece {
   rackNo: string;
@@ -30,7 +31,7 @@ export default function PrintInventoryPage() {
     }
     pieces = pieces.filter((r) => !r.isUsedUp);
     const grouped = pieces.reduce((acc: Record<string, number>, p) => {
-      const baseRack = (p.rackNo || "ไม่ทราบถาด").split("-")[0];
+      const baseRack = p.rackNo ? getBaseRackKeyAuto(p.rackNo) : "ไม่ทราบถาด";
       acc[baseRack] = (acc[baseRack] || 0) + 1;
       return acc;
     }, {});

@@ -1,5 +1,13 @@
+import { parseRackCode, formatRackCode, DEFAULT_PRODUCT_TYPE, PIECES_PER_RACK } from "./rackCode";
+
 export interface RackLike {
   rackNo: string;
+  // Which product this piece belongs to — defaults to the original product
+  // (PORK) so existing callers that never set this still behave exactly as
+  // before. Grouping by this INSIDE the function (rather than requiring
+  // callers to pre-filter) means a caller can safely pass a combined list
+  // spanning both products without remembering to split it first.
+  productType?: string;
 }
 
 // Finds pork-piece codes that should exist (they sit inside a run of
@@ -10,48 +18,65 @@ export interface RackLike {
 // isolation misses gaps that sit right at the boundary between two admins.
 //
 // A candidate gap is only reported if the run between its neighbors is
-// smaller than 10 linear positions (2 racks' worth) — a bigger jump is
-// almost certainly an intentional new batch starting at a fresh number, not
-// pieces that actually went missing.
+// smaller than 2 racks' worth of positions — a bigger jump is almost
+// certainly an intentional new batch starting at a fresh number, not pieces
+// that actually went missing.
 export function findMissingRackCodes(racks: RackLike[]): string[] {
-  const allRackNos = racks.map((r) => r.rackNo);
+  // Group by product first — a classic-format run and a prefixed-format run
+  // must never be compared against each other for gaps (their codes don't
+  // even parse under the other's format, so mixing them would either throw
+  // away real neighbors or, worse, misdetect gaps across two unrelated
+  // numbering schemes).
+  const byProduct = new Map<string, RackLike[]>();
+  for (const r of racks) {
+    const productType = r.productType || DEFAULT_PRODUCT_TYPE;
+    if (!byProduct.has(productType)) byProduct.set(productType, []);
+    byProduct.get(productType)!.push(r);
+  }
+
   const missing = new Set<string>();
 
-  const sorted = [...racks].sort((a, b) => {
-    const matchA = a.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
-    const matchB = b.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
-    if (matchA && matchB) {
-      if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
-      if (parseInt(matchA[2]) !== parseInt(matchB[2])) return parseInt(matchA[2]) - parseInt(matchB[2]);
-      if (matchA[3] && matchB[3]) return parseInt(matchA[3]) - parseInt(matchB[3]);
-    }
-    return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
-  });
+  for (const [productType, group] of byProduct) {
+    const allCodesInGroup = new Set(group.map((r) => r.rackNo));
 
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const a = sorted[i];
-    const b = sorted[i + 1];
-    // Whether a piece has already sold out (isUsedUp) says nothing about
-    // whether the code between it and its neighbor was ever created —
-    // checking that here used to hide real gaps (confirmed against
-    // production: L112-1 sits right after L111-5, but L112-2 was already
-    // sold out, so an isUsedUp check on the neighbors skipped the pair
-    // entirely). The only thing that matters is whether the candidate code
-    // exists anywhere at all, checked below via allRackNos.
-    const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-    const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-    if (aM && bM && aM[1] === bM[1]) {
-      const p = aM[1];
-      const anum = parseInt(aM[2], 10) * 5 + parseInt(aM[3], 10);
-      const bnum = parseInt(bM[2], 10) * 5 + parseInt(bM[3], 10);
-      if (bnum - anum > 1 && bnum - anum < 10) {
-        for (let n = anum + 1; n < bnum; n++) {
-          let pNum = n % 5;
-          let rNum = Math.floor(n / 5);
-          if (pNum === 0) { pNum = 5; rNum--; }
-          const missingName = `${p}${String(rNum).padStart(aM[2].length, "0")}-${pNum}`;
-          if (!allRackNos.includes(missingName)) {
-            missing.add(missingName);
+    const sorted = [...group].sort((a, b) => {
+      const matchA = parseRackCode(a.rackNo, productType);
+      const matchB = parseRackCode(b.rackNo, productType);
+      if (matchA && matchB) {
+        if (matchA.prefix !== matchB.prefix) return matchA.prefix.localeCompare(matchB.prefix);
+        if (matchA.num !== matchB.num) return matchA.num - matchB.num;
+        if (matchA.piece !== null && matchB.piece !== null) return matchA.piece - matchB.piece;
+      }
+      return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
+    });
+
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const a = sorted[i];
+      const b = sorted[i + 1];
+      // Whether a piece has already sold out (isUsedUp) says nothing about
+      // whether the code between it and its neighbor was ever created —
+      // checking that here used to hide real gaps (confirmed against
+      // production: L112-1 sits right after L111-5, but L112-2 was already
+      // sold out, so an isUsedUp check on the neighbors skipped the pair
+      // entirely). The only thing that matters is whether the candidate
+      // code exists anywhere at all, checked below via allCodesInGroup.
+      const aM = parseRackCode(a.rackNo, productType);
+      const bM = parseRackCode(b.rackNo, productType);
+      if (aM && bM && aM.piece !== null && bM.piece !== null && aM.prefix === bM.prefix) {
+        const anum = aM.num * PIECES_PER_RACK + aM.piece;
+        const bnum = bM.num * PIECES_PER_RACK + bM.piece;
+        if (bnum - anum > 1 && bnum - anum < PIECES_PER_RACK * 2) {
+          for (let n = anum + 1; n < bnum; n++) {
+            let pNum = n % PIECES_PER_RACK;
+            let rNum = Math.floor(n / PIECES_PER_RACK);
+            if (pNum === 0) {
+              pNum = PIECES_PER_RACK;
+              rNum--;
+            }
+            const missingName = formatRackCode({ prefix: aM.prefix, num: rNum, piece: pNum }, productType);
+            if (!allCodesInGroup.has(missingName)) {
+              missing.add(missingName);
+            }
           }
         }
       }

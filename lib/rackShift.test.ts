@@ -93,6 +93,51 @@ describe("computeShiftTargets", () => {
   });
 });
 
+describe("computeShiftTargets — prefixed format (PORK_LOIN)", () => {
+  it("sorts prefixed-format codes by rack number then piece number, not lexically", () => {
+    const sorted = sortRackAssignments(
+      [
+        { id: "1", rackNo: "L-A010-1" },
+        { id: "2", rackNo: "L-A002-1" },
+      ],
+      "PORK_LOIN"
+    );
+    expect(sorted.map((r) => r.rackNo)).toEqual(["L-A002-1", "L-A010-1"]);
+  });
+
+  it("shifting down rolls piece 5 over into the next rack's piece 1", () => {
+    const sorted = items("L-A001-5");
+    const targets = computeShiftTargets(sorted, "L-A001-5", "down", "PORK_LOIN");
+    expect(targets).toEqual([{ id: "id-0-L-A001-5", newName: "L-A002-1" }]);
+  });
+
+  it("shifting up rolls piece 1 over into the previous rack's piece 5", () => {
+    const sorted = items("L-A002-1");
+    const targets = computeShiftTargets(sorted, "L-A002-1", "up", "PORK_LOIN");
+    expect(targets).toEqual([{ id: "id-0-L-A002-1", newName: "L-A001-5" }]);
+  });
+
+  it("throws COLLISION_DOWN: when shifting down would land on an unshifted prefixed piece", () => {
+    const manuallySorted = [
+      { id: "unshifted", rackNo: "L-A002-5" },
+      { id: "moving", rackNo: "L-A002-4" },
+    ];
+    expect(() => computeShiftTargets(manuallySorted, "L-A002-4", "down", "PORK_LOIN")).toThrow(
+      "COLLISION_DOWN:L-A002-5"
+    );
+  });
+
+  it("throws COLLISION_UP: when shifting up would land on an unshifted prefixed piece", () => {
+    const manuallySorted = [
+      { id: "unshifted", rackNo: "L-A002-1" },
+      { id: "moving", rackNo: "L-A002-2" },
+    ];
+    expect(() => computeShiftTargets(manuallySorted, "L-A002-2", "up", "PORK_LOIN")).toThrow(
+      "COLLISION_UP:L-A002-1"
+    );
+  });
+});
+
 describe("syncOrderRackDetails", () => {
   it("updates rackNo for entries whose assignmentId matches a shifted target, leaving weight untouched", () => {
     const orders = [

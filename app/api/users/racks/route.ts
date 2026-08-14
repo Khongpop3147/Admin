@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { getSessionUser } from "../../../../lib/session";
 import { isSuperAdminRole } from "../../../../lib/roles";
+import { parseRackCode, DEFAULT_PRODUCT_TYPE } from "../../../../lib/rackCode";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -26,7 +27,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
 
-    const { userId, rackNo, weight } = await req.json();
+    const { userId, rackNo, weight, productType: rawProductType } = await req.json();
+    const productType = rawProductType || DEFAULT_PRODUCT_TYPE;
 
     if (!userId || !rackNo) {
       return NextResponse.json({ error: "User ID and Rack No are required" }, { status: 400 });
@@ -35,6 +37,7 @@ export async function POST(req: Request) {
     const data: any = {
       userId,
       rackNo,
+      productType,
     };
 
     if (weight !== undefined) {
@@ -115,6 +118,7 @@ export async function DELETE(req: Request) {
           rackNo: r.rackNo,
           weight: r.remainingWeight,
           userName: r.user.name,
+          productType: r.productType,
         })),
       }),
       prisma.rackAssignment.deleteMany({
@@ -140,6 +144,20 @@ export async function PATCH(req: Request) {
 
     if (!id || !rackNo) {
       return NextResponse.json({ error: "Assignment ID and new Rack No are required" }, { status: 400 });
+    }
+
+    const existing = await prisma.rackAssignment.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "ไม่พบชิ้นหมูนี้ อาจถูกลบไปแล้ว" }, { status: 404 });
+    }
+
+    // A rack code's format is tied to its product (classic "A005-1" for
+    // หมูกรอบ, prefixed "L-A001-1" for หมูกรอบสันนอก) — reject an edit that
+    // would put a code from the wrong format onto this row, which would
+    // otherwise silently break every downstream parse (auto-select grouping,
+    // gap detection, shift) for that piece.
+    if (!parseRackCode(rackNo, existing.productType)) {
+      return NextResponse.json({ error: "รูปแบบรหัสถาดไม่ตรงกับสินค้าของชิ้นนี้" }, { status: 400 });
     }
 
     const dataToUpdate: any = { rackNo };

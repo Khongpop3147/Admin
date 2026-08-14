@@ -6,6 +6,18 @@ import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { findMissingRackCodes } from "../../lib/rackGaps";
+import {
+  incrementPrefix,
+  decrementPrefix,
+  getRackSequence,
+  formatRackCode,
+  parseRackCode,
+  getBaseRackKey,
+  getProductFormat,
+  PRODUCT_TYPES,
+  DEFAULT_PRODUCT_TYPE,
+  PIECES_PER_RACK,
+} from "../../lib/rackCode";
 import styles from "../page.module.css";
 
 interface DraftRack {
@@ -31,99 +43,20 @@ function ActionCard({ icon, title, subtitle, accent, onClick }: { icon: string; 
   );
 }
 
-function incrementPrefix(prefix: string): string {
-  if (!prefix) return "A";
-  const match = prefix.match(/([a-zA-Z]+)$/);
-  if (!match) return prefix + "A";
-  
-  const letters = match[1];
-  let newLetters = "";
-  let carry = true;
-  
-  for (let i = letters.length - 1; i >= 0; i--) {
-      if (!carry) {
-          newLetters = letters[i] + newLetters;
-          continue;
-      }
-      const charCode = letters.charCodeAt(i);
-      if (charCode === 90) { // 'Z'
-          newLetters = 'A' + newLetters;
-          carry = true;
-      } else if (charCode === 122) { // 'z'
-          newLetters = 'a' + newLetters;
-          carry = true;
-      } else {
-          newLetters = String.fromCharCode(charCode + 1) + newLetters;
-          carry = false;
-      }
-  }
-  if (carry) {
-      const isUpper = letters[0] === letters[0].toUpperCase();
-      newLetters = (isUpper ? 'A' : 'a') + newLetters;
-  }
-  return prefix.slice(0, prefix.length - letters.length) + newLetters;
-}
-
-function decrementPrefix(prefix: string): string {
-  if (!prefix) return "A";
-  const match = prefix.match(/([a-zA-Z]+)$/);
-  if (!match) return prefix;
-  
-  const letters = match[1];
-  let newLetters = "";
-  let borrow = true;
-  
-  for (let i = letters.length - 1; i >= 0; i--) {
-      if (!borrow) {
-          newLetters = letters[i] + newLetters;
-          continue;
-      }
-      const charCode = letters.charCodeAt(i);
-      if (charCode === 65) { // 'A'
-          newLetters = 'Z' + newLetters;
-          borrow = true;
-      } else if (charCode === 97) { // 'a'
-          newLetters = 'z' + newLetters;
-          borrow = true;
-      } else {
-          newLetters = String.fromCharCode(charCode - 1) + newLetters;
-          borrow = false;
-      }
-  }
-  if (borrow && letters.length > 1) {
-      newLetters = newLetters.slice(1);
-  }
-  return prefix.slice(0, prefix.length - letters.length) + newLetters;
-}
-
-function getRackSequence(basePrefix: string, baseStartNum: number, rackOffset: number): { prefix: string, num: number } {
-  let num = baseStartNum + rackOffset;
-  let pfx = basePrefix;
-  
-  while (num > 999) {
-      num -= 999;
-      pfx = incrementPrefix(pfx);
-  }
-  while (num <= 0 && baseStartNum > 0) {
-      // There's no prefix before "A" — clamp here instead of letting
-      // decrementPrefix wrap it around to "Z" (that produced racks like
-      // Z999 out of nowhere when someone dialed the start number too low).
-      if (pfx === "A" || pfx === "a") {
-        num = 1;
-        break;
-      }
-      num += 999;
-      pfx = decrementPrefix(pfx);
-  }
-  return { prefix: pfx, num: Math.max(num, 0) };
-}
-
 export default function RacksPage() {
   const { currentUser, users, fetchUsers } = useUser();
   const centralUser = users.find(u => u.role === "CENTRAL_INVENTORY");
   const centralRacks = centralUser?.racks || [];
   const [selectedUserId, setSelectedUserId] = useState("");
-  // Batch generation state
+  // Which product this page is currently showing/operating on — every list,
+  // summary, and code generator below is scoped to this so the two
+  // products' rack codes (and weights) never get mixed together.
+  const [selectedProduct, setSelectedProduct] = useState<string>(DEFAULT_PRODUCT_TYPE);
+  const productRacksOf = (u: any) => (u?.racks || []).filter((r: any) => (r.productType || DEFAULT_PRODUCT_TYPE) === selectedProduct);
+  const productCentralRacks = useMemo(
+    () => centralRacks.filter((r: any) => (r.productType || DEFAULT_PRODUCT_TYPE) === selectedProduct),
+    [centralRacks, selectedProduct]
+  );
   // Batch generation state
   const [prefix, setPrefix] = useState("A");
   const [startNum, setStartNum] = useState<number>(1);
@@ -192,52 +125,63 @@ export default function RacksPage() {
     ])).sort();
   }, [users, centralRacks]);
 
+  // Same combined list as allRackNos but keeping each row's productType, so
+  // the code-generation helpers below can scope themselves to whichever
+  // product is currently selected instead of scanning across both formats.
+  const allRacksFlat = useMemo(() => {
+    return [
+      ...users.flatMap(u => (u.racks || []).map((r: any) => ({ rackNo: r.rackNo, productType: r.productType || DEFAULT_PRODUCT_TYPE, owner: u.nickname || u.name }))),
+      ...centralRacks.map((r: any) => ({ rackNo: r.rackNo, productType: r.productType || DEFAULT_PRODUCT_TYPE, owner: "คลังกลาง" })),
+    ];
+  }, [users, centralRacks]);
+
   // Where the batch generator should pick up — one past whatever rack number
-  // is highest across the whole system, so the admin never has to remember
-  // and retype where the last batch left off.
+  // is highest within the currently selected product, so the admin never has
+  // to remember and retype where the last batch left off. Scoped per product
+  // because the two products' rack codes are unrelated sequences.
   const nextRackStart = useMemo(() => {
     let maxPrefix = "A";
     let maxNum = 0;
     let found = false;
 
-    allRackNos.forEach((rackNo) => {
-      const match = rackNo.match(/^([A-Z]+)(\d+)(?:-\d+)?$/);
-      if (!match) return;
-      const [, pfx, numStr] = match;
-      const num = parseInt(numStr, 10);
-      // Same base-26 ordering as the letter-prefix rollover (A, B, ... Z, AA, AB, ...):
-      // shorter prefix always sorts before a longer one.
-      const isHigher = !found
-        || pfx.length > maxPrefix.length
-        || (pfx.length === maxPrefix.length && pfx > maxPrefix)
-        || (pfx === maxPrefix && num > maxNum);
-      if (isHigher) {
-        maxPrefix = pfx;
-        maxNum = num;
-        found = true;
-      }
-    });
+    allRacksFlat
+      .filter((r) => r.productType === selectedProduct)
+      .forEach((r) => {
+        const parsed = parseRackCode(r.rackNo, selectedProduct);
+        if (!parsed) return;
+        const { prefix: pfx, num } = parsed;
+        // Same base-26 ordering as the letter-prefix rollover (A, B, ... Z, AA, AB, ...):
+        // shorter prefix always sorts before a longer one.
+        const isHigher = !found
+          || pfx.length > maxPrefix.length
+          || (pfx.length === maxPrefix.length && pfx > maxPrefix)
+          || (pfx === maxPrefix && num > maxNum);
+        if (isHigher) {
+          maxPrefix = pfx;
+          maxNum = num;
+          found = true;
+        }
+      });
 
     if (!found) return { prefix: "A", startNum: 1 };
     const next = getRackSequence(maxPrefix, maxNum, 1);
     return { prefix: next.prefix, startNum: next.num };
-  }, [allRackNos]);
+  }, [allRacksFlat, selectedProduct]);
 
-  // The single highest individual piece (rack + piece number) across the
-  // whole system — shown alongside the batch generator so it's clear where
-  // the auto-filled prefix/start number is continuing from.
+  // The single highest individual piece (rack + piece number) within the
+  // currently selected product — shown alongside the batch generator so
+  // it's clear where the auto-filled prefix/start number is continuing from.
   const lastPiece = useMemo(() => {
     type Piece = { prefix: string; num: number; piece: number; rackNo: string; owner: string };
     const pieces: Piece[] = [];
 
-    const collect = (rackNo: string, owner: string) => {
-      const match = rackNo.match(/^([A-Z]+)(\d+)-(\d+)$/);
-      if (!match) return;
-      pieces.push({ prefix: match[1], num: parseInt(match[2], 10), piece: parseInt(match[3], 10), rackNo, owner });
-    };
-
-    users.forEach((u) => (u.racks || []).forEach((r: any) => collect(r.rackNo, u.name)));
-    centralRacks.forEach((r: any) => collect(r.rackNo, "คลังกลาง"));
+    allRacksFlat
+      .filter((r) => r.productType === selectedProduct)
+      .forEach((r) => {
+        const parsed = parseRackCode(r.rackNo, selectedProduct);
+        if (!parsed || parsed.piece === null) return;
+        pieces.push({ prefix: parsed.prefix, num: parsed.num, piece: parsed.piece, rackNo: r.rackNo, owner: r.owner });
+      });
 
     if (pieces.length === 0) return null;
 
@@ -249,7 +193,7 @@ export default function RacksPage() {
         || (curr.prefix === best.prefix && curr.num === best.num && curr.piece > best.piece);
       return isHigher ? curr : best;
     });
-  }, [users, centralRacks]);
+  }, [allRacksFlat, selectedProduct]);
 
   // Pre-fill the batch generator with wherever the last batch left off, every
   // time the modal is opened fresh (not while there's already a draft in progress).
@@ -263,14 +207,15 @@ export default function RacksPage() {
 
   const currentAdminPiecesWithGaps = useMemo(() => {
     if (!currentUser) return [];
-    const sourceRacks = users.find(u => u.id === selectedUserId)?.racks || (selectedUserId === currentUser.id ? currentUser.racks : []);
+    const rawSourceRacks = users.find(u => u.id === selectedUserId)?.racks || (selectedUserId === currentUser.id ? currentUser.racks : []);
+    const sourceRacks = (rawSourceRacks || []).filter((r: any) => (r.productType || DEFAULT_PRODUCT_TYPE) === selectedProduct);
     const sorted = [...sourceRacks].sort((a: any, b: any) => {
       if (a.isUsedUp !== b.isUsedUp) return a.isUsedUp ? 1 : -1;
-      const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-      const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-      if (aM && bM && aM[1] === bM[1]) {
-        const aNum = parseInt(aM[2], 10) * 10 + parseInt(aM[3], 10);
-        const bNum = parseInt(bM[2], 10) * 10 + parseInt(bM[3], 10);
+      const aM = parseRackCode(a.rackNo, selectedProduct);
+      const bM = parseRackCode(b.rackNo, selectedProduct);
+      if (aM && bM && aM.piece !== null && bM.piece !== null && aM.prefix === bM.prefix) {
+        const aNum = aM.num * 10 + aM.piece;
+        const bNum = bM.num * 10 + bM.piece;
         return aNum - bNum;
       }
       return a.rackNo.localeCompare(b.rackNo);
@@ -283,18 +228,18 @@ export default function RacksPage() {
         const a = sorted[i];
         const b = sorted[i+1];
         if (!a.isUsedUp && !b.isUsedUp) {
-          const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-          const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-          if (aM && bM && aM[1] === bM[1]) {
-            const p = aM[1];
-            const anum = parseInt(aM[2], 10) * 5 + parseInt(aM[3], 10);
-            const bnum = parseInt(bM[2], 10) * 5 + parseInt(bM[3], 10);
-            if (bnum - anum > 1 && bnum - anum < 10) {
+          const aM = parseRackCode(a.rackNo, selectedProduct);
+          const bM = parseRackCode(b.rackNo, selectedProduct);
+          if (aM && bM && aM.piece !== null && bM.piece !== null && aM.prefix === bM.prefix) {
+            const p = aM.prefix;
+            const anum = aM.num * PIECES_PER_RACK + aM.piece;
+            const bnum = bM.num * PIECES_PER_RACK + bM.piece;
+            if (bnum - anum > 1 && bnum - anum < PIECES_PER_RACK * 2) {
               for (let n = anum + 1; n < bnum; n++) {
-                let pNum = n % 5;
-                let rNum = Math.floor(n / 5);
-                if (pNum === 0) { pNum = 5; rNum--; }
-                const missingName = `${p}${String(rNum).padStart(aM[2].length, '0')}-${pNum}`;
+                let pNum = n % PIECES_PER_RACK;
+                let rNum = Math.floor(n / PIECES_PER_RACK);
+                if (pNum === 0) { pNum = PIECES_PER_RACK; rNum--; }
+                const missingName = formatRackCode({ prefix: p, num: rNum, piece: pNum }, selectedProduct);
                 if (!allRackNos.includes(missingName)) {
                   displayList.push({ isMissingPlaceholder: true, rackNo: missingName, id: 'missing-' + missingName });
                 }
@@ -304,25 +249,25 @@ export default function RacksPage() {
         }
       }
     }
-    
+
     if (assignmentsSearch) {
       const s = assignmentsSearch.toLowerCase();
-      return displayList.filter(rack => 
-        rack.rackNo.toLowerCase().includes(s) || 
+      return displayList.filter(rack =>
+        rack.rackNo.toLowerCase().includes(s) ||
         (rack.remainingWeight !== undefined && String(rack.remainingWeight).includes(s))
       );
     }
     return displayList;
-  }, [users, selectedUserId, currentUser, assignmentsSearch, allRackNos]);
+  }, [users, selectedUserId, currentUser, assignmentsSearch, allRackNos, selectedProduct]);
 
   const centralPiecesWithGaps = useMemo(() => {
-    const sorted = [...centralRacks].sort((a: any, b: any) => {
-      const matchA = a.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
-      const matchB = b.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
+    const sorted = [...productCentralRacks].sort((a: any, b: any) => {
+      const matchA = parseRackCode(a.rackNo, selectedProduct);
+      const matchB = parseRackCode(b.rackNo, selectedProduct);
       if (matchA && matchB) {
-        if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
-        if (parseInt(matchA[2]) !== parseInt(matchB[2])) return parseInt(matchA[2]) - parseInt(matchB[2]);
-        if (matchA[3] && matchB[3]) return parseInt(matchA[3]) - parseInt(matchB[3]);
+        if (matchA.prefix !== matchB.prefix) return matchA.prefix.localeCompare(matchB.prefix);
+        if (matchA.num !== matchB.num) return matchA.num - matchB.num;
+        if (matchA.piece !== null && matchB.piece !== null) return matchA.piece - matchB.piece;
       }
       return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
     });
@@ -334,18 +279,18 @@ export default function RacksPage() {
         const a = sorted[i];
         const b = sorted[i+1];
         if (!a.isUsedUp && !b.isUsedUp) {
-          const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-          const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-          if (aM && bM && aM[1] === bM[1]) {
-            const p = aM[1];
-            const anum = parseInt(aM[2], 10) * 5 + parseInt(aM[3], 10);
-            const bnum = parseInt(bM[2], 10) * 5 + parseInt(bM[3], 10);
-            if (bnum - anum > 1 && bnum - anum < 10) {
+          const aM = parseRackCode(a.rackNo, selectedProduct);
+          const bM = parseRackCode(b.rackNo, selectedProduct);
+          if (aM && bM && aM.piece !== null && bM.piece !== null && aM.prefix === bM.prefix) {
+            const p = aM.prefix;
+            const anum = aM.num * PIECES_PER_RACK + aM.piece;
+            const bnum = bM.num * PIECES_PER_RACK + bM.piece;
+            if (bnum - anum > 1 && bnum - anum < PIECES_PER_RACK * 2) {
               for (let n = anum + 1; n < bnum; n++) {
-                let pNum = n % 5;
-                let rNum = Math.floor(n / 5);
-                if (pNum === 0) { pNum = 5; rNum--; }
-                const missingName = `${p}${String(rNum).padStart(aM[2].length, '0')}-${pNum}`;
+                let pNum = n % PIECES_PER_RACK;
+                let rNum = Math.floor(n / PIECES_PER_RACK);
+                if (pNum === 0) { pNum = PIECES_PER_RACK; rNum--; }
+                const missingName = formatRackCode({ prefix: p, num: rNum, piece: pNum }, selectedProduct);
                 if (!allRackNos.includes(missingName)) {
                   displayList.push({ isMissingPlaceholder: true, rackNo: missingName, id: 'missing-' + missingName });
                 }
@@ -355,59 +300,60 @@ export default function RacksPage() {
         }
       }
     }
-    
+
     if (distributeSearch) {
       const s = distributeSearch.toLowerCase();
-      return displayList.filter(rack => 
-        rack.rackNo.toLowerCase().includes(s) || 
+      return displayList.filter(rack =>
+        rack.rackNo.toLowerCase().includes(s) ||
         (rack.remainingWeight !== undefined && String(rack.remainingWeight).includes(s))
       );
     }
     return displayList;
-  }, [centralRacks, distributeSearch, allRackNos]);
+  }, [productCentralRacks, distributeSearch, allRackNos, selectedProduct]);
 
   const globalMissingPieces = useMemo(() => {
     const combined = [
       ...users.flatMap(u => u.racks || []),
       ...centralRacks,
-    ];
+    ].filter((r: any) => (r.productType || DEFAULT_PRODUCT_TYPE) === selectedProduct);
     return findMissingRackCodes(combined);
-  }, [users, centralRacks]);
+  }, [users, centralRacks, selectedProduct]);
 
   const inventorySummary = useMemo(() => {
     const perAdmin = users
       .filter((u) => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING")
       .map((u) => {
-        const racks = u.racks || [];
-        const pieces = racks.filter((r) => !r.isUsedUp).length;
-        const weight = racks.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0);
+        const racks = productRacksOf(u);
+        const pieces = racks.filter((r: any) => !r.isUsedUp).length;
+        const weight = racks.reduce((sum: number, r: any) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0);
         return { name: u.nickname || u.name, pieces, weight };
       })
       .sort((a, b) => b.weight - a.weight);
 
-    const centralPieces = centralRacks.filter((r: any) => !r.isUsedUp).length;
-    const centralWeight = centralRacks.reduce((sum: number, r: any) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0);
+    const centralPieces = productCentralRacks.filter((r: any) => !r.isUsedUp).length;
+    const centralWeight = productCentralRacks.reduce((sum: number, r: any) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0);
 
     const totalPieces = perAdmin.reduce((s, a) => s + a.pieces, 0) + centralPieces;
     const totalWeight = perAdmin.reduce((s, a) => s + a.weight, 0) + centralWeight;
 
     return { perAdmin, centralPieces, centralWeight, totalPieces, totalWeight };
-  }, [users, centralRacks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users, productCentralRacks, selectedProduct]);
 
   const handleSelectDistributeRange = () => {
-    if (!centralRacks.length || !distributeStartRack || !distributeEndRack) return;
-    const startIndex = centralRacks.findIndex((r: any) => r.rackNo === distributeStartRack);
-    const endIndex = centralRacks.findIndex((r: any) => r.rackNo === distributeEndRack);
-    
+    if (!productCentralRacks.length || !distributeStartRack || !distributeEndRack) return;
+    const startIndex = productCentralRacks.findIndex((r: any) => r.rackNo === distributeStartRack);
+    const endIndex = productCentralRacks.findIndex((r: any) => r.rackNo === distributeEndRack);
+
     if (startIndex === -1 || endIndex === -1) return;
-    
+
     const start = Math.min(startIndex, endIndex);
     const end = Math.max(startIndex, endIndex);
-    
+
     const newSet = new Set(selectedCentralRacks);
     for (let i = start; i <= end; i++) {
-      if (!centralRacks[i].isUsedUp) {
-        newSet.add(centralRacks[i].id);
+      if (!productCentralRacks[i].isUsedUp) {
+        newSet.add(productCentralRacks[i].id);
       }
     }
     setSelectedCentralRacks(newSet);
@@ -429,13 +375,13 @@ export default function RacksPage() {
     const newPrefix = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
     const oldPrefix = prefix;
     setPrefix(newPrefix);
-    
+
     if (draftRacks.length > 0) {
       setDraftRacks(prev => prev.map(r => {
-        const match = r.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+        const match = parseRackCode(r.rackNo, selectedProduct);
         // If it starts with the old prefix (or oldPrefix is empty), replace it
-        if (match && (oldPrefix === "" || match[1] === oldPrefix)) {
-          return { ...r, rackNo: `${newPrefix}${match[2]}-${match[3]}` };
+        if (match && match.piece !== null && (oldPrefix === "" || match.prefix === oldPrefix)) {
+          return { ...r, rackNo: formatRackCode({ prefix: newPrefix, num: match.num, piece: match.piece }, selectedProduct) };
         }
         return r;
       }));
@@ -450,15 +396,14 @@ export default function RacksPage() {
 
     const diff = newStart - startNum;
     setStartNum(newStart);
-    
+
     if (draftRacks.length > 0 && diff !== 0) {
       setDraftRacks(prev => prev.map(r => {
-        const match = r.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
+        const match = parseRackCode(r.rackNo, selectedProduct);
         // Only update items that match the current prefix
-        if (match && match[1] === prefix) {
-          const currentNum = parseInt(match[2], 10);
-          const { prefix: newPfx, num: newNum } = getRackSequence(match[1], currentNum, diff);
-          return { ...r, rackNo: `${newPfx}${String(newNum).padStart(3, '0')}-${match[3]}` };
+        if (match && match.piece !== null && match.prefix === prefix) {
+          const { prefix: newPfx, num: newNum } = getRackSequence(match.prefix, match.num, diff);
+          return { ...r, rackNo: formatRackCode({ prefix: newPfx, num: newNum, piece: match.piece }, selectedProduct) };
         }
         return r;
       }));
@@ -518,12 +463,11 @@ export default function RacksPage() {
 
         const newRacks: DraftRack[] = [];
         weights.forEach((weight, idx) => {
-          const rackIncrement = Math.floor(idx / 5);
-          const pieceNumber = (idx % 5) + 1;
+          const rackIncrement = Math.floor(idx / PIECES_PER_RACK);
+          const pieceNumber = (idx % PIECES_PER_RACK) + 1;
           const { prefix: seqPfx, num: seqNum } = getRackSequence(prefix, startNum, rackIncrement);
-          const formattedNum = String(seqNum).padStart(3, '0');
           newRacks.push({
-            rackNo: `${seqPfx}${formattedNum}-${pieceNumber}`,
+            rackNo: formatRackCode({ prefix: seqPfx, num: seqNum, piece: pieceNumber }, selectedProduct),
             weight: weight,
             selected: true
           });
@@ -581,33 +525,32 @@ export default function RacksPage() {
   const handleAddManualPiece = () => {
     let newName = "";
     if (draftRacks.length > 0) {
-      const { prefix: pfx, num } = getRackSequence(prefix, startNum, Math.floor(draftRacks.length / 5));
-      newName = `${pfx}${String(num).padStart(3, '0')}-${(draftRacks.length % 5) + 1}`;
+      const { prefix: pfx, num } = getRackSequence(prefix, startNum, Math.floor(draftRacks.length / PIECES_PER_RACK));
+      newName = formatRackCode({ prefix: pfx, num, piece: (draftRacks.length % PIECES_PER_RACK) + 1 }, selectedProduct);
     } else {
       const { prefix: pfx, num } = getRackSequence(prefix, startNum, 0);
-      newName = `${pfx}${String(num).padStart(3, '0')}-1`;
+      newName = formatRackCode({ prefix: pfx, num, piece: 1 }, selectedProduct);
     }
-      
+
     setDraftRacks(prev => [...prev, { rackNo: newName, weight: 0, selected: true }]);
   };
 
   const handleInsertGap = (index: number) => {
     const updated = [...draftRacks];
     if (updated.length === 0) return;
-    
+
     const oldRackNos = updated.map(r => r.rackNo);
-    
+
     // Generate next name for the item pushed to the bottom
     let nextName = "";
     const lastItem = updated[updated.length - 1];
-    const match = lastItem.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-    if (match) {
-      const p = match[1];
-      let rNum = parseInt(match[2], 10);
-      let pNum = parseInt(match[3], 10);
+    const match = parseRackCode(lastItem.rackNo, selectedProduct);
+    if (match && match.piece !== null) {
+      let rNum = match.num;
+      let pNum = match.piece;
       pNum++;
-      if (pNum > 5) { pNum = 1; rNum++; }
-      nextName = `${p}${String(rNum).padStart(match[2].length, '0')}-${pNum}`;
+      if (pNum > PIECES_PER_RACK) { pNum = 1; rNum++; }
+      nextName = formatRackCode({ prefix: match.prefix, num: rNum, piece: pNum }, selectedProduct);
     } else {
       nextName = lastItem.rackNo + "-next";
     }
@@ -637,7 +580,7 @@ export default function RacksPage() {
       const res = await fetch(`${BASE_PATH}/api/users/racks/batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: selectedUserId, racks: racksToAssign }),
+        body: JSON.stringify({ userId: selectedUserId, racks: racksToAssign, productType: selectedProduct }),
       });
       if (res.ok) {
         const remainingRacks = draftRacks.filter(r => !r.selected || r.weight === 0);
@@ -737,7 +680,7 @@ export default function RacksPage() {
     const available = currentAdminPiecesWithGaps.filter((r: any) => !r.isMissingPlaceholder && !r.isUsedUp);
     const grouped: Record<string, string[]> = {};
     for (const r of available) {
-      const baseRack = r.rackNo.split('-')[0];
+      const baseRack = getBaseRackKey(r.rackNo, selectedProduct);
       if (!grouped[baseRack]) grouped[baseRack] = [];
       grouped[baseRack].push(r.id);
     }
@@ -815,7 +758,7 @@ export default function RacksPage() {
       const res = await fetch(`${BASE_PATH}/api/users/racks/shift`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startRackNo: bulkShiftTarget.trim(), direction }),
+        body: JSON.stringify({ startRackNo: bulkShiftTarget.trim(), direction, productType: selectedProduct }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -843,6 +786,7 @@ export default function RacksPage() {
       const payload: any = {
         userId: targetUserId,
         rackNo: manualAddRackNo.trim(),
+        productType: selectedProduct,
       };
       if (manualAddWeight !== "") {
         payload.weight = Number(manualAddWeight);
@@ -870,12 +814,36 @@ export default function RacksPage() {
 
   const selectedUser = users.find(u => u.id === selectedUserId);
   const displayName = (u: any) => u?.nickname || u?.name;
+  const exampleRackNo = formatRackCode({ prefix: "A", num: 5, piece: 3 }, selectedProduct);
+  const productDeletedLogs = deletedLogs.filter((log: any) => (log.productType || DEFAULT_PRODUCT_TYPE) === selectedProduct);
 
   return (
     <div className={styles.container}>
       <div className={styles.header}>
         <h1 className={styles.title}>จัดการชิ้นหมู</h1>
         <p className={styles.subtitle}>จัดสรรชิ้นหมูให้แอดมินและดูแลคลังสินค้า</p>
+      </div>
+
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+        {Object.values(PRODUCT_TYPES).map((p) => (
+          <button
+            key={p.code}
+            type="button"
+            onClick={() => setSelectedProduct(p.code)}
+            style={{
+              background: selectedProduct === p.code ? 'var(--accent-blue)' : 'rgba(255,255,255,0.06)',
+              color: selectedProduct === p.code ? '#fff' : 'var(--text-secondary)',
+              border: selectedProduct === p.code ? 'none' : '1px solid var(--border-color)',
+              padding: '10px 20px',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
       <div className="glass-panel" style={{ padding: '20px 24px', borderRadius: '16px', marginBottom: '24px' }}>
@@ -929,7 +897,7 @@ export default function RacksPage() {
         <ActionCard
           icon="🗑️"
           title="ประวัติการลบ"
-          subtitle={deletedLogs.length > 0 ? `${deletedLogs.length} รายการ` : "ยังไม่มีรายการ"}
+          subtitle={productDeletedLogs.length > 0 ? `${productDeletedLogs.length} รายการ` : "ยังไม่มีรายการ"}
           accent="rgba(139,148,158,0.15)"
           onClick={() => setIsDeletedLogModalOpen(true)}
         />
@@ -951,7 +919,7 @@ export default function RacksPage() {
               <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>สร้างลำดับชิ้นหมูจากไฟล์ Excel</h3>
               {lastPiece && (
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', padding: '8px 12px' }}>
-                  📍 ถาดสุดท้ายในระบบตอนนี้: <strong style={{ color: 'var(--text-primary)' }}>{lastPiece.prefix}{String(lastPiece.num).padStart(3, '0')} ชิ้นที่ {lastPiece.piece}</strong> ({lastPiece.owner}) — ระบบเริ่มให้ที่ {prefix}{String(startNum).padStart(3, '0')} ต่ออัตโนมัติ
+                  📍 ถาดสุดท้ายในระบบตอนนี้: <strong style={{ color: 'var(--text-primary)' }}>{getBaseRackKey(lastPiece.rackNo, selectedProduct)} ชิ้นที่ {lastPiece.piece}</strong> ({lastPiece.owner}) — ระบบเริ่มให้ที่ {getBaseRackKey(formatRackCode({ prefix, num: startNum, piece: 1 }, selectedProduct), selectedProduct)} ต่ออัตโนมัติ
                 </div>
               )}
               <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '12px', alignItems: 'end' }}>
@@ -1068,12 +1036,12 @@ export default function RacksPage() {
                             <option value="">-- เลือก --</option>
                             {centralUser && (
                               <option value={centralUser.id}>
-                                คลังกลาง (เหลือ {centralRacks.reduce((sum: any, r: any) => sum + (!r.isUsedUp ? r.remainingWeight : 0), 0).toFixed(2) || '0.00'} กก.)
+                                คลังกลาง (เหลือ {productCentralRacks.reduce((sum: any, r: any) => sum + (!r.isUsedUp ? r.remainingWeight : 0), 0).toFixed(2) || '0.00'} กก.)
                               </option>
                             )}
                             {users.filter(u => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING").map(u => (
                               <option key={u.id} value={u.id}>
-                                {displayName(u)} (เหลือ {u.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} กก.)
+                                {displayName(u)} (เหลือ {productRacksOf(u).reduce((sum: number, r: any) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2) || '0.00'} กก.)
                               </option>
                             ))}
                           </select>
@@ -1104,10 +1072,9 @@ export default function RacksPage() {
                   {showAdvancedTools && (
                     <div style={{ marginTop: '16px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
                       <datalist id="all-racks-list">
-                        {Array.from(new Set([
-                          ...users.flatMap(u => u.racks?.map(r => r.rackNo) || []),
-                          ...(centralRacks.map((r: any) => r.rackNo) || [])
-                        ])).sort().map(no => <option key={no} value={no} />)}
+                        {Array.from(new Set(
+                          allRacksFlat.filter(r => r.productType === selectedProduct).map(r => r.rackNo)
+                        )).sort().map(no => <option key={no} value={no} />)}
                       </datalist>
                       <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
                         เครื่องมือด้านล่างนี้ใช้เฉพาะกรณีพิเศษ/ฉุกเฉินเท่านั้น ใช้อย่างระมัดระวัง
@@ -1144,7 +1111,7 @@ export default function RacksPage() {
                             <input
                               type="text"
                               className={styles.input}
-                              placeholder="เริ่มจากชิ้น (เช่น A005-3)"
+                              placeholder={`เริ่มจากชิ้น (เช่น ${exampleRackNo})`}
                               value={bulkShiftTarget}
                               onChange={e => setBulkShiftTarget(e.target.value)}
                               list="all-racks-list"
@@ -1193,7 +1160,7 @@ export default function RacksPage() {
                             <input
                               type="text"
                               className={styles.input}
-                              placeholder="รหัสชิ้น (เช่น A005-3)"
+                              placeholder={`รหัสชิ้น (เช่น ${exampleRackNo})`}
                               value={manualAddRackNo}
                               onChange={e => setManualAddRackNo(e.target.value)}
                               list="all-racks-list"
@@ -1244,7 +1211,7 @@ export default function RacksPage() {
                   list="rack-datalist"
                   className={styles.input}
                   style={{ fontSize: '16px', padding: '12px' }}
-                  placeholder="เช่น C001-1"
+                  placeholder={`เช่น ${exampleRackNo}`}
                   value={distributeStartRack}
                   onChange={(e) => setDistributeStartRack(e.target.value)}
                 />
@@ -1256,7 +1223,7 @@ export default function RacksPage() {
                   list="rack-datalist"
                   className={styles.input}
                   style={{ fontSize: '16px', padding: '12px' }}
-                  placeholder="เช่น C050-5"
+                  placeholder={`เช่น ${exampleRackNo}`}
                   value={distributeEndRack}
                   onChange={(e) => setDistributeEndRack(e.target.value)}
                 />
@@ -1271,13 +1238,13 @@ export default function RacksPage() {
             </div>
 
             <datalist id="rack-datalist">
-              {[...centralRacks].sort((a: any, b: any) => {
-                const matchA = a.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
-                const matchB = b.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
+              {[...productCentralRacks].sort((a: any, b: any) => {
+                const matchA = parseRackCode(a.rackNo, selectedProduct);
+                const matchB = parseRackCode(b.rackNo, selectedProduct);
                 if (matchA && matchB) {
-                  if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
-                  if (parseInt(matchA[2]) !== parseInt(matchB[2])) return parseInt(matchA[2]) - parseInt(matchB[2]);
-                  if (matchA[3] && matchB[3]) return parseInt(matchA[3]) - parseInt(matchB[3]);
+                  if (matchA.prefix !== matchB.prefix) return matchA.prefix.localeCompare(matchB.prefix);
+                  if (matchA.num !== matchB.num) return matchA.num - matchB.num;
+                  if (matchA.piece !== null && matchB.piece !== null) return matchA.piece - matchB.piece;
                 }
                 return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
               }).map((r: any) => (
@@ -1301,19 +1268,19 @@ export default function RacksPage() {
                     const count = parseInt(input.value, 10);
                     if (isNaN(count) || count <= 0) return;
                     
-                    const available = [...centralRacks].filter((r: any) => !r.isUsedUp).sort((a: any, b: any) => {
-                      const matchA = a.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
-                      const matchB = b.rackNo.match(/([A-Z]+)(\d+)(?:-(\d+))?/);
+                    const available = [...productCentralRacks].filter((r: any) => !r.isUsedUp).sort((a: any, b: any) => {
+                      const matchA = parseRackCode(a.rackNo, selectedProduct);
+                      const matchB = parseRackCode(b.rackNo, selectedProduct);
                       if (matchA && matchB) {
-                        if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
-                        if (parseInt(matchA[2]) !== parseInt(matchB[2])) return parseInt(matchA[2]) - parseInt(matchB[2]);
-                        if (matchA[3] && matchB[3]) return parseInt(matchA[3]) - parseInt(matchB[3]);
+                        if (matchA.prefix !== matchB.prefix) return matchA.prefix.localeCompare(matchB.prefix);
+                        if (matchA.num !== matchB.num) return matchA.num - matchB.num;
+                        if (matchA.piece !== null && matchB.piece !== null) return matchA.piece - matchB.piece;
                       }
                       return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
                     });
 
                     const grouped = available.reduce((acc: any, curr: any) => {
-                      const baseRack = curr.rackNo.split('-')[0];
+                      const baseRack = getBaseRackKey(curr.rackNo, selectedProduct);
                       if (!acc[baseRack]) acc[baseRack] = [];
                       acc[baseRack].push(curr.id);
                       return acc;
@@ -1349,7 +1316,7 @@ export default function RacksPage() {
               </div>
               <button
                 onClick={() => {
-                  const filteredRacks = centralRacks.filter((r: any) => {
+                  const filteredRacks = productCentralRacks.filter((r: any) => {
                     if (!distributeSearch) return true;
                     const s = distributeSearch.toLowerCase();
                     return r.rackNo.toLowerCase().includes(s) || String(r.remainingWeight).includes(s);
@@ -1374,7 +1341,7 @@ export default function RacksPage() {
             </div>
 
             <div className={styles.rackScrollInner} style={{ flex: 1, overflowY: 'auto', marginBottom: '24px', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', alignContent: 'start' }}>
-              {centralRacks.length === 0 ? (
+              {productCentralRacks.length === 0 ? (
                 <div className={styles.emptyState} style={{ gridColumn: '1 / -1' }}>ไม่มีชิ้นหมูในคลังกลาง</div>
               ) : (
                 centralPiecesWithGaps.map((rack: any) => (
@@ -1538,7 +1505,7 @@ export default function RacksPage() {
             <div className={styles.rackScrollInner} style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignContent: 'start', background: 'rgba(0,0,0,0.2)' }}>
               {!users.find(u => u.id === selectedUserId) && selectedUserId !== currentUser.id ? (
                 <div className={styles.emptyState} style={{ gridColumn: '1 / -1', padding: '40px' }}>เลือกแอดมินเพื่อดูชิ้นหมูของเขา</div>
-              ) : (users.find(u => u.id === selectedUserId)?.racks || (selectedUserId === currentUser.id ? currentUser.racks : [])).length === 0 ? (
+              ) : currentAdminPiecesWithGaps.length === 0 ? (
                 <div className={styles.emptyState} style={{ gridColumn: '1 / -1', padding: '40px' }}>ยังไม่มีชิ้นหมูที่มอบหมาย</div>
               ) : (
                 currentAdminPiecesWithGaps.map((rack: any) => (
@@ -1649,7 +1616,7 @@ export default function RacksPage() {
                 style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
               >✕</button>
             </div>
-            {deletedLogs.length === 0 ? (
+            {productDeletedLogs.length === 0 ? (
               <div className={styles.emptyState} style={{ padding: '40px' }}>ยังไม่มีประวัติการลบ</div>
             ) : (
               <>
@@ -1664,7 +1631,7 @@ export default function RacksPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {deletedLogs.map((log) => (
+                      {productDeletedLogs.map((log) => (
                         <tr key={log.id} style={{ borderTop: '1px solid var(--border-color)' }}>
                           <td style={{ padding: '12px 16px', color: '#fff' }}>
                             {new Date(log.deletedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
@@ -1681,7 +1648,7 @@ export default function RacksPage() {
                 {/* Mobile: stacked cards — a 4-column table is unreadable on a
                     phone, so each deletion gets its own full-width card. */}
                 <div className={`${styles.mobileCardList} ${styles.rackScrollInner}`} style={{ overflowY: 'auto' }}>
-                  {deletedLogs.map((log) => (
+                  {productDeletedLogs.map((log) => (
                     <div key={log.id} className={styles.mobileCard}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ color: '#ffac33', fontWeight: 'bold', fontSize: '15px' }}>{log.rackNo}</span>

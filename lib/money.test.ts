@@ -9,7 +9,35 @@ import {
   isCodPending,
   isExcludedFromRevenue,
   commissionForOrder,
+  getPricePerKg,
 } from "./money";
+
+describe("getPricePerKg", () => {
+  it("returns the PORK_LOIN rate for a PORK_LOIN line item", () => {
+    expect(getPricePerKg("PORK_LOIN", DEFAULT_SETTINGS)).toBe(350);
+  });
+
+  it("returns the PORK_HIP rate for a PORK_HIP line item", () => {
+    expect(getPricePerKg("PORK_HIP", DEFAULT_SETTINGS)).toBe(350);
+  });
+
+  it("returns the PORK rate for a PORK line item", () => {
+    expect(getPricePerKg("PORK", DEFAULT_SETTINGS)).toBe(250);
+  });
+
+  it("defaults to the PORK rate for null/undefined/unrecognized productType", () => {
+    expect(getPricePerKg(null, DEFAULT_SETTINGS)).toBe(250);
+    expect(getPricePerKg(undefined, DEFAULT_SETTINGS)).toBe(250);
+    expect(getPricePerKg("SOMETHING_UNKNOWN", DEFAULT_SETTINGS)).toBe(250);
+  });
+
+  it("respects custom settings, not just the defaults", () => {
+    const custom = { ...DEFAULT_SETTINGS, porkPricePerKg: 260, porkLoinPricePerKg: 400, porkHipPricePerKg: 420 };
+    expect(getPricePerKg("PORK", custom)).toBe(260);
+    expect(getPricePerKg("PORK_LOIN", custom)).toBe(400);
+    expect(getPricePerKg("PORK_HIP", custom)).toBe(420);
+  });
+});
 
 describe("calculateCodAmount", () => {
   it("returns the flat fee at or below the threshold", () => {

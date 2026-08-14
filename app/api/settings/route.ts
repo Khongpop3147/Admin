@@ -54,6 +54,8 @@ const NUMERIC_FIELDS = [
   "codDivisor",
   "codMultiplier",
   "porkPricePerKg",
+  "porkLoinPricePerKg",
+  "porkHipPricePerKg",
 ] as const;
 
 export async function PATCH(req: Request) {

@@ -7,13 +7,15 @@ import { useUser } from "./UserProvider";
 import { useSettings } from "./SettingsProvider";
 import { isSuperAdminRole } from "../lib/roles";
 import { BASE_PATH } from "../lib/basePath";
-import { calculateCodAmount, AppSettings, computeVatAmount, computeActualReceivedAmount } from "../lib/money";
+import { calculateCodAmount, AppSettings, computeVatAmount, computeActualReceivedAmount, getPricePerKg } from "../lib/money";
 import { calculateShippingCost, computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from "../lib/shipping";
 import { computeRackAllocation, MAX_OVER_DEVIATION_KG, MIN_UNDER_DEVIATION_KG, MAX_UNDER_DEVIATION_KG } from "../lib/rackAllocate";
 import { sumUsableSlipAmounts, isTotalAmountMatched, hasAnySlipIssue } from "../lib/slipVerification";
 import { nextDayStr, previousDayStr } from "../lib/packingCutoff";
 import { isValidPhone, isValidZip } from "../lib/addressParse";
 import { formatMoney, getOrderStatusInfo, DetailSection, DetailRow } from "./OrderDetailShared";
+import { getEffectiveItems } from "../lib/orderItems";
+import { PRODUCT_TYPES, DEFAULT_PRODUCT_TYPE, parseRackCode, getBaseRackKeyAuto } from "../lib/rackCode";
 
 interface Order {
   id: string;
@@ -35,32 +37,47 @@ interface RackDetail {
   assignmentId: string;
 }
 
+// One product line within an order — an order is 1+ of these. "AUTO"
+// promotion means "compute this line's price from its product's rate in
+// Settings"; anything else (just "") means the admin types the price by
+// hand for that line, same override capability the old single-item price
+// field used to give at the whole-order level.
+interface OrderLineItem {
+  productType: string;
+  promotion: "AUTO" | "";
+  weightStr: string;
+  priceStr: string;
+  rackDetails: RackDetail[];
+  allocationMode: 'weight' | 'count' | null;
+  desiredPieceCount: string;
+  pieceSortOrder: 'asc' | 'desc';
+  weightSearch: string;
+}
 
-// Shared by both the weight-input flow and the piece-count flow, so price/COD/
-// shipping stay consistent no matter which one drove the allocation.
-function computeWeightDerivedFields(
-  promotion: string,
-  isCod: boolean,
-  shippingMethod: string,
-  weightStr: string,
-  settings: AppSettings
-) {
-  const updates: { crispyPorkWeight: string; price?: string; codAmount?: string; additionalShippingCost?: string } = {
-    crispyPorkWeight: weightStr,
+function makeDefaultLineItem(productType: string): OrderLineItem {
+  return {
+    productType,
+    promotion: "AUTO",
+    weightStr: "",
+    priceStr: "",
+    rackDetails: [],
+    allocationMode: null,
+    desiredPieceCount: "",
+    pieceSortOrder: 'desc',
+    weightSearch: "",
   };
-  const parsedWeight = parseFloat(weightStr);
-  if (isNaN(parsedWeight) || parsedWeight <= 0) return updates;
+}
 
-  if (promotion === "1 kg 250 บาท") {
-    updates.price = (parsedWeight * settings.porkPricePerKg).toFixed(2);
-  }
-  if (isCod) {
-    updates.codAmount = calculateCodAmount(parsedWeight, settings).toFixed(2);
-  }
-  if (shippingMethod === "EMS" || shippingMethod === "NIM Express" || shippingMethod === "ส่งในพื้นที่") {
-    updates.additionalShippingCost = calculateShippingCost(shippingMethod, parsedWeight).toFixed(2);
-  }
-  return updates;
+// Recomputes one line item's price from its own weight/product rate — the
+// per-line replacement for the old single computeWeightDerivedFields, used
+// whenever that line's weight, promotion, or product changes. Only touches
+// price; COD/shipping are order-level (courier boxes by total kg, not by
+// product) and derived separately from the combined weight below.
+function computeItemPrice(item: Pick<OrderLineItem, 'promotion' | 'weightStr' | 'productType' | 'priceStr'>, settings: AppSettings): string {
+  if (item.promotion !== "AUTO") return item.priceStr;
+  const parsedWeight = parseFloat(item.weightStr);
+  if (isNaN(parsedWeight) || parsedWeight <= 0) return item.priceStr;
+  return (parsedWeight * getPricePerKg(item.productType, settings)).toFixed(2);
 }
 
 // Strips everything but digits (dashes, spaces, parens from a pasted "099-
@@ -234,7 +251,6 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     crispyPorkPiece: "",
     crispyPorkWeight: "",
     packedPork: "",
-    promotion: "1 kg 250 บาท",
     price: "",
     shippingMethod: mode === "walkin" ? "รับหน้าร้าน" : "",
     additionalShippingCost: "",
@@ -257,7 +273,16 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
   const isStorefrontMode = mode === "walkin";
   const [formData, setFormData] = useState(initialForm);
-  const [rackDetails, setRackDetails] = useState<RackDetail[]>([]);
+  // One or more product lines making up this order — see OrderLineItem.
+  // formData.crispyPorkWeight/crispyPorkPiece/price are kept in sync as the
+  // SUM across these (see the aggregate effect below) so every downstream
+  // consumer of those 3 fields (VAT/total effect, box-count check, submit
+  // body) keeps working unchanged.
+  const [items, setItems] = useState<OrderLineItem[]>([makeDefaultLineItem(DEFAULT_PRODUCT_TYPE)]);
+  // Which line item the "คลังหมูของฉัน" side panel is currently browsing/
+  // adding pieces into — clamped to a valid index at render time so removing
+  // a line never leaves this pointing past the end of the array.
+  const [sidePanelTargetIndex, setSidePanelTargetIndex] = useState(0);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
   const [filterShippingMethod, setFilterShippingMethod] = useState("");
@@ -312,13 +337,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const [customerSearchInput, setCustomerSearchInput] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [showInventory, setShowInventory] = useState(false);
-  const [insufficientWeight, setInsufficientWeight] = useState(0);
-  const [allocationError, setAllocationError] = useState("");
-  const [weightSearch, setWeightSearch] = useState("");
   const [showOrdersModal, setShowOrdersModal] = useState(false);
-  const [desiredPieceCount, setDesiredPieceCount] = useState("");
-  const [pieceSortOrder, setPieceSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [allocationMode, setAllocationMode] = useState<'weight' | 'count' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { currentUser, users, fetchUsers } = useUser();
@@ -397,20 +416,51 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     }
   }, [formData.price, formData.additionalShippingCost, formData.codAmount]);
 
+  // Keeps the order-level aggregate fields in sync with the sum across line
+  // items — every downstream reader (VAT/total effect above, box-count
+  // check, submit body, the read-only "จำนวนชิ้น" display) keeps working
+  // against these 3 fields exactly as before, unaware there's more than one
+  // product line behind them. Writes to formData (not items), so this can
+  // never self-trigger a loop.
   useEffect(() => {
+    const totalWeight = items.reduce((sum, it) => sum + (parseFloat(it.weightStr) || 0), 0);
+    const totalPieces = items.reduce((sum, it) => sum + it.rackDetails.length, 0);
+    const totalPrice = items.reduce((sum, it) => sum + (parseFloat(it.priceStr) || 0), 0);
+    const weightStr = totalWeight > 0 ? String(Number(totalWeight.toFixed(2))) : "";
+    const priceStr = totalPrice > 0 ? totalPrice.toFixed(2) : "";
+    const pieceStr = String(totalPieces);
     setFormData(prev => {
-      const updates: typeof prev = { ...prev, crispyPorkPiece: rackDetails.length.toString() };
-      // In count-mode the weight (and anything derived from it) isn't a typed
-      // target — it's whatever the currently-selected pieces add up to. Keep it
-      // in sync even if the pieces were tweaked by hand afterward (add/remove).
-      if (allocationMode === 'count') {
-        const totalWeight = Number(rackDetails.reduce((sum, r) => sum + (r.weight || 0), 0).toFixed(2));
-        const weightStr = totalWeight > 0 ? String(totalWeight) : "";
-        Object.assign(updates, computeWeightDerivedFields(prev.promotion, prev.isCod, prev.shippingMethod, weightStr, settings));
-      }
-      return updates;
+      if (prev.crispyPorkWeight === weightStr && prev.crispyPorkPiece === pieceStr && prev.price === priceStr) return prev;
+      return { ...prev, crispyPorkWeight: weightStr, crispyPorkPiece: pieceStr, price: priceStr };
     });
-  }, [rackDetails, allocationMode]);
+  }, [items]);
+
+  // COD/shipping are order-level, not per-line — a courier boxes and
+  // collects cash by total kg regardless of product mix — so they derive
+  // from the combined weight rather than from any one line item. Mirrors
+  // the old handleChange's crispyPorkWeight/shippingMethod branches, just
+  // moved to an effect since weight is no longer a single directly-typed
+  // input. Never touches a value the admin edited by hand otherwise.
+  useEffect(() => {
+    const weight = parseFloat(formData.crispyPorkWeight) || 0;
+    const method = formData.shippingMethod;
+    setFormData(prev => {
+      let additionalShippingCost = prev.additionalShippingCost;
+      if (method === "ส่งในพื้นที่") {
+        additionalShippingCost = calculateShippingCost(method, 0).toFixed(2);
+      } else if ((method === "EMS" || method === "NIM Express") && weight > 0) {
+        additionalShippingCost = calculateShippingCost(method, weight).toFixed(2);
+      } else if (method !== "EMS" && method !== "NIM Express" && method !== "ส่งในพื้นที่") {
+        additionalShippingCost = "";
+      }
+      let codAmount = prev.codAmount;
+      if (prev.isCod && weight > 0) {
+        codAmount = calculateCodAmount(weight, settings).toFixed(2);
+      }
+      if (additionalShippingCost === prev.additionalShippingCost && codAmount === prev.codAmount) return prev;
+      return { ...prev, additionalShippingCost, codAmount };
+    });
+  }, [formData.crispyPorkWeight, formData.shippingMethod, formData.isCod, settings]);
 
   const fetchOrders = async (adminName?: string, date?: string, customerNameSearch?: string) => {
     try {
@@ -442,134 +492,145 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     }
   };
 
-  const autoAllocateRacks = (targetWeight: number) => {
+  const updateItem = (index: number, patch: Partial<OrderLineItem>) => {
+    setItems(prev => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  };
+
+  // Re-derives one item's weight/price from its rackDetails total — used for
+  // every DISCRETE action that changes which pieces are selected (manual
+  // add/remove/change, toggling a piece from the search panel, auto-select-
+  // by-count). Never used for the typing-driven weight flow, which must not
+  // fight the admin's keystrokes (see handleItemWeightChange).
+  const syncItemFromRackDetails = (index: number, newRackDetails: RackDetail[]) => {
+    setItems(prev => prev.map((it, i) => {
+      if (i !== index) return it;
+      const totalWeight = Number(newRackDetails.reduce((sum, r) => sum + (r.weight || 0), 0).toFixed(2));
+      const weightStr = totalWeight > 0 ? String(totalWeight) : "";
+      const priceStr = computeItemPrice({ ...it, weightStr }, settings);
+      return {
+        ...it,
+        rackDetails: newRackDetails,
+        weightStr,
+        priceStr,
+        allocationMode: newRackDetails.length === 0 ? null : it.allocationMode,
+        desiredPieceCount: newRackDetails.length === 0 ? "" : it.desiredPieceCount,
+      };
+    }));
+  };
+
+  const autoAllocateRacksForItem = (index: number, productType: string, targetWeight: number) => {
     if (!currentUser || !currentUser.racks) return;
-    setRackDetails(computeRackAllocation(currentUser.racks as any, targetWeight));
+    const productRacks = currentUser.racks.filter((r: any) => (r.productType || DEFAULT_PRODUCT_TYPE) === productType);
+    updateItem(index, { rackDetails: computeRackAllocation(productRacks as any, targetWeight) });
   };
 
   // Alternative to picking by weight: grab the N lightest or N heaviest
-  // available pieces instead, then derive weight/price/COD/shipping from
+  // available pieces of that item's product, then derive weight/price from
   // whatever that comes out to.
-  const autoAllocateRacksByCount = (count: number, order: 'asc' | 'desc') => {
+  const autoAllocateRacksByCountForItem = (index: number, productType: string, count: number, order: 'asc' | 'desc') => {
     if (!currentUser || !currentUser.racks) return;
 
-    const availableRacks = [...currentUser.racks]
-      .filter((r: any) => !r.isUsedUp && r.remainingWeight > 0)
+    const availableRacks = currentUser.racks
+      .filter((r: any) => (r.productType || DEFAULT_PRODUCT_TYPE) === productType && !r.isUsedUp && r.remainingWeight > 0)
       .sort((a: any, b: any) => order === 'asc' ? a.remainingWeight - b.remainingWeight : b.remainingWeight - a.remainingWeight);
 
     const selected = availableRacks.slice(0, count);
     const newAllocation: RackDetail[] = selected.map((rack: any) => ({
       assignmentId: rack.id,
       rackNo: rack.rackNo,
-      weight: rack.remainingWeight
+      weight: rack.remainingWeight,
     }));
-    // Weight/price/COD/shipping derive from this via the rackDetails-sync effect.
-    setRackDetails(newAllocation);
+    syncItemFromRackDetails(index, newAllocation);
   };
 
-  const handlePieceCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePieceCountChangeForItem = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setDesiredPieceCount(value);
-
+    const productType = items[index].productType;
     const count = parseInt(value, 10);
     if (!isNaN(count) && count > 0) {
-      setAllocationMode('count');
-      autoAllocateRacksByCount(count, pieceSortOrder);
+      updateItem(index, { desiredPieceCount: value, allocationMode: 'count' });
+      autoAllocateRacksByCountForItem(index, productType, count, items[index].pieceSortOrder);
     } else {
-      setAllocationMode(null);
-      setRackDetails([]);
-      setFormData(prev => ({ ...prev, crispyPorkWeight: "" }));
+      updateItem(index, { desiredPieceCount: value, allocationMode: null, rackDetails: [], weightStr: "" });
     }
   };
 
-  const handlePieceSortOrderChange = (order: 'asc' | 'desc') => {
-    setPieceSortOrder(order);
-    const count = parseInt(desiredPieceCount, 10);
+  const handlePieceSortOrderChangeForItem = (index: number, order: 'asc' | 'desc') => {
+    updateItem(index, { pieceSortOrder: order });
+    const item = items[index];
+    const count = parseInt(item.desiredPieceCount, 10);
     if (!isNaN(count) && count > 0) {
-      autoAllocateRacksByCount(count, order);
+      autoAllocateRacksByCountForItem(index, item.productType, count, order);
     }
+  };
+
+  // The one place a line item's weight is directly typed — deliberately
+  // separate from syncItemFromRackDetails (which derives weight FROM the
+  // pieces), since here the typed number is the source of truth and must
+  // never get fought mid-keystroke by a re-derive from whatever the
+  // allocator happened to land on.
+  const handleItemWeightChange = (index: number, value: string) => {
+    const trimmed = value.trim();
+    setItems(prev => prev.map((it, i) => {
+      if (i !== index) return it;
+      const priceStr = computeItemPrice({ ...it, weightStr: value }, settings);
+      return {
+        ...it,
+        weightStr: value,
+        priceStr,
+        allocationMode: trimmed !== "" ? 'weight' : null,
+        desiredPieceCount: trimmed === "" ? "" : it.desiredPieceCount,
+      };
+    }));
+
+    const parsedWeight = parseFloat(trimmed);
+    if (!isNaN(parsedWeight) && parsedWeight > 0) {
+      autoAllocateRacksForItem(index, items[index].productType, parsedWeight);
+    } else {
+      updateItem(index, { rackDetails: [] });
+    }
+  };
+
+  const handleItemPromotionChange = (index: number, promotion: "AUTO" | "") => {
+    const item = items[index];
+    const priceStr = computeItemPrice({ ...item, promotion }, settings);
+    updateItem(index, { promotion, priceStr });
+  };
+
+  const handleItemProductChange = (index: number, productType: string) => {
+    const item = items[index];
+    const priceStr = computeItemPrice({ ...item, productType }, settings);
+    // Clears any already-picked pieces — they belong to the old product and
+    // would silently mismatch this line's new one otherwise.
+    updateItem(index, { productType, priceStr, rackDetails: [], allocationMode: null, desiredPieceCount: "" });
+  };
+
+  const addLineItem = () => {
+    setItems(prev => {
+      const usedTypes = new Set(prev.map(it => it.productType));
+      const nextType = Object.keys(PRODUCT_TYPES).find(t => !usedTypes.has(t)) || DEFAULT_PRODUCT_TYPE;
+      return [...prev, makeDefaultLineItem(nextType)];
+    });
+  };
+
+  const removeLineItem = (index: number) => {
+    setItems(prev => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+    setSidePanelTargetIndex(prev => Math.max(0, prev >= index ? prev - 1 : prev));
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const target = e.target as HTMLInputElement;
     const name = target.name;
     const value = target.type === 'checkbox' ? target.checked : target.value;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
 
+  const handleIsCodChange = (checked: boolean) => {
     setFormData(prev => {
-      const newData = { ...prev, [name]: value };
-
-      // Auto-calculate price if promotion is "1 kg 250 บาท"
-      if (name === "crispyPorkWeight" || name === "promotion") {
-        const promo = name === "promotion" ? value : newData.promotion;
-        const weightStr = name === "crispyPorkWeight" ? value : newData.crispyPorkWeight;
-
-        if (promo === "1 kg 250 บาท") {
-          const parsedWeight = parseFloat(String(weightStr));
-          if (!isNaN(parsedWeight) && parsedWeight > 0) {
-            newData.price = (parsedWeight * settings.porkPricePerKg).toFixed(2);
-          }
-        }
-      }
-
-      // Auto-calculate COD based on weight and isCod
-      if (name === "crispyPorkWeight" || name === "isCod") {
-        const weightStr = name === "crispyPorkWeight" ? value : newData.crispyPorkWeight;
-        const parsedWeight = parseFloat(weightStr as string);
-        const applyCod = name === "isCod" ? value : newData.isCod;
-
-        if (applyCod && !isNaN(parsedWeight) && parsedWeight > 0) {
-          newData.codAmount = calculateCodAmount(parsedWeight, settings).toFixed(2);
-        } else if (name === "isCod" && !applyCod) {
-          newData.codAmount = "";
-        }
-      }
-
-      // Ticking "เก็บเงินปลายทาง" reflects straight into payment status too —
-      // it's neither unpaid nor paid yet, it's specifically COD.
-      if (name === "isCod") {
-        if (value) {
-          newData.paymentStatus = "COD";
-        } else if (newData.paymentStatus === "COD") {
-          newData.paymentStatus = "";
-        }
-      }
-
-      // Auto-calculate Shipping Cost for EMS, NIM Express & local delivery
-      if (name === "crispyPorkWeight" || name === "shippingMethod") {
-        const weightStr = name === "crispyPorkWeight" ? value : newData.crispyPorkWeight;
-        const method = name === "shippingMethod" ? value : newData.shippingMethod;
-        const parsedWeight = parseFloat(weightStr as string);
-
-        if (method === "ส่งในพื้นที่") {
-          // Flat rate — doesn't depend on weight, so it fills in as soon as
-          // the method is picked instead of waiting for a weight to be typed.
-          newData.additionalShippingCost = calculateShippingCost(method, 0).toFixed(2);
-        } else if ((method === "EMS" || method === "NIM Express") && !isNaN(parsedWeight) && parsedWeight > 0) {
-          newData.additionalShippingCost = calculateShippingCost(method, parsedWeight).toFixed(2);
-        } else if (name === "shippingMethod" && method !== "EMS" && method !== "NIM Express" && method !== "ส่งในพื้นที่") {
-          newData.additionalShippingCost = "";
-        }
-      }
-
-      return newData;
+      const next = { ...prev, isCod: checked, paymentStatus: checked ? "COD" : (prev.paymentStatus === "COD" ? "" : prev.paymentStatus) };
+      if (!checked) next.codAmount = "";
+      return next;
     });
-
-    if (name === "crispyPorkWeight") {
-      const trimmed = String(value).trim();
-      setAllocationMode(trimmed !== "" ? 'weight' : null);
-      if (trimmed === "") {
-        setDesiredPieceCount("");
-      }
-
-      const parsedWeight = parseFloat(trimmed);
-      if (!isNaN(parsedWeight) && parsedWeight > 0) {
-        autoAllocateRacks(parsedWeight);
-      } else {
-        setRackDetails([]);
-        setInsufficientWeight(0);
-        setAllocationError("");
-      }
-    }
   };
 
   // Best-effort check via Thunder Solution — never blocks saving the order,
@@ -846,6 +907,11 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const editHasAnySlipUploaded = !!editOrderData?.transferSlip || editExtraSlips.length > 0;
   const editSlipAmountMismatch = editHasAnySlipUploaded && editExpectedPaymentTotal > 0 && !isTotalAmountMatched(editTotalVerifiedSlipAmount, editExpectedPaymentTotal);
   const editHasSlipIssue = hasAnySlipIssue(editAllSlipResults) || editSlipAmountMismatch;
+  // Orders with 2+ product lines get per-item weight/price edit rows
+  // instead of the flat weight/piece/price inputs — editing the flat
+  // aggregate directly would have nowhere sensible to redistribute back
+  // into the underlying items.
+  const isMultiItemEdit = (editOrderData?.items?.length ?? 0) > 1;
 
   const handleSaveOrderEdit = async () => {
     if (!editOrderData) return;
@@ -866,9 +932,9 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
           customerPhone: editOrderData.customerPhone,
           customerZip: editOrderData.customerZip,
           needsTaxInvoice: editOrderData.needsTaxInvoice,
-          price: editOrderData.price,
-          crispyPorkWeight: editOrderData.crispyPorkWeight,
-          crispyPorkPiece: editOrderData.crispyPorkPiece,
+          ...(isMultiItemEdit
+            ? { items: editOrderData.items.map((it: any) => ({ id: it.id, weight: it.weight, pieceCount: it.pieceCount, price: it.price })) }
+            : { price: editOrderData.price, crispyPorkWeight: editOrderData.crispyPorkWeight, crispyPorkPiece: editOrderData.crispyPorkPiece }),
           codAmount: editOrderData.codAmount,
           trackingNumber: editOrderData.trackingNumber,
           adminNote: combinedAdminNote,
@@ -901,96 +967,61 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     }
   };
 
-  // Manual add/remove/edit of a piece is a discrete click, never mid-keystroke
-  // into the weight field, so it's always safe here to re-derive weight/price/
-  // COD/shipping from the pieces actually selected — unlike the typing-driven
-  // auto-allocate flow in handleChange, which must NOT be touched this way
-  // (it would fight the user's typing on every keystroke).
-  const syncFormDataToRackTotal = (newRackDetails: RackDetail[]) => {
-    const totalWeight = Number(newRackDetails.reduce((sum, r) => sum + (r.weight || 0), 0).toFixed(2));
-    const weightStr = totalWeight > 0 ? String(totalWeight) : "";
-    setFormData(prev => ({
-      ...prev,
-      crispyPorkPiece: newRackDetails.length.toString(),
-      ...computeWeightDerivedFields(prev.promotion, prev.isCod, prev.shippingMethod, weightStr, settings),
-    }));
-    // Nothing selected anymore — release the weight/count lock so either
-    // method can be picked fresh, instead of staying stuck on whichever mode
-    // was used before everything got manually removed.
-    if (newRackDetails.length === 0) {
-      setAllocationMode(null);
-      setDesiredPieceCount("");
-    }
+  const handleAddManualRackForItem = (index: number) => {
+    const updated = [...items[index].rackDetails, { assignmentId: "", rackNo: "", weight: 0 }];
+    syncItemFromRackDetails(index, updated);
   };
 
-  const handleAddManualRack = () => {
-    const updated = [...rackDetails, { assignmentId: "", rackNo: "", weight: 0 }];
-    setRackDetails(updated);
-    syncFormDataToRackTotal(updated);
-  };
-
-  const handleManualRackChange = (index: number, field: keyof RackDetail, value: string | number) => {
-    const updated = [...rackDetails];
+  const handleManualRackChangeForItem = (index: number, rackIdx: number, field: keyof RackDetail, value: string | number) => {
+    const updated = [...items[index].rackDetails];
     if (field === "assignmentId") {
       const selected = currentUser?.racks?.find((r: any) => r.id === value) as any;
-      if (selected) {
-        updated[index].assignmentId = selected.id;
-        updated[index].rackNo = selected.rackNo;
-        updated[index].weight = selected.remainingWeight;
-      } else {
-        updated[index].assignmentId = "";
-        updated[index].rackNo = "";
-        updated[index].weight = 0;
-      }
+      updated[rackIdx] = selected
+        ? { assignmentId: selected.id, rackNo: selected.rackNo, weight: selected.remainingWeight }
+        : { assignmentId: "", rackNo: "", weight: 0 };
     } else if (field === "weight") {
-      updated[index].weight = Number(value);
+      updated[rackIdx] = { ...updated[rackIdx], weight: Number(value) };
     }
-    setRackDetails(updated);
-    syncFormDataToRackTotal(updated);
+    syncItemFromRackDetails(index, updated);
   };
 
-  const handleRemoveRack = (index: number) => {
-    const updated = rackDetails.filter((_, i) => i !== index);
-    setRackDetails(updated);
-    syncFormDataToRackTotal(updated);
+  const handleRemoveRackForItem = (index: number, rackIdx: number) => {
+    const updated = items[index].rackDetails.filter((_, i) => i !== rackIdx);
+    syncItemFromRackDetails(index, updated);
   };
 
   // Lets a search result row itself act as the "add to order" control — click
   // once to add the piece, click again to take it back out.
-  const handleTogglePieceInOrder = (piece: any) => {
-    const exists = rackDetails.some(r => r.assignmentId === piece.id);
+  const handleTogglePieceInOrderForItem = (index: number, piece: any) => {
+    const item = items[index];
+    const exists = item.rackDetails.some(r => r.assignmentId === piece.id);
 
     if (exists) {
       // Removing always falls back to the normal "derive weight/price from
       // whatever's actually selected" behavior, same as any other manual edit.
-      const updated = rackDetails.filter(r => r.assignmentId !== piece.id);
-      setRackDetails(updated);
-      syncFormDataToRackTotal(updated);
+      syncItemFromRackDetails(index, item.rackDetails.filter(r => r.assignmentId !== piece.id));
       return;
     }
 
-    const updated = [...rackDetails, { assignmentId: piece.id, rackNo: piece.rackNo, weight: piece.remainingWeight }];
-    setRackDetails(updated);
+    const updated = [...item.rackDetails, { assignmentId: piece.id, rackNo: piece.rackNo, weight: piece.remainingWeight }];
 
     // Picking a piece off the "หาชิ้นหมูใกล้เคียงน้ำหนัก" search results is
     // choosing "close enough" on purpose, not a request to bill the customer
-    // for whatever that specific piece happens to weigh — pin the order's
+    // for whatever that specific piece happens to weigh — pin this item's
     // weight/price to the number that was searched for instead of the real
-    // piece total. targetWeight then no longer equals totalAllocated, which
-    // is exactly what makes the derivedAdminNote/derivedWarning block below
-    // (already comparing those two) surface "เกินมา/ขาดอีก X กก." for
-    // Packing on its own — nothing extra to do here for that part.
-    const searchTarget = parseFloat(weightSearch);
-    const hasActiveSearch = weightSearch !== "" && !isNaN(searchTarget) && searchTarget > 0;
+    // piece total. targetWeight then no longer equals the allocated total,
+    // which is exactly what makes the shortage/overage note below (already
+    // comparing those two) surface "เกินมา/ขาดอีก X กก." for Packing on its
+    // own — nothing extra to do here for that part.
+    const searchTarget = parseFloat(item.weightSearch);
+    const hasActiveSearch = item.weightSearch !== "" && !isNaN(searchTarget) && searchTarget > 0;
 
     if (hasActiveSearch) {
-      setFormData(prev => ({
-        ...prev,
-        crispyPorkPiece: updated.length.toString(),
-        ...computeWeightDerivedFields(prev.promotion, prev.isCod, prev.shippingMethod, String(searchTarget), settings),
-      }));
+      const weightStr = String(searchTarget);
+      const priceStr = computeItemPrice({ ...item, weightStr }, settings);
+      updateItem(index, { rackDetails: updated, weightStr, priceStr });
     } else {
-      syncFormDataToRackTotal(updated);
+      syncItemFromRackDetails(index, updated);
     }
   };
 
@@ -1017,11 +1048,13 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
       return;
     }
 
-    // Validation
-    const requestedWeight = parseFloat(formData.crispyPorkWeight);
-
     const slipIssueNote = combinedHasSlipIssue && slipIssueReason ? `[หมายเหตุสลิป: ${slipIssueReason}]` : "";
     const combinedAdminNote = [derivedAdminNote, slipIssueNote].filter(Boolean).join(" ");
+
+    // Drop any line the admin added but never actually filled in (e.g.
+    // clicked "+ เพิ่มสินค้าอีกชนิด" then changed their mind) so an empty
+    // second line never creates a zero-weight OrderItem row.
+    const itemsToSubmit = items.filter(it => (parseFloat(it.weightStr) || 0) > 0 || it.rackDetails.length > 0);
 
     setIsLoading(true);
     try {
@@ -1032,7 +1065,14 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
           ...formData,
           orderStatus: isStorefrontMode ? "Completed" : formData.orderStatus,
           adminNote: combinedAdminNote,
-          rackDetails: JSON.stringify(rackDetails),
+          rackDetails: JSON.stringify(items.flatMap(it => it.rackDetails)),
+          items: itemsToSubmit.map(it => ({
+            productType: it.productType,
+            weight: parseFloat(it.weightStr) || 0,
+            pieceCount: it.rackDetails.length || null,
+            price: parseFloat(it.priceStr) || 0,
+            pricePerKg: getPricePerKg(it.productType, settings),
+          })),
           extraSlipUrls: extraSlips.map(s => s.url).filter(Boolean),
           bypassDuplicateCheck,
         }),
@@ -1058,9 +1098,8 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
             ? { ...initialForm, customerName: "ลูกค้าหน้าร้าน", platform: "Storefront", shippingMethod: "รับหน้าร้าน", paymentStatus: "Paid", sellerName: currentUser?.name || "" }
             : { ...initialForm, sellerName: currentUser?.name || "" }
         );
-        setRackDetails([]);
-        setDesiredPieceCount("");
-        setAllocationMode(null);
+        setItems([makeDefaultLineItem(DEFAULT_PRODUCT_TYPE)]);
+        setSidePanelTargetIndex(0);
         setAlertData({ show: false, message: "", customerName: "" });
         setSlipVerification(null);
         setSlipIssueReason("");
@@ -1117,9 +1156,6 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     handleSubmit(fakeEvent, true);
   };
 
-  const totalAllocated = Number(rackDetails.reduce((sum, r) => sum + r.weight, 0).toFixed(2));
-  const targetWeight = parseFloat(formData.crispyPorkWeight) || 0;
-
   // Combined across the primary slip and every extra one — a customer who
   // paid in two transfers has their amounts summed and checked against the
   // order total together, rather than each slip needing to match the full
@@ -1136,23 +1172,32 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   // close enough" too, same as nothing being available) — flag whichever
   // direction it landed in so the admin always sees exactly how far off it
   // is, and why nothing got picked when picking was impossible within that
-  // tolerance.
-  let derivedAdminNote = "";
-  let derivedWarning = "";
-  if (targetWeight > 0 && rackDetails.length > 0 && totalAllocated !== targetWeight) {
-    const diff = Number((targetWeight - totalAllocated).toFixed(2));
-    if (diff > 0) {
-      derivedAdminNote = `หมูในคลังไม่พอดี ขาดอีก ${diff} กก.`;
-      derivedWarning = `⚠️ หมูในคลังไม่พอดี ขาดอีก ${diff} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
-    } else {
+  // tolerance. Computed per line item, then combined below — the PORK line
+  // deliberately keeps the exact original wording ("หมูในคลังไม่พอดี...",
+  // no product name inserted) so lib/porkSlip.ts's extractShortageNote
+  // regex, which predates multi-item orders, keeps matching the common
+  // single-PORK-item case unchanged.
+  const itemNotes = items.map((item) => {
+    const itemTargetWeight = parseFloat(item.weightStr) || 0;
+    const itemAllocated = Number(item.rackDetails.reduce((sum, r) => sum + r.weight, 0).toFixed(2));
+    const label = item.productType === DEFAULT_PRODUCT_TYPE ? "หมู" : (PRODUCT_TYPES[item.productType]?.label || item.productType);
+    if (itemTargetWeight > 0 && item.rackDetails.length > 0 && itemAllocated !== itemTargetWeight) {
+      const diff = Number((itemTargetWeight - itemAllocated).toFixed(2));
+      if (diff > 0) {
+        return { adminNote: `${label}ในคลังไม่พอดี ขาดอีก ${diff} กก.`, warning: `⚠️ ${label}ในคลังไม่พอดี ขาดอีก ${diff} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ` };
+      }
       const over = Math.abs(diff);
-      derivedAdminNote = `หมูในคลังไม่พอดี เกินมา ${over} กก.`;
-      derivedWarning = `⚠️ หมูในคลังไม่พอดี เกินมา ${over} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ`;
+      return { adminNote: `${label}ในคลังไม่พอดี เกินมา ${over} กก.`, warning: `⚠️ ${label}ในคลังไม่พอดี เกินมา ${over} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ` };
     }
-  } else if (targetWeight > 0 && rackDetails.length === 0) {
-    derivedAdminNote = `ไม่มีชิ้นหมูที่ใกล้เคียงพอ ขาดอีก ${targetWeight} กก.`;
-    derivedWarning = `⚠️ ไม่มีชิ้นหมูในคลังที่น้ำหนักใกล้เคียงกับที่ต้องการมากพอ (ต้องเกินไม่เกิน ${MAX_OVER_DEVIATION_KG} กก. หรือขาดอยู่ในช่วง ${MIN_UNDER_DEVIATION_KG}-${MAX_UNDER_DEVIATION_KG} กก.) — กรุณาเลือกชิ้นหมูเองด้านล่าง หรือปรับน้ำหนักที่ต้องการ`;
-  }
+    if (itemTargetWeight > 0 && item.rackDetails.length === 0) {
+      return {
+        adminNote: `ไม่มีชิ้น${label}ที่ใกล้เคียงพอ ขาดอีก ${itemTargetWeight} กก.`,
+        warning: `⚠️ ไม่มีชิ้น${label}ในคลังที่น้ำหนักใกล้เคียงกับที่ต้องการมากพอ (ต้องเกินไม่เกิน ${MAX_OVER_DEVIATION_KG} กก. หรือขาดอยู่ในช่วง ${MIN_UNDER_DEVIATION_KG}-${MAX_UNDER_DEVIATION_KG} กก.) — กรุณาเลือกชิ้นหมูเองด้านล่าง หรือปรับน้ำหนักที่ต้องการ`,
+      };
+    }
+    return null;
+  });
+  const derivedAdminNote = itemNotes.map(n => n?.adminNote).filter(Boolean).join(" / ");
 
   if (currentUser?.role === "PACKING" || currentUser?.role === "STOREFRONT") return null;
 
@@ -1325,30 +1370,29 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                       type="number"
                       step="0.01"
                       min="0"
-                      name="crispyPorkWeight"
-                      value={formData.crispyPorkWeight}
-                      onChange={handleChange}
+                      value={items[0].weightStr}
+                      onChange={(e) => handleItemWeightChange(0, e.target.value)}
                       className={styles.input}
                       placeholder="เช่น 1.5"
                     />
                   </div>
-                  {derivedWarning && (
+                  {itemNotes[0]?.warning && (
                     <div style={{ color: '#ffac33', fontSize: '12px', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span style={{ fontSize: '14px' }}>⚠️</span> {derivedWarning}
+                      <span style={{ fontSize: '14px' }}>⚠️</span> {itemNotes[0].warning}
                     </div>
                   )}
-                  {rackDetails.length === 0 ? (
+                  {items[0].rackDetails.length === 0 ? (
                     <p style={{ fontSize: '13px', color: '#ff6b6b', margin: '4px 0 0 0' }}>⚠️ ยังไม่ได้เลือกชิ้นที่ขาย — เลือกจากรายการ "คลังหมูของฉัน" ด้านขวา หรือพิมพ์น้ำหนักด้านบน</p>
                   ) : (
                     <>
                       <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--accent-green)', margin: '4px 0 0 0' }}>
-                        {totalAllocated} กก. ({rackDetails.length} ชิ้น)
+                        {Number(items[0].rackDetails.reduce((sum, r) => sum + r.weight, 0).toFixed(2))} กก. ({items[0].rackDetails.length} ชิ้น)
                       </p>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
-                        {rackDetails.map((rack, index) => (
-                          <span key={index} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(88,166,255,0.15)', border: '1px solid var(--accent-blue)', borderRadius: '999px', padding: '6px 10px', fontSize: '13px' }}>
+                        {items[0].rackDetails.map((rack, rackIdx) => (
+                          <span key={rackIdx} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(88,166,255,0.15)', border: '1px solid var(--accent-blue)', borderRadius: '999px', padding: '6px 10px', fontSize: '13px' }}>
                             {rack.weight} กก.
-                            <button type="button" onClick={() => handleRemoveRack(index)} style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+                            <button type="button" onClick={() => handleRemoveRackForItem(0, rackIdx)} style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
                           </span>
                         ))}
                       </div>
@@ -1357,177 +1401,204 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 </div>
               ) : (
                 <>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>น้ำหนักหมูกรอบ (กก.) <span style={{ color: '#ff6b6b' }}>*</span></label>
-                <input
-                  required
-                  type="number"
-                  step="0.01"
-                  name="crispyPorkWeight"
-                  value={formData.crispyPorkWeight}
-                  onChange={handleChange}
-                  className={styles.input}
-                  placeholder="เช่น 1.5"
-                  disabled={allocationMode === 'count'}
-                  style={{ opacity: allocationMode === 'count' ? 0.5 : 1 }}
-                />
-                {derivedWarning && (
-                  <div style={{ color: '#ffac33', fontSize: '12px', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontSize: '14px' }}>⚠️</span> {derivedWarning}
-                  </div>
-                )}
-                {computeBoxCount(parseFloat(formData.crispyPorkWeight) || 0) > 1 && (
-                  <div style={{ color: '#ffac33', fontSize: '12px', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontSize: '14px' }}>📦</span> น้ำหนักเกิน {MAX_WEIGHT_PER_BOX_KG} กก. ต่อกล่อง — ต้องแบ่งเป็น {computeBoxCount(parseFloat(formData.crispyPorkWeight) || 0)} กล่อง (แต่ละกล่องได้เลข track แยกกัน)
-                  </div>
-                )}
-              </div>
+                  {items.map((item, index) => {
+                    const itemTotalAllocated = Number(item.rackDetails.reduce((sum, r) => sum + r.weight, 0).toFixed(2));
+                    const itemTargetWeight = parseFloat(item.weightStr) || 0;
+                    const productLabel = PRODUCT_TYPES[item.productType]?.label || item.productType;
+                    return (
+                      <div key={index} style={{ gridColumn: '1 / -1', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>สินค้า:</span>
+                            <select
+                              value={item.productType}
+                              onChange={(e) => handleItemProductChange(index, e.target.value)}
+                              className={styles.input}
+                              style={{ maxWidth: '220px' }}
+                            >
+                              {Object.values(PRODUCT_TYPES).map(p => <option key={p.code} value={p.code}>{p.label}</option>)}
+                            </select>
+                          </div>
+                          {items.length > 1 && (
+                            <button type="button" onClick={() => removeLineItem(index)} style={{ background: 'rgba(255,107,107,0.15)', border: '1px solid rgba(255,107,107,0.4)', color: '#ff6b6b', cursor: 'pointer', borderRadius: '6px', padding: '4px 10px', fontSize: '12px' }}>
+                                ✕ เอาออก
+                              </button>
+                            )}
+                        </div>
 
-              <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
-                <label className={styles.label}>หรือเลือกจากจำนวนชิ้น (แทนการกรอกน้ำหนัก)</label>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <input
-                    type="number"
-                    min="0"
-                    value={desiredPieceCount}
-                    onChange={handlePieceCountChange}
-                    className={styles.input}
-                    placeholder="จำนวนชิ้น"
-                    disabled={allocationMode === 'weight'}
-                    style={{ maxWidth: '160px', opacity: allocationMode === 'weight' ? 0.5 : 1 }}
-                  />
-                  <select
-                    value={pieceSortOrder}
-                    onChange={(e) => handlePieceSortOrderChange(e.target.value as 'asc' | 'desc')}
-                    className={styles.input}
-                    disabled={allocationMode === 'weight'}
-                    style={{ maxWidth: '220px', opacity: allocationMode === 'weight' ? 0.5 : 1 }}
-                  >
-                    <option value="desc">เอาน้ำหนักมากไปน้อย</option>
-                    <option value="asc">เอาน้ำหนักน้อยไปมาก</option>
-                  </select>
-                </div>
-                {allocationMode === 'count' && (
-                  <div style={{ fontSize: '12px', marginTop: '8px' }}>
-                    {rackDetails.length > 0 ? (
-                      <span style={{ color: 'var(--accent-green)' }}>
-                        น้ำหนักรวม {formData.crispyPorkWeight || 0} กก. ({rackDetails.length} ชิ้น)
-                      </span>
-                    ) : (
-                      <span style={{ color: '#ff6b6b' }}>⚠️ ไม่มีชิ้นหมูในคลังให้เลือก</span>
-                    )}
-                    {Number(desiredPieceCount) > rackDetails.length && rackDetails.length > 0 && (
-                      <span style={{ color: '#ffac33', marginLeft: '8px' }}>
-                        (ขอ {desiredPieceCount} ชิ้น แต่ในคลังมีให้แค่ {rackDetails.length} ชิ้น)
-                      </span>
-                    )}
-                  </div>
-                )}
-                {allocationMode === 'weight' && (
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>
-                    ลบน้ำหนักด้านบนออกก่อน ถ้าจะเลือกตามจำนวนชิ้นแทน
-                  </div>
-                )}
-              </div>
+                        <div className={styles.formGroup}>
+                          <label className={styles.label}>น้ำหนัก{productLabel} (กก.) <span style={{ color: '#ff6b6b' }}>*</span></label>
+                          <input
+                            required
+                            type="number"
+                            step="0.01"
+                            value={item.weightStr}
+                            onChange={(e) => handleItemWeightChange(index, e.target.value)}
+                            className={styles.input}
+                            placeholder="เช่น 1.5"
+                            disabled={item.allocationMode === 'count'}
+                            style={{ opacity: item.allocationMode === 'count' ? 0.5 : 1 }}
+                          />
+                          {itemNotes[index]?.warning && (
+                            <div style={{ color: '#ffac33', fontSize: '12px', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '14px' }}>⚠️</span> {itemNotes[index]!.warning}
+                            </div>
+                          )}
+                        </div>
 
-              <div className={styles.formGroup}>
-                <label className={styles.label}>จำนวนชิ้นหมูกรอบ</label>
-                <input
-                  type="number"
-                  name="crispyPorkPiece"
-                  value={formData.crispyPorkPiece}
-                  className={styles.input}
-                  placeholder="จำนวนชิ้น"
-                  min="0"
-                  readOnly
-                  style={{ opacity: 0.7 }}
-                />
-              </div>
+                        <div className={styles.formGroup}>
+                          <label className={styles.label}>หรือเลือกจากจำนวนชิ้น (แทนการกรอกน้ำหนัก)</label>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.desiredPieceCount}
+                              onChange={(e) => handlePieceCountChangeForItem(index, e)}
+                              className={styles.input}
+                              placeholder="จำนวนชิ้น"
+                              disabled={item.allocationMode === 'weight'}
+                              style={{ maxWidth: '160px', opacity: item.allocationMode === 'weight' ? 0.5 : 1 }}
+                            />
+                            <select
+                              value={item.pieceSortOrder}
+                              onChange={(e) => handlePieceSortOrderChangeForItem(index, e.target.value as 'asc' | 'desc')}
+                              className={styles.input}
+                              disabled={item.allocationMode === 'weight'}
+                              style={{ maxWidth: '220px', opacity: item.allocationMode === 'weight' ? 0.5 : 1 }}
+                            >
+                              <option value="desc">เอาน้ำหนักมากไปน้อย</option>
+                              <option value="asc">เอาน้ำหนักน้อยไปมาก</option>
+                            </select>
+                          </div>
+                          {item.allocationMode === 'count' && (
+                            <div style={{ fontSize: '12px', marginTop: '8px' }}>
+                              {item.rackDetails.length > 0 ? (
+                                <span style={{ color: 'var(--accent-green)' }}>
+                                  น้ำหนักรวม {item.weightStr || 0} กก. ({item.rackDetails.length} ชิ้น)
+                                </span>
+                              ) : (
+                                <span style={{ color: '#ff6b6b' }}>⚠️ ไม่มีชิ้น{productLabel}ในคลังให้เลือก</span>
+                              )}
+                              {Number(item.desiredPieceCount) > item.rackDetails.length && item.rackDetails.length > 0 && (
+                                <span style={{ color: '#ffac33', marginLeft: '8px' }}>
+                                  (ขอ {item.desiredPieceCount} ชิ้น แต่ในคลังมีให้แค่ {item.rackDetails.length} ชิ้น)
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {item.allocationMode === 'weight' && (
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                              ลบน้ำหนักด้านบนออกก่อน ถ้าจะเลือกตามจำนวนชิ้นแทน
+                            </div>
+                          )}
+                        </div>
 
-              {/* Rack Allocation UI */}
-              <div className={styles.formGroup} style={{ gridColumn: '1 / -1', background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <label className={styles.label} style={{ marginBottom: 0 }}>ชิ้นหมูที่ใช้ในออเดอร์นี้</label>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', color: totalAllocated < targetWeight ? '#ff6b6b' : 'var(--accent-green)' }}>
-                      จัดแล้ว {totalAllocated} / {targetWeight} กก.
-                    </span>
-                  </div>
-                </div>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 12px 0' }}>
-                  ระบบเลือกชิ้นหมูจากคลังให้อัตโนมัติตามน้ำหนักที่กรอกด้านบน ถ้าต้องการแก้ไขเอง กด "เลือกชิ้นหมู" เพื่อเปลี่ยน หรือลบ/เพิ่มรายการได้
-                </p>
+                        {/* Rack Allocation UI */}
+                        <div className={styles.formGroup} style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <label className={styles.label} style={{ marginBottom: 0 }}>ชิ้น{productLabel}ที่ใช้</label>
+                            <span style={{ fontSize: '12px', color: itemTotalAllocated < itemTargetWeight ? '#ff6b6b' : 'var(--accent-green)' }}>
+                              จัดแล้ว {itemTotalAllocated} / {itemTargetWeight} กก.
+                            </span>
+                          </div>
+                          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 12px 0' }}>
+                            ระบบเลือกชิ้นจากคลังให้อัตโนมัติตามน้ำหนักที่กรอกด้านบน ถ้าต้องการแก้ไขเอง กด "เลือกชิ้นหมู" เพื่อเปลี่ยน หรือลบ/เพิ่มรายการได้
+                          </p>
 
-                <>
-                  {rackDetails.map((rack, index) => (
-                    <div key={index} className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 100px auto', gap: '8px', marginBottom: '8px' }}>
-                      <select
-                        className={styles.input}
-                        value={rack.assignmentId}
-                        onChange={(e) => handleManualRackChange(index, "assignmentId", e.target.value)}
-                      >
-                        <option value="">-- เลือกชิ้นหมู --</option>
-                        {[...(currentUser?.racks || [])]
-                          .filter((r: any) => !r.isUsedUp || r.id === rack.assignmentId)
-                          .sort((a: any, b: any) => {
-                            const matchA = a.rackNo.match(/([A-Z]+)(\d+)-(\d+)/);
-                            const matchB = b.rackNo.match(/([A-Z]+)(\d+)-(\d+)/);
-                            if (matchA && matchB) {
-                              if (matchA[1] !== matchB[1]) return matchA[1].localeCompare(matchB[1]);
-                              if (parseInt(matchA[2]) !== parseInt(matchB[2])) return parseInt(matchA[2]) - parseInt(matchB[2]);
-                              return parseInt(matchA[3]) - parseInt(matchB[3]);
-                            }
-                            return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
-                          })
-                          .map((r: any) => (
-                          <option key={r.id} value={r.id}>
-                            {r.rackNo} (avail: {parseFloat(Number(r.remainingWeight).toFixed(2))}kg)
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        step="0.01"
-                        className={styles.input}
-                        value={rack.weight || ""}
-                        readOnly
-                        style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}
-                        placeholder="kg"
-                        title="ห้ามย่อยขาย (Force whole piece)"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRack(index)}
-                        title="ลบชิ้นนี้ออกจากออเดอร์"
-                        style={{
-                          background: 'rgba(255,107,107,0.15)',
-                          border: '1px solid rgba(255,107,107,0.4)',
-                          color: '#ff6b6b',
-                          cursor: 'pointer',
-                          borderRadius: '8px',
-                          width: '44px',
-                          fontSize: '20px',
-                          fontWeight: 'bold',
-                        }}
-                      >✕</button>
+                          {item.rackDetails.map((rack, rackIdx) => (
+                            <div key={rackIdx} className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 100px auto', gap: '8px', marginBottom: '8px' }}>
+                              <select
+                                className={styles.input}
+                                value={rack.assignmentId}
+                                onChange={(e) => handleManualRackChangeForItem(index, rackIdx, "assignmentId", e.target.value)}
+                              >
+                                <option value="">-- เลือกชิ้นหมู --</option>
+                                {[...(currentUser?.racks || [])]
+                                  .filter((r: any) => (!r.isUsedUp || r.id === rack.assignmentId) && (r.productType || DEFAULT_PRODUCT_TYPE) === item.productType)
+                                  .sort((a: any, b: any) => {
+                                    const matchA = parseRackCode(a.rackNo, item.productType);
+                                    const matchB = parseRackCode(b.rackNo, item.productType);
+                                    if (matchA && matchB) {
+                                      if (matchA.prefix !== matchB.prefix) return matchA.prefix.localeCompare(matchB.prefix);
+                                      if (matchA.num !== matchB.num) return matchA.num - matchB.num;
+                                      if (matchA.piece !== null && matchB.piece !== null) return matchA.piece - matchB.piece;
+                                    }
+                                    return a.rackNo.localeCompare(b.rackNo, undefined, { numeric: true });
+                                  })
+                                  .map((r: any) => (
+                                  <option key={r.id} value={r.id}>
+                                    {r.rackNo} (avail: {parseFloat(Number(r.remainingWeight).toFixed(2))}kg)
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="number"
+                                step="0.01"
+                                className={styles.input}
+                                value={rack.weight || ""}
+                                readOnly
+                                style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}
+                                placeholder="kg"
+                                title="ห้ามย่อยขาย (Force whole piece)"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveRackForItem(index, rackIdx)}
+                                title="ลบชิ้นนี้ออกจากออเดอร์"
+                                style={{
+                                  background: 'rgba(255,107,107,0.15)',
+                                  border: '1px solid rgba(255,107,107,0.4)',
+                                  color: '#ff6b6b',
+                                  cursor: 'pointer',
+                                  borderRadius: '8px',
+                                  width: '44px',
+                                  fontSize: '20px',
+                                  fontWeight: 'bold',
+                                }}
+                              >✕</button>
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => handleAddManualRackForItem(index)} className={styles.button} style={{ width: '100%', marginTop: '10px', padding: '14px 20px', fontSize: '16px', fontWeight: 'bold', background: 'rgba(255,255,255,0.1)' }}>
+                            + เพิ่มชิ้นเอง
+                          </button>
+                        </div>
+
+                        <div className={styles.mobileStackGrid} style={{ display: isStorefrontMode ? 'none' : 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                          <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                            <label className={styles.label}>โปรโมชั่น</label>
+                            <select value={item.promotion} onChange={(e) => handleItemPromotionChange(index, e.target.value as "AUTO" | "")} className={styles.input}>
+                              <option value="">ไม่มีโปรโมชั่น</option>
+                              <option value="AUTO">1 กก. {getPricePerKg(item.productType, settings)} บาท</option>
+                            </select>
+                          </div>
+                          <div className={styles.formGroup} style={{ marginBottom: 0, display: showPriceAndSlip ? 'block' : 'none' }}>
+                            <label className={styles.label}>ราคา{productLabel} (บาท) <span style={{ color: '#ff6b6b' }}>*</span></label>
+                            <input required={showPriceAndSlip} type="number" step="0.01" value={item.priceStr} onChange={(e) => updateItem(index, { priceStr: e.target.value })} className={styles.input} placeholder={`ราคา${productLabel}`} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {!isStorefrontMode && Object.keys(PRODUCT_TYPES).length > items.length && (
+                    <button type="button" onClick={addLineItem} className={styles.button} style={{ width: '100%', marginBottom: '8px', background: 'rgba(88,166,255,0.12)', border: '1px solid rgba(88,166,255,0.3)', color: 'var(--accent-blue)' }}>
+                      + เพิ่มสินค้าอีกชนิด
+                    </button>
+                  )}
+
+                  <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
+                    <label className={styles.label}>รวมทุกรายการ</label>
+                    <div style={{ fontSize: '15px', color: 'var(--text-secondary)' }}>
+                      {formData.crispyPorkWeight || 0} กก. ({formData.crispyPorkPiece || 0} ชิ้น)
                     </div>
-                  ))}
-                  <button type="button" onClick={handleAddManualRack} className={styles.button} style={{ width: '100%', marginTop: '10px', padding: '14px 20px', fontSize: '16px', fontWeight: 'bold', background: 'rgba(255,255,255,0.1)' }}>
-                    + เพิ่มชิ้นหมูเอง
-                  </button>
-                </>
-              </div>
+                    {computeBoxCount(parseFloat(formData.crispyPorkWeight) || 0) > 1 && (
+                      <div style={{ color: '#ffac33', fontSize: '12px', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '14px' }}>📦</span> น้ำหนักเกิน {MAX_WEIGHT_PER_BOX_KG} กก. ต่อกล่อง — ต้องแบ่งเป็น {computeBoxCount(parseFloat(formData.crispyPorkWeight) || 0)} กล่อง (แต่ละกล่องได้เลข track แยกกัน)
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
-
-
-              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
-                <label className={styles.label}>โปรโมชั่น</label>
-                <select name="promotion" value={formData.promotion} onChange={handleChange} className={styles.input}>
-                  <option value="">ไม่มีโปรโมชั่น</option>
-                  <option value="1 kg 250 บาท">1 กก. {settings.porkPricePerKg} บาท</option>
-                </select>
-              </div>
             </div>
 
             {/* Financials */}
@@ -1537,8 +1608,8 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
               {/* Primary, required inputs */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>ราคาสินค้า (บาท) <span style={{ color: '#ff6b6b' }}>*</span></label>
-                  <input required={showPriceAndSlip} type="number" step="0.01" name="price" value={formData.price} onChange={handleChange} className={styles.input} placeholder="ราคาหมูกรอบ" />
+                  <label className={styles.label}>ราคาสินค้ารวม (บาท)</label>
+                  <input type="number" step="0.01" value={formData.price} readOnly className={styles.input} placeholder="ราคาหมูกรอบ" style={{ opacity: 0.7, background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>วิธีจัดส่ง <span style={{ color: '#ff6b6b' }}>*</span></label>
@@ -1569,7 +1640,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input type="checkbox" name="isCod" checked={formData.isCod} onChange={handleChange} style={{ width: '16px', height: '16px' }} />
+                    <input type="checkbox" checked={formData.isCod} onChange={(e) => handleIsCodChange(e.target.checked)} style={{ width: '16px', height: '16px' }} />
                     เก็บเงินปลายทาง (COD)
                   </label>
                   <input type="number" step="0.01" name="codAmount" value={formData.codAmount} readOnly className={styles.input} placeholder="ยอดเก็บปลายทาง" style={{ opacity: formData.isCod ? 1 : 0.5, background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
@@ -1699,45 +1770,79 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
         </div>
 
         <div className={styles.sideContent}>
-          {currentUser && (
+          {currentUser && (() => {
+            // Clamped so removing a line never leaves this pointing past the
+            // end of the array.
+            const targetIndex = Math.min(sidePanelTargetIndex, items.length - 1);
+            const targetItem = items[targetIndex];
+            const targetProductType = targetItem.productType;
+            const targetProductLabel = PRODUCT_TYPES[targetProductType]?.label || targetProductType;
+            const productRacks = (currentUser.racks || []).filter((r: any) => (r.productType || DEFAULT_PRODUCT_TYPE) === targetProductType);
+
+            return (
             <div className={`${styles.card} glass-panel`} style={{ marginBottom: '24px' }}>
               <h2 className={styles.cardTitle} style={{ marginBottom: '16px', fontSize: '1.2rem' }}>📦 คลังหมูของฉัน</h2>
+
+              {!useSimplifiedPicker && items.length > 1 && (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                  {items.map((it, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSidePanelTargetIndex(i)}
+                      style={{
+                        flex: 1,
+                        background: targetIndex === i ? 'var(--accent-blue)' : 'rgba(255,255,255,0.06)',
+                        color: targetIndex === i ? '#fff' : 'var(--text-secondary)',
+                        border: targetIndex === i ? 'none' : '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        padding: '8px 10px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      {PRODUCT_TYPES[it.productType]?.label || it.productType}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
                 <div>
                   <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--accent-blue)' }}>
-                    {currentUser.racks?.filter(r => !r.isUsedUp).length || 0}
+                    {productRacks.filter((r: any) => !r.isUsedUp).length}
                   </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>ชิ้นคงเหลือ</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>ชิ้น{targetProductLabel}คงเหลือ</div>
                 </div>
                 <div style={{ borderLeft: '1px solid rgba(255,255,255,0.1)' }}></div>
                 <div>
                   <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--accent-green)' }}>
-                    {currentUser.racks?.reduce((sum, r) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2)}
+                    {productRacks.reduce((sum: number, r: any) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0).toFixed(2)}
                   </div>
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>กก. คงเหลือ</div>
                 </div>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
-                <label className={styles.label} style={{ display: 'block', marginBottom: '6px', fontSize: '13px' }}>🔍 หาชิ้นหมูใกล้เคียงน้ำหนัก (กก.)</label>
+                <label className={styles.label} style={{ display: 'block', marginBottom: '6px', fontSize: '13px' }}>🔍 หาชิ้น{targetProductLabel}ใกล้เคียงน้ำหนัก (กก.)</label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
-                  value={weightSearch}
-                  onChange={(e) => setWeightSearch(e.target.value)}
+                  value={targetItem.weightSearch}
+                  onChange={(e) => updateItem(targetIndex, { weightSearch: e.target.value })}
                   className={styles.input}
                   placeholder="เช่น 1.5"
                 />
               </div>
 
-              {(!currentUser.racks || currentUser.racks.filter(r => !r.isUsedUp).length === 0) ? (
-                <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textAlign: 'center', padding: '20px 0' }}>ไม่มีชิ้นหมูในคลัง</div>
+              {productRacks.filter((r: any) => !r.isUsedUp).length === 0 ? (
+                <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textAlign: 'center', padding: '20px 0' }}>ไม่มีชิ้น{targetProductLabel}ในคลัง</div>
               ) : (() => {
-                const availableRacks = currentUser.racks.filter(r => !r.isUsedUp);
-                const target = parseFloat(weightSearch);
-                const isSearching = weightSearch !== "" && !isNaN(target) && target > 0;
+                const availableRacks = productRacks.filter((r: any) => !r.isUsedUp);
+                const target = parseFloat(targetItem.weightSearch);
+                const isSearching = targetItem.weightSearch !== "" && !isNaN(target) && target > 0;
                 // Storefront role always gets the flat pick-by-weight list —
                 // there's no auto-allocate form for them to fall back on, so
                 // this list IS how they mark a piece as sold.
@@ -1755,16 +1860,16 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                   return (
                     <>
                       <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
-                        {isSearching ? `ชิ้นที่ใกล้เคียง ${target} กก. มากที่สุด:` : (useSimplifiedPicker ? 'กดเพื่อเลือกชิ้นที่ขายไป:' : 'รายการชิ้นหมูที่เหลือ:')}
+                        {isSearching ? `ชิ้นที่ใกล้เคียง ${target} กก. มากที่สุด:` : (useSimplifiedPicker ? 'กดเพื่อเลือกชิ้นที่ขายไป:' : `รายการชิ้น${targetProductLabel}ที่เหลือ:`)}
                       </h3>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
                         {matches.map((p: any, idx: number) => {
                           const isClose = p.diff !== null && p.diff <= 0.1;
-                          const isAdded = rackDetails.some(r => r.assignmentId === p.id);
+                          const isAdded = targetItem.rackDetails.some(r => r.assignmentId === p.id);
                           return (
                             <div
                               key={p.id || idx}
-                              onClick={() => handleTogglePieceInOrder(p)}
+                              onClick={() => handleTogglePieceInOrderForItem(targetIndex, p)}
                               style={{
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                 padding: '10px 14px', borderRadius: '8px', flexShrink: 0, cursor: 'pointer',
@@ -1774,7 +1879,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                               title={isAdded ? "กดอีกครั้งเพื่อเอาออกจากออเดอร์" : "กดเพื่อเพิ่มชิ้นนี้เข้าออเดอร์"}
                             >
                               <span style={{ fontSize: '14px', color: '#ddd' }}>
-                                {useSimplifiedPicker ? '🐷 หมู 1 ชิ้น' : `ถาด ${p.rackNo?.split('-')[0] || '-'}${p.rackNo?.includes('-') ? ` • ชิ้นที่ ${p.rackNo.split('-')[1]}` : ''}`}
+                                {useSimplifiedPicker ? '🐷 หมู 1 ชิ้น' : `ถาด ${getBaseRackKeyAuto(p.rackNo || '')}${p.rackNo?.includes('-') ? ` • ${p.rackNo}` : ''}`}
                                 {isAdded && <span style={{ marginLeft: '8px', color: 'var(--accent-blue)' }}>✓ เลือกแล้ว</span>}
                                 {!isAdded && isClose && <span style={{ marginLeft: '8px', color: 'var(--accent-green)' }}>✓ ใกล้เคียงมาก</span>}
                               </span>
@@ -1788,7 +1893,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 }
 
                 const groupedRacks = availableRacks.reduce((acc: any, curr: any) => {
-                  const baseRack = curr.rackNo.split('-')[0];
+                  const baseRack = getBaseRackKeyAuto(curr.rackNo);
                   if (!acc[baseRack]) acc[baseRack] = [];
                   acc[baseRack].push(curr);
                   return acc;
@@ -1798,7 +1903,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
                 return (
                   <>
-                    <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-secondary)' }}>รายการชิ้นหมูที่เหลือ:</h3>
+                    <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-secondary)' }}>รายการชิ้น{targetProductLabel}ที่เหลือ:</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
                       {sortedBaseRacks.map(baseRack => {
                         const pieces = groupedRacks[baseRack];
@@ -1813,7 +1918,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                             <div>
                               {sortedPieces.map((p: any, idx: number) => (
                                 <div key={p.rackNo || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: idx === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)' }}>
-                                  <span style={{ fontSize: '14px', color: '#ddd' }}>{p.rackNo?.includes('-') ? `ชิ้นที่ ${p.rackNo.split('-')[1]}` : (p.rackNo || 'ไม่ทราบ')}</span>
+                                  <span style={{ fontSize: '14px', color: '#ddd' }}>{p.rackNo || 'ไม่ทราบ'}</span>
                                   <span style={{ fontSize: '14px', color: 'var(--accent-green)', fontWeight: 'bold' }}>{p.remainingWeight} กก.</span>
                                 </div>
                               ))}
@@ -1826,7 +1931,8 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 );
               })()}
             </div>
-          )}
+            );
+          })()}
 
           <button
             type="button"
@@ -2109,25 +2215,55 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                         <span className={styles.label} style={{ margin: 0 }}>🧾 ต้องการใบกำกับภาษี</span>
                       </label>
                     </div>
-                    <div className={styles.mobileStackGrid} style={{ display: editOrderData.platform === "Storefront" && editOrderData.customerName === "วางขายหน้าร้าน" ? 'none' : 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                      <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                        <label className={styles.label}>ราคาสินค้า (บาท)</label>
-                        <input type="number" step="0.01" className={styles.input} value={editOrderData.price ?? ''} onChange={e => setEditOrderData({ ...editOrderData, price: e.target.value })} />
+                    {isMultiItemEdit ? (
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>รายการสินค้า</label>
+                        {editOrderData.items.map((it: any, i: number) => (
+                          <div key={it.id} className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{PRODUCT_TYPES[it.productType]?.label || it.productType}</span>
+                            <input
+                              type="number" step="0.01" className={styles.input} value={it.weight ?? ''}
+                              onChange={e => {
+                                const nextItems = [...editOrderData.items];
+                                nextItems[i] = { ...nextItems[i], weight: e.target.value === '' ? '' : Number(e.target.value) };
+                                setEditOrderData({ ...editOrderData, items: nextItems });
+                              }}
+                              placeholder="น้ำหนัก (กก.)"
+                            />
+                            <input
+                              type="number" step="0.01" className={styles.input} value={it.price ?? ''}
+                              onChange={e => {
+                                const nextItems = [...editOrderData.items];
+                                nextItems[i] = { ...nextItems[i], price: e.target.value === '' ? '' : Number(e.target.value) };
+                                setEditOrderData({ ...editOrderData, items: nextItems });
+                              }}
+                              placeholder="ราคา (บาท)"
+                            />
+                          </div>
+                        ))}
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                          เพิ่ม/ลบรายการสินค้าไม่ได้ในหน้านี้ — ถ้าต้องแก้จำนวนรายการ กรุณาลบออเดอร์แล้วลงใหม่
+                        </div>
                       </div>
-                      <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                        <label className={styles.label}>เก็บปลายทาง (บาท)</label>
-                        <input type="number" step="0.01" className={styles.input} value={editOrderData.codAmount ?? ''} onChange={e => setEditOrderData({ ...editOrderData, codAmount: e.target.value })} />
+                    ) : (
+                      <div className={styles.mobileStackGrid} style={{ display: editOrderData.platform === "Storefront" && editOrderData.customerName === "วางขายหน้าร้าน" ? 'none' : 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                          <label className={styles.label}>ราคาสินค้า (บาท)</label>
+                          <input type="number" step="0.01" className={styles.input} value={editOrderData.price ?? ''} onChange={e => setEditOrderData({ ...editOrderData, price: e.target.value })} />
+                        </div>
+                        <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                          <label className={styles.label}>น้ำหนัก (กก.)</label>
+                          <input type="text" className={styles.input} value={editOrderData.crispyPorkWeight || ''} onChange={e => setEditOrderData({ ...editOrderData, crispyPorkWeight: e.target.value })} />
+                        </div>
+                        <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                          <label className={styles.label}>จำนวนชิ้น</label>
+                          <input type="text" className={styles.input} value={editOrderData.crispyPorkPiece || ''} onChange={e => setEditOrderData({ ...editOrderData, crispyPorkPiece: e.target.value })} />
+                        </div>
                       </div>
-                    </div>
-                    <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                      <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                        <label className={styles.label}>น้ำหนัก (กก.)</label>
-                        <input type="text" className={styles.input} value={editOrderData.crispyPorkWeight || ''} onChange={e => setEditOrderData({ ...editOrderData, crispyPorkWeight: e.target.value })} />
-                      </div>
-                      <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                        <label className={styles.label}>จำนวนชิ้น</label>
-                        <input type="text" className={styles.input} value={editOrderData.crispyPorkPiece || ''} onChange={e => setEditOrderData({ ...editOrderData, crispyPorkPiece: e.target.value })} />
-                      </div>
+                    )}
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>เก็บปลายทาง (บาท)</label>
+                      <input type="number" step="0.01" className={styles.input} value={editOrderData.codAmount ?? ''} onChange={e => setEditOrderData({ ...editOrderData, codAmount: e.target.value })} />
                     </div>
                     <div className={styles.formGroup}>
                       <label className={styles.label}>เลขพัสดุ</label>
@@ -2279,8 +2415,15 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                     </DetailSection>
 
                     <DetailSection title="สินค้า">
-                      <DetailRow label="น้ำหนัก" value={`${selectedOrder.crispyPorkWeight || '-'} กก.`} />
-                      <DetailRow label="จำนวนชิ้น" value={selectedOrder.crispyPorkPiece || '-'} />
+                      {getEffectiveItems(selectedOrder).length > 1 && getEffectiveItems(selectedOrder).map((it, i) => (
+                        <DetailRow
+                          key={i}
+                          label={PRODUCT_TYPES[it.productType]?.label || it.productType}
+                          value={`${it.weight} กก.${it.pieceCount ? ` (${it.pieceCount} ชิ้น)` : ''} — ฿${formatMoney(it.price)}`}
+                        />
+                      ))}
+                      <DetailRow label="น้ำหนักรวม" value={`${selectedOrder.crispyPorkWeight || '-'} กก.`} />
+                      <DetailRow label="จำนวนชิ้นรวม" value={selectedOrder.crispyPorkPiece || '-'} />
                       <DetailRow
                         label="ชิ้นหมูที่ใช้"
                         value={rackPieces.length > 0 ? rackPieces.map(r => `${r.rackNo} (${r.weight}กก.)`).join(', ') : '-'}

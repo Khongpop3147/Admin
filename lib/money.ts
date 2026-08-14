@@ -10,6 +10,8 @@ export interface AppSettings {
   codDivisor: number;
   codMultiplier: number;
   porkPricePerKg: number;
+  porkLoinPricePerKg: number;
+  porkHipPricePerKg: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -20,7 +22,24 @@ export const DEFAULT_SETTINGS: AppSettings = {
   codDivisor: 1.5,
   codMultiplier: 20,
   porkPricePerKg: 250,
+  porkLoinPricePerKg: 350,
+  porkHipPricePerKg: 350,
 };
+
+// Maps a line item's productType to the right rate field on Settings — the
+// one place that needs to know PRODUCT_TYPES' keys line up with a Settings
+// field. A registry rather than an if/else chain now that there are 3+
+// rates, so a future product only needs a new entry here.
+const PRICE_PER_KG_FIELD: Record<string, keyof AppSettings> = {
+  PORK: "porkPricePerKg",
+  PORK_LOIN: "porkLoinPricePerKg",
+  PORK_HIP: "porkHipPricePerKg",
+};
+
+export function getPricePerKg(productType: string | null | undefined, settings: AppSettings): number {
+  const field = PRICE_PER_KG_FIELD[productType || "PORK"] || "porkPricePerKg";
+  return settings[field];
+}
 
 export function calculateCodAmount(weight: number, settings: AppSettings): number {
   if (weight <= settings.codFlatFeeThreshold) return settings.codFlatFee;

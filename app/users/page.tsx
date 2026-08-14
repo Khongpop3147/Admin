@@ -647,14 +647,34 @@ export default function UsersPage() {
         </div>
 
         <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "16px", marginBottom: "16px" }}>
-          <div className={styles.formGroup} style={{ maxWidth: "240px" }}>
-            <label className={styles.label}>ราคาหมูกรอบ (บาท/กก.)</label>
-            <input
-              type="number"
-              className={styles.input}
-              value={settingsForm.porkPricePerKg}
-              onChange={(e) => setSettingsForm((prev) => ({ ...prev, porkPricePerKg: Number(e.target.value) || 0 }))}
-            />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
+            <div className={styles.formGroup} style={{ maxWidth: "240px" }}>
+              <label className={styles.label}>ราคาหมูกรอบ (บาท/กก.)</label>
+              <input
+                type="number"
+                className={styles.input}
+                value={settingsForm.porkPricePerKg}
+                onChange={(e) => setSettingsForm((prev) => ({ ...prev, porkPricePerKg: Number(e.target.value) || 0 }))}
+              />
+            </div>
+            <div className={styles.formGroup} style={{ maxWidth: "240px" }}>
+              <label className={styles.label}>ราคาหมูกรอบสันนอก (บาท/กก.)</label>
+              <input
+                type="number"
+                className={styles.input}
+                value={settingsForm.porkLoinPricePerKg}
+                onChange={(e) => setSettingsForm((prev) => ({ ...prev, porkLoinPricePerKg: Number(e.target.value) || 0 }))}
+              />
+            </div>
+            <div className={styles.formGroup} style={{ maxWidth: "240px" }}>
+              <label className={styles.label}>ราคาหมูกรอบสะโพก (บาท/กก.)</label>
+              <input
+                type="number"
+                className={styles.input}
+                value={settingsForm.porkHipPricePerKg}
+                onChange={(e) => setSettingsForm((prev) => ({ ...prev, porkHipPricePerKg: Number(e.target.value) || 0 }))}
+              />
+            </div>
           </div>
         </div>
 

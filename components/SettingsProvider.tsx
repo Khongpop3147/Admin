@@ -29,6 +29,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           codDivisor: data.settings.codDivisor,
           codMultiplier: data.settings.codMultiplier,
           porkPricePerKg: data.settings.porkPricePerKg,
+          porkLoinPricePerKg: data.settings.porkLoinPricePerKg,
+          porkHipPricePerKg: data.settings.porkHipPricePerKg,
         });
       }
     } catch (e) {

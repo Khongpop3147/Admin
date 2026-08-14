@@ -93,6 +93,26 @@ describe("getRackDisplay", () => {
   it("handles malformed JSON without throwing", () => {
     expect(getRackDisplay("not valid json")).toEqual({ detailsArray: ["-"], totalWeight: 0, pieceCount: 0 });
   });
+
+  it("regression: groups prefixed-format (PORK_LOIN) pieces by their real base rack, not collapsed to 'L'", () => {
+    const rackDetails = JSON.stringify([
+      { rackNo: "L-A001-1", weight: 1.5 },
+      { rackNo: "L-A001-2", weight: 2 },
+      { rackNo: "L-A002-1", weight: 1 },
+    ]);
+    const result = getRackDisplay(rackDetails);
+    expect(result.detailsArray.sort()).toEqual(["L-A001 = 1.5 / 2 kg", "L-A002 = 1 kg"].sort());
+    expect(result.pieceCount).toBe(3);
+  });
+
+  it("regression: a mixed classic + prefixed order groups each product's pieces independently", () => {
+    const rackDetails = JSON.stringify([
+      { rackNo: "A005-1", weight: 1 },
+      { rackNo: "L-A001-1", weight: 1.5 },
+    ]);
+    const result = getRackDisplay(rackDetails);
+    expect(result.detailsArray.sort()).toEqual(["A005 = 1 kg", "L-A001 = 1.5 kg"].sort());
+  });
 });
 
 function order(overrides: Partial<PrintableOrder> & { orderNo: number }): PrintableOrder {

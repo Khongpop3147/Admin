@@ -31,12 +31,30 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { 
+    const {
       customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price,
       shippingMethod, additionalShippingCost, codAmount, actualReceivedAmount,
       transferSlip, paymentStatus, customerAddress, customerPhone, customerZip, needsTaxInvoice, orderStatus, rackDetails, sellerName, trackingNumber,
-      bypassDuplicateCheck, adminNote, entryDate, extraSlipUrls
+      bypassDuplicateCheck, adminNote, entryDate, extraSlipUrls, items
     } = body;
+
+    // Product line items — one per line the admin added in Order Entry.
+    // crispyPorkWeight/crispyPorkPiece/price above are still written as sent
+    // (the client already sums them from these items), but every downstream
+    // reader that only knows about those 3 flat fields keeps working
+    // unchanged since their meaning ("total across the order") hasn't
+    // changed, just what feeds them.
+    const validItems: { productType: string; weight: number; pieceCount: number | null; price: number; pricePerKg: number | null }[] = Array.isArray(items)
+      ? items
+          .map((it: any) => ({
+            productType: typeof it?.productType === "string" && it.productType ? it.productType : "PORK",
+            weight: Number(it?.weight) || 0,
+            pieceCount: it?.pieceCount != null ? Number(it.pieceCount) : null,
+            price: Number(it?.price) || 0,
+            pricePerKg: it?.pricePerKg != null ? Number(it.pricePerKg) : null,
+          }))
+          .filter((it: any) => it.weight > 0 || (it.pieceCount ?? 0) > 0)
+      : [];
 
     if (!customerName) {
       return NextResponse.json(
@@ -152,8 +170,11 @@ export async function POST(req: Request) {
           extraSlips: validExtraSlipUrls.length > 0
             ? { create: validExtraSlipUrls.map((url: string) => ({ url })) }
             : undefined,
+          items: validItems.length > 0
+            ? { create: validItems }
+            : undefined,
         },
-        include: { extraSlips: true },
+        include: { extraSlips: true, items: true },
       });
 
       // 4. Deduct weight from assigned racks atomically
@@ -288,7 +309,7 @@ export async function GET(req: Request) {
 
     const orders = await prisma.order.findMany({
       where: whereClause,
-      include: { extraSlips: true },
+      include: { extraSlips: true, items: true },
       orderBy: {
         createdAt: "desc",
       },

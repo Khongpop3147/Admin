@@ -4,6 +4,8 @@
 // tests here are what stop a future tweak from silently reverting an
 // earlier fix.
 
+import { getBaseRackKeyAuto } from "./rackCode";
+
 export interface ShippingInfo {
   shippingMethod: string;
   codAmount?: number | null;
@@ -48,7 +50,7 @@ export function getRackDisplay(rackDetailsStr: string): RackDisplay {
     racks.forEach((r: any) => {
       if (!r.rackNo) return;
       pieceCount += 1;
-      const base = r.rackNo.split("-")[0];
+      const base = getBaseRackKeyAuto(r.rackNo);
       if (!groups[base]) groups[base] = [];
       const w = parseFloat(r.weight) || 0;
       groups[base].push(w);

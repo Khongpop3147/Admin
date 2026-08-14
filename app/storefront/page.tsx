@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
+import { getBaseRackKeyAuto, PRODUCT_TYPES, DEFAULT_PRODUCT_TYPE } from "../../lib/rackCode";
 import styles from "../page.module.css";
 
 interface Order {
@@ -25,6 +26,7 @@ interface Order {
   additionalShippingCost: number;
   actualReceivedAmount: number;
   rackDetails: string;
+  items?: { id: string; productType: string; weight: number; pieceCount: number | null; price: number }[];
 }
 
 interface Piece {
@@ -32,6 +34,7 @@ interface Piece {
   rackNo: string;
   remainingWeight: number;
   isUsedUp?: boolean;
+  productType?: string;
 }
 
 export default function StorefrontPage() {
@@ -60,6 +63,11 @@ export default function StorefrontPage() {
   const [weightSearch, setWeightSearch] = useState("");
   const [isSubmittingSale, setIsSubmittingSale] = useState(false);
   const [saleMsg, setSaleMsg] = useState("");
+  // Which product the counter is currently selling — scopes the piece
+  // picker below so a sale is always one product at a time, never a mix of
+  // หมูกรอบ/หมูกรอบสันนอก pieces that would otherwise get recorded (and
+  // deducted from stock) with no way to tell which was which afterward.
+  const [selectedProduct, setSelectedProduct] = useState<string>(DEFAULT_PRODUCT_TYPE);
 
   useEffect(() => {
     if (inventorySource?.racks) {
@@ -67,10 +75,20 @@ export default function StorefrontPage() {
     }
   }, [inventorySource]);
 
+  const productPieces = pieces.filter((p) => (p.productType || DEFAULT_PRODUCT_TYPE) === selectedProduct);
+
   const totalWeight = Number(selected.reduce((sum, p) => sum + p.remainingWeight, 0).toFixed(2));
 
   const togglePiece = (p: Piece) => {
     setSelected((prev) => (prev.some((x) => x.id === p.id) ? prev.filter((x) => x.id !== p.id) : [...prev, p]));
+  };
+
+  const handleProductChange = (product: string) => {
+    setSelectedProduct(product);
+    // Clears whatever was mid-sale — switching products mid-pick would
+    // otherwise let a PORK piece and a PORK_LOIN piece end up selected
+    // together for the same single-line sale.
+    setSelected([]);
   };
 
   const handleSubmitSale = async (e: React.FormEvent) => {
@@ -95,6 +113,11 @@ export default function StorefrontPage() {
           paymentStatus: "Paid",
           orderStatus: "Completed",
           rackDetails: JSON.stringify(selected.map((s) => ({ assignmentId: s.id, rackNo: s.rackNo, weight: s.remainingWeight }))),
+          // No price is computed here (see the note below the picker) — this
+          // just records which product it was, so it's labeled correctly
+          // anywhere downstream that reads an order's line items instead of
+          // silently defaulting to หมูกรอบ.
+          items: [{ productType: selectedProduct, weight: totalWeight, pieceCount: selected.length, price: 0 }],
           sellerName: currentUser?.name,
           // Storefront customers are anonymous/repeat by nature (same generic
           // name every time) — the usual same-name-same-weight duplicate
@@ -174,8 +197,11 @@ export default function StorefrontPage() {
           customerName: editingOrder.customerName,
           customerAddress: editingOrder.customerAddress,
           codAmount: editingOrder.codAmount,
-          crispyPorkPiece: editingOrder.crispyPorkPiece,
-          crispyPorkWeight: editingOrder.crispyPorkWeight,
+          // A multi-line order's weight/piece can only be edited from Order
+          // Entry (see the disabled inputs below) — omit them here so this
+          // save never trips the server's multi-item guard just from
+          // touching an unrelated field like the admin note.
+          ...((editingOrder.items?.length ?? 0) > 1 ? {} : { crispyPorkPiece: editingOrder.crispyPorkPiece, crispyPorkWeight: editingOrder.crispyPorkWeight }),
           adminNote: editingOrder.adminNote,
           editedBy: currentUser?.name,
         }),
@@ -207,8 +233,8 @@ export default function StorefrontPage() {
   const target = parseFloat(weightSearch);
   const isSearching = weightSearch !== "" && !isNaN(target) && target > 0;
   const displayedPieces = isSearching
-    ? [...pieces].map((p) => ({ ...p, diff: Math.abs(p.remainingWeight - target) })).sort((a, b) => a.diff - b.diff)
-    : [...pieces].sort((a, b) => b.remainingWeight - a.remainingWeight).map((p) => ({ ...p, diff: null as number | null }));
+    ? [...productPieces].map((p) => ({ ...p, diff: Math.abs(p.remainingWeight - target) })).sort((a, b) => a.diff - b.diff)
+    : [...productPieces].sort((a, b) => b.remainingWeight - a.remainingWeight).map((p) => ({ ...p, diff: null as number | null }));
 
   return (
     <div className={styles.container} style={{ color: "#fff" }}>
@@ -217,10 +243,32 @@ export default function StorefrontPage() {
         <p className={styles.subtitle}>บันทึกการขายหน้าร้าน และดูประวัติออเดอร์หน้าร้านทั้งหมด</p>
       </div>
 
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+        {Object.values(PRODUCT_TYPES).map((p) => (
+          <button
+            key={p.code}
+            type="button"
+            onClick={() => handleProductChange(p.code)}
+            style={{
+              background: selectedProduct === p.code ? "var(--accent-blue)" : "rgba(255,255,255,0.06)",
+              color: selectedProduct === p.code ? "#fff" : "var(--text-secondary)",
+              border: selectedProduct === p.code ? "none" : "1px solid var(--border-color)",
+              padding: "10px 20px",
+              borderRadius: "10px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "bold",
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       {/* ===== Sale entry ===== */}
       <div style={{ display: "flex", gap: "24px", flexWrap: "wrap", marginBottom: "32px" }}>
         <form onSubmit={handleSubmitSale} className={`glass-panel ${styles.sfPanel}`} style={{ flex: "2 1 380px", borderRadius: "16px" }}>
-          <h2 style={{ fontSize: "1.1rem", marginBottom: "16px" }}>🧾 บันทึกการขาย</h2>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: "16px" }}>🧾 บันทึกการขาย{PRODUCT_TYPES[selectedProduct]?.label ? ` — ${PRODUCT_TYPES[selectedProduct].label}` : ""}</h2>
 
           <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "16px" }}>
             🏪 ลูกค้าหน้าร้าน (walk-in ไม่ต้องระบุชื่อ)
@@ -271,7 +319,7 @@ export default function StorefrontPage() {
                 // logged-in session, not whichever user a DEV is currently
                 // impersonating via the sidebar switcher, and would show the
                 // wrong (often empty) inventory.
-                sessionStorage.setItem("storefront-print-inventory", JSON.stringify(pieces));
+                sessionStorage.setItem("storefront-print-inventory", JSON.stringify(productPieces));
                 window.open(`${BASE_PATH}/storefront/print-inventory`, '_blank');
               }}
               style={{ background: 'rgba(63,185,80,0.2)', color: 'var(--accent-green)', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
@@ -281,12 +329,12 @@ export default function StorefrontPage() {
           </div>
           <div style={{ marginBottom: "16px", padding: "14px", background: "rgba(255,255,255,0.05)", borderRadius: "8px", display: "flex", justifyContent: "space-around", textAlign: "center" }}>
             <div>
-              <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--accent-blue)" }}>{pieces.length}</div>
+              <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--accent-blue)" }}>{productPieces.length}</div>
               <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>ชิ้นคงเหลือ</div>
             </div>
             <div>
               <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--accent-green)" }}>
-                {pieces.reduce((sum, p) => sum + p.remainingWeight, 0).toFixed(2)}
+                {productPieces.reduce((sum, p) => sum + p.remainingWeight, 0).toFixed(2)}
               </div>
               <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>กก. คงเหลือ</div>
             </div>
@@ -297,7 +345,7 @@ export default function StorefrontPage() {
             <input type="number" step="0.01" min="0" value={weightSearch} onChange={(e) => setWeightSearch(e.target.value)} className={styles.input} placeholder="เช่น 1.5" />
           </div>
 
-          {pieces.length === 0 ? (
+          {productPieces.length === 0 ? (
             <div style={{ color: "var(--text-secondary)", fontSize: "14px", textAlign: "center", padding: "20px 0" }}>ไม่มีชิ้นหมูในคลัง</div>
           ) : (
             <>
@@ -524,14 +572,19 @@ export default function StorefrontPage() {
                 <textarea value={editingOrder.customerAddress} onChange={e => setEditingOrder({...editingOrder, customerAddress: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white', minHeight: '80px' }} required />
               </div>
 
+              {(editingOrder.items?.length ?? 0) > 1 && (
+                <div style={{ fontSize: '12px', color: '#ffac33', background: 'rgba(255,172,51,0.1)', border: '1px solid rgba(255,172,51,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
+                  ⚠️ ออเดอร์นี้มีหลายรายการสินค้า — แก้ไขรายละเอียดสินค้าได้ที่หน้า Order Entry เท่านั้น
+                </div>
+              )}
               <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>จำนวนชิ้นหมู</label>
-                  <input type="text" value={editingOrder.crispyPorkPiece || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkPiece: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  <input type="text" value={editingOrder.crispyPorkPiece || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkPiece: e.target.value})} disabled={(editingOrder.items?.length ?? 0) > 1} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white', opacity: (editingOrder.items?.length ?? 0) > 1 ? 0.5 : 1 }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>น้ำหนักหมู (กก.)</label>
-                  <input type="text" value={editingOrder.crispyPorkWeight || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkWeight: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  <input type="text" value={editingOrder.crispyPorkWeight || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkWeight: e.target.value})} disabled={(editingOrder.items?.length ?? 0) > 1} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white', opacity: (editingOrder.items?.length ?? 0) > 1 ? 0.5 : 1 }} />
                 </div>
               </div>
 
@@ -572,7 +625,7 @@ export default function StorefrontPage() {
                   if (!Array.isArray(racks) || racks.length === 0) return <div style={{ color: 'var(--text-secondary)' }}>ไม่พบข้อมูลถาด</div>;
 
                   const aggregatedRacks = racks.reduce((acc: Record<string, string[]>, curr: any) => {
-                    const baseRackNo = (curr.rackNo || 'ไม่ทราบถาด').split('-')[0];
+                    const baseRackNo = curr.rackNo ? getBaseRackKeyAuto(curr.rackNo) : 'ไม่ทราบถาด';
                     if (!acc[baseRackNo]) acc[baseRackNo] = [];
                     acc[baseRackNo].push(`${Number(curr.weight).toFixed(2)} กก.`);
                     return acc;

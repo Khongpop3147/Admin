@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import { getSessionUser } from "../../../../../lib/session";
 import { isSuperAdminRole } from "../../../../../lib/roles";
 import { sortRackAssignments, computeShiftTargets, syncOrderRackDetails } from "../../../../../lib/rackShift";
+import { parseRackCode, getRackScopePrefix, DEFAULT_PRODUCT_TYPE } from "../../../../../lib/rackCode";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 let prisma: PrismaClient;
@@ -23,18 +24,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
 
-    const { startRackNo, direction } = await req.json(); // direction: 'up' or 'down'
+    const { startRackNo, direction, productType: rawProductType } = await req.json(); // direction: 'up' or 'down'
+    const productType = rawProductType || DEFAULT_PRODUCT_TYPE;
 
     if (!startRackNo || !direction) {
       return NextResponse.json({ error: "กรุณากรอกข้อมูลให้ครบ" }, { status: 400 });
     }
 
-    const match = startRackNo.match(/^(.*?)(\d+)-(\d+)$/);
+    const match = parseRackCode(startRackNo, productType);
     if (!match) {
       return NextResponse.json({ error: "รูปแบบรหัสถาดไม่ถูกต้อง ต้องเป็น อักษรนำหน้า+เลข+ชิ้น (เช่น A005-3)" }, { status: 400 });
     }
 
-    const prefix = match[1];
+    // Scoping by prefix (in the format the DB actually stores it) is not
+    // just a performance narrowing — sortRackAssignments/computeShiftTargets
+    // assume every item in the batch shares the same letter prefix, so
+    // mixing prefixes here would silently corrupt the ordering. Filtering by
+    // productType as well closes a real cross-product collision: a classic
+    // rack starting with letter "L" (e.g. "L005-1") used to `startsWith`-match
+    // every PORK_LOIN rack too, since "L-A001-1" also starts with "L".
+    const dbPrefix = getRackScopePrefix(match.prefix, productType);
 
     // The whole read -> collision-check -> write sequence has to happen as
     // one atomic unit under Serializable isolation — otherwise a piece
@@ -49,11 +58,11 @@ export async function POST(req: Request) {
     // resolved VALUE, not an actual HTTP response.
     const count = await prisma.$transaction(async (tx) => {
       const allAssignments = await tx.rackAssignment.findMany({
-        where: { rackNo: { startsWith: prefix } },
+        where: { rackNo: { startsWith: dbPrefix }, productType },
       });
 
-      const sortedAssignments = sortRackAssignments(allAssignments);
-      const targets = computeShiftTargets(sortedAssignments, startRackNo, direction);
+      const sortedAssignments = sortRackAssignments(allAssignments, productType);
+      const targets = computeShiftTargets(sortedAssignments, startRackNo, direction, productType);
 
       for (const t of targets) {
         await tx.rackAssignment.update({ where: { id: t.id }, data: { rackNo: t.newName } });

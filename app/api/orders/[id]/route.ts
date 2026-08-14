@@ -57,7 +57,7 @@ export async function PATCH(
     const { id } = resolvedParams;
     const body = await req.json();
 
-    const existingOrder = await prisma.order.findUnique({ where: { id } });
+    const existingOrder = await prisma.order.findUnique({ where: { id }, include: { items: true } });
     if (!existingOrder) {
       return NextResponse.json({ error: "ไม่พบออเดอร์นี้ อาจถูกลบไปแล้ว" }, { status: 404 });
     }
@@ -67,6 +67,16 @@ export async function PATCH(
     // order by just calling this route directly with a different id.
     if (session.role === "STOREFRONT" && existingOrder.platform !== "Storefront") {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
+    }
+
+    // An order with 2+ product lines can't have its flat weight/piece/price
+    // edited directly — there'd be nowhere sensible to redistribute the new
+    // number back into the underlying items. The client-side edit form
+    // already hides those inputs for such orders and sends `items` instead;
+    // this is the server-side backstop for a stale client (or a direct API
+    // call) that tries the old flat-field shape anyway.
+    if (existingOrder.items.length > 1 && !Array.isArray(body.items) && (body.price !== undefined || body.crispyPorkWeight !== undefined || body.crispyPorkPiece !== undefined)) {
+      return NextResponse.json({ error: "ออเดอร์นี้มีหลายรายการสินค้า กรุณาแก้ไขที่หน้า Order Entry เท่านั้น" }, { status: 400 });
     }
 
     // Allow updating orderStatus, trackingNumber, or adminNote
@@ -87,6 +97,32 @@ export async function PATCH(
     if (body.transferSlip !== undefined) updateData.transferSlip = body.transferSlip;
     if (body.isReturned !== undefined) updateData.isReturned = !!body.isReturned;
     if (body.boxPieceCounts !== undefined) updateData.boxPieceCounts = body.boxPieceCounts;
+
+    // Per-item edits (multi-line orders only) — only weight/pieceCount/price
+    // are editable per item; product/rack allocation stay untouched, same
+    // trust model as the flat-field edit path (which also never touches
+    // RackAssignment rows). The 3 flat aggregate fields are recomputed here
+    // as the sum across the just-edited items, so they keep meaning "total
+    // across the order" for every downstream reader that only knows the
+    // flat shape.
+    const itemUpdates: { id: string; weight: number; pieceCount: number | null; price: number }[] = Array.isArray(body.items)
+      ? body.items
+          .filter((it: any) => it && typeof it.id === "string" && existingOrder.items.some((eo) => eo.id === it.id))
+          .map((it: any) => ({
+            id: it.id,
+            weight: Number(it.weight) || 0,
+            pieceCount: it.pieceCount != null ? Number(it.pieceCount) : null,
+            price: Number(it.price) || 0,
+          }))
+      : [];
+    if (itemUpdates.length > 0) {
+      const totalWeight = itemUpdates.reduce((sum, it) => sum + it.weight, 0);
+      const totalPieces = itemUpdates.reduce((sum, it) => sum + (it.pieceCount || 0), 0);
+      const totalPrice = itemUpdates.reduce((sum, it) => sum + it.price, 0);
+      updateData.crispyPorkWeight = totalWeight > 0 ? String(Number(totalWeight.toFixed(2))) : "";
+      updateData.crispyPorkPiece = String(totalPieces);
+      updateData.price = totalPrice;
+    }
 
     // actualReceivedAmount is never sent by any client — it's derived once
     // at order creation as round((price + shipping) * 1.07 + codAmount) and
@@ -120,10 +156,18 @@ export async function PATCH(
         }
       : {};
 
-    const updatedOrder = await prisma.order.update({
-      where: { id },
-      data: { ...updateData, ...extraSlipsData },
-      include: { extraSlips: true },
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      for (const it of itemUpdates) {
+        await tx.orderItem.update({
+          where: { id: it.id },
+          data: { weight: it.weight, pieceCount: it.pieceCount, price: it.price },
+        });
+      }
+      return tx.order.update({
+        where: { id },
+        data: { ...updateData, ...extraSlipsData },
+        include: { extraSlips: true, items: true },
+      });
     });
 
     const changes: string[] = [];

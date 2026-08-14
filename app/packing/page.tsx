@@ -15,7 +15,22 @@ import { getShippingContact, isValidPhone, isValidZip } from "../../lib/addressP
 import { findShipDateInRows, filterTrackingRowsToClosestDate, extractCellDateStr, TrackingRow } from "../../lib/trackingImport";
 import { formatDateDDMMYY_BE } from "../../lib/thaiDate";
 import { computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from "../../lib/shipping";
+import { getBaseRackKeyAuto, PRODUCT_TYPES, DEFAULT_PRODUCT_TYPE } from "../../lib/rackCode";
+import { getEffectiveItems } from "../../lib/orderItems";
 import styles from "../page.module.css";
+
+// A courier shipping label/export needs a real product name, not a
+// hardcoded "หมูกรอบ" — that was safe when only one product existed, but
+// now that an order can hold a mix (see lib/orderItems.ts), the printed
+// label has to name whatever's actually in the box. Falls back to the
+// default product's label for legacy orders with no OrderItem rows, and
+// joins multiple distinct products with "+" for a mixed order.
+function getOrderProductLabel(order: { items?: { productType: string }[]; crispyPorkWeight?: string | null; crispyPorkPiece?: string | null; price?: number | null }): string {
+  const items = getEffectiveItems(order as any);
+  if (items.length === 0) return PRODUCT_TYPES[DEFAULT_PRODUCT_TYPE]?.label || DEFAULT_PRODUCT_TYPE;
+  const labels = Array.from(new Set(items.map((it) => PRODUCT_TYPES[it.productType]?.label || it.productType)));
+  return labels.join(" + ");
+}
 
 function formatMoney(value: unknown): string {
   const num = typeof value === "string" ? parseFloat(value) : (value as number);
@@ -47,6 +62,7 @@ interface Order {
   actualReceivedAmount: number;
   rackDetails: string;
   boxPieceCounts: string | null;
+  items?: { productType: string; weight: number; pieceCount: number | null; price: number }[];
 }
 
 export default function PackingPage() {
@@ -356,11 +372,12 @@ export default function PackingPage() {
       const isCodOrder = Number(order.codAmount) > 0;
       const codTotal = isCodOrder ? (Number(order.actualReceivedAmount) || Number(order.codAmount)) : "";
 
+      const productLabel = getOrderProductLabel(order);
       boxesForRows.forEach((pieces, boxIdx) => {
         const isFirstRow = rowIndex === 0;
         const note = useBoxSplit
-          ? `หมูกรอบ ชิ้น: ${pieces} (กล่อง ${boxIdx + 1}/${boxesForRows.length})`
-          : `หมูกรอบ ชิ้น: ${order.crispyPorkPiece || '-'} น้ำหนัก: ${order.crispyPorkWeight || '-'}kg`
+          ? `${productLabel} ชิ้น: ${pieces} (กล่อง ${boxIdx + 1}/${boxesForRows.length})`
+          : `${productLabel} ชิ้น: ${order.crispyPorkPiece || '-'} น้ำหนัก: ${order.crispyPorkWeight || '-'}kg`
             + (boxCount > 1 ? ` (แบ่ง ${boxCount} กล่อง)` : "");
 
         rows.push([
@@ -601,7 +618,7 @@ export default function PackingPage() {
         for (let r = startRow + 2; r <= startRow + 6; r++) worksheet.getRow(r).height = 18;
 
         setCell(startRow + 7, c(0), "สินค้า");
-        setCell(startRow + 7, c(1), "หมูกรอบ");
+        setCell(startRow + 7, c(1), getOrderProductLabel(order));
         worksheet.getRow(startRow + 7).height = 18;
 
         setCell(startRow + 8, c(0), "น้ำหนัก:");
@@ -1088,7 +1105,27 @@ export default function PackingPage() {
                       ? { background: 'rgba(255,0,0,0.18)', border: '2px solid #ff3b3b', borderRadius: '6px' }
                       : {}),
                   }}>
-                    <div>{order.crispyPorkPiece ? `${order.crispyPorkPiece} ชิ้น` : '-'} / {order.crispyPorkWeight ? `${order.crispyPorkWeight} กก.` : '-'}</div>
+                    {(() => {
+                      const orderItems = getEffectiveItems(order);
+                      // Only one product on this order (the vast majority) —
+                      // keep showing the exact combined total as before, no
+                      // need for a per-line breakdown of one line.
+                      if (orderItems.length <= 1) {
+                        return <div>{order.crispyPorkPiece ? `${order.crispyPorkPiece} ชิ้น` : '-'} / {order.crispyPorkWeight ? `${order.crispyPorkWeight} กก.` : '-'}</div>;
+                      }
+                      // Multiple products — a packer needs to know exactly
+                      // which ones and how much of each to pull, not just a
+                      // combined count that hides the mix.
+                      return (
+                        <div>
+                          {orderItems.map((it, i) => (
+                            <div key={i}>
+                              {PRODUCT_TYPES[it.productType]?.label || it.productType}: {it.pieceCount ?? '-'} ชิ้น / {it.weight} กก.
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     {computeBoxCount(Number(order.crispyPorkWeight) || 0) > 1 && (
                       <div style={{ marginTop: '4px' }}>
                         <div style={{ fontSize: '12px', color: '#ff3b3b', fontWeight: 'bold' }}>
@@ -1407,7 +1444,7 @@ export default function PackingPage() {
                   if (!Array.isArray(racks) || racks.length === 0) return <div style={{ color: 'var(--text-secondary)' }}>ไม่พบข้อมูลถาด</div>;
 
                   const aggregatedRacks = racks.reduce((acc: Record<string, string[]>, curr: any) => {
-                    const baseRackNo = (curr.rackNo || 'ไม่ทราบถาด').split('-')[0];
+                    const baseRackNo = curr.rackNo ? getBaseRackKeyAuto(curr.rackNo) : 'ไม่ทราบถาด';
                     if (!acc[baseRackNo]) acc[baseRackNo] = [];
                     acc[baseRackNo].push(`${Number(curr.weight).toFixed(2)} กก.`);
                     return acc;

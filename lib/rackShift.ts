@@ -3,6 +3,8 @@
 // actual piece-renumbering math and the order rackDetails sync can be
 // tested without a database.
 
+import { parseRackCode, formatRackCode, DEFAULT_PRODUCT_TYPE, PIECES_PER_RACK } from "./rackCode";
+
 export interface RackShiftItem {
   id: string;
   rackNo: string;
@@ -13,13 +15,15 @@ export interface RackShiftTarget {
   newName: string;
 }
 
-export function sortRackAssignments<T extends RackShiftItem>(items: T[]): T[] {
+// productType defaults to the original product (PORK) so every existing
+// caller that never passes it keeps behaving exactly as before.
+export function sortRackAssignments<T extends RackShiftItem>(items: T[], productType: string = DEFAULT_PRODUCT_TYPE): T[] {
   return [...items].sort((a, b) => {
-    const aM = a.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-    const bM = b.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-    if (aM && bM) {
-      const aNum = parseInt(aM[2], 10) * 10 + parseInt(aM[3], 10);
-      const bNum = parseInt(bM[2], 10) * 10 + parseInt(bM[3], 10);
+    const aM = parseRackCode(a.rackNo, productType);
+    const bM = parseRackCode(b.rackNo, productType);
+    if (aM && bM && aM.piece !== null && bM.piece !== null) {
+      const aNum = aM.num * 10 + aM.piece;
+      const bNum = bM.num * 10 + bM.piece;
       return aNum - bNum;
     }
     return a.rackNo.localeCompare(b.rackNo);
@@ -33,7 +37,8 @@ export function sortRackAssignments<T extends RackShiftItem>(items: T[]): T[] {
 export function computeShiftTargets(
   sortedAssignments: RackShiftItem[],
   startRackNo: string,
-  direction: "up" | "down"
+  direction: "up" | "down",
+  productType: string = DEFAULT_PRODUCT_TYPE
 ): RackShiftTarget[] {
   const startIndex = sortedAssignments.findIndex((a) => a.rackNo === startRackNo);
   if (startIndex === -1) {
@@ -46,14 +51,13 @@ export function computeShiftTargets(
   if (direction === "down") {
     for (let i = sortedAssignments.length - 1; i >= startIndex; i--) {
       const item = sortedAssignments[i];
-      const m = item.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-      if (m) {
-        const p = m[1];
-        let rNum = parseInt(m[2], 10);
-        let pNum = parseInt(m[3], 10);
+      const m = parseRackCode(item.rackNo, productType);
+      if (m && m.piece !== null) {
+        let rNum = m.num;
+        let pNum = m.piece;
         pNum++;
-        if (pNum > 5) { pNum = 1; rNum++; }
-        const newName = `${p}${String(rNum).padStart(m[2].length, "0")}-${pNum}`;
+        if (pNum > PIECES_PER_RACK) { pNum = 1; rNum++; }
+        const newName = formatRackCode({ prefix: m.prefix, num: rNum, piece: pNum }, productType);
 
         if (unshiftedNames.has(newName)) {
           throw new Error(`COLLISION_DOWN:${newName}`);
@@ -65,14 +69,13 @@ export function computeShiftTargets(
   } else if (direction === "up") {
     for (let i = startIndex; i < sortedAssignments.length; i++) {
       const item = sortedAssignments[i];
-      const m = item.rackNo.match(/^(.*?)(\d+)-(\d+)$/);
-      if (m) {
-        const p = m[1];
-        let rNum = parseInt(m[2], 10);
-        let pNum = parseInt(m[3], 10);
+      const m = parseRackCode(item.rackNo, productType);
+      if (m && m.piece !== null) {
+        let rNum = m.num;
+        let pNum = m.piece;
         pNum--;
-        if (pNum < 1) { pNum = 5; rNum--; }
-        const newName = `${p}${String(rNum).padStart(m[2].length, "0")}-${pNum}`;
+        if (pNum < 1) { pNum = PIECES_PER_RACK; rNum--; }
+        const newName = formatRackCode({ prefix: m.prefix, num: rNum, piece: pNum }, productType);
 
         if (unshiftedNames.has(newName)) {
           throw new Error(`COLLISION_UP:${newName}`);

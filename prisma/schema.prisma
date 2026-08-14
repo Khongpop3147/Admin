@@ -70,6 +70,12 @@ model Order {
   // itself is untouched by this: every existing order and every order with
   // just one slip behaves exactly as before.
   extraSlips            OrderSlip[]
+  // Per-product line items — added when Order Entry gained multi-product
+  // support. crispyPorkWeight/crispyPorkPiece/price above keep meaning "sum
+  // across items" so every reader that predates this stays correct without
+  // changes. An order created before this feature has zero items; treat
+  // that as an implicit single PORK line (see lib/orderItems.ts).
+  items                 OrderItem[]
 }
 
 model OrderSlip {
@@ -78,6 +84,20 @@ model OrderSlip {
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   url       String
   createdAt DateTime @default(now())
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productType String   @default("PORK")
+  weight      Float
+  pieceCount  Int?
+  // Snapshot of the rate used at order time, independent of whatever
+  // Settings.porkPricePerKg/porkLoinPricePerKg later change to.
+  pricePerKg  Float?
+  price       Float
+  createdAt   DateTime @default(now())
 }
 
 model User {
@@ -110,6 +130,11 @@ model RackAssignment {
   isUsedUp        Boolean   @default(false)
   usedUpAt        DateTime?
   createdAt       DateTime  @default(now())
+  // Which product this piece is ("PORK" = the original หมูกรอบ, "PORK_LOIN"
+  // = หมูกรอบสันนอก added later) — see lib/rackCode.ts's PRODUCT_TYPES for
+  // the registry and each product's rack-code format. Defaults every
+  // existing row to the original product with no backfill needed.
+  productType     String    @default("PORK")
 
   @@unique([userId, rackNo])
 }
@@ -120,6 +145,7 @@ model DeletedPorkLog {
   weight          Float
   userName        String
   deletedAt       DateTime @default(now())
+  productType     String   @default("PORK")
 }
 
 model Settings {
@@ -131,6 +157,8 @@ model Settings {
   codDivisor          Float    @default(1.5)
   codMultiplier       Float    @default(20)
   porkPricePerKg      Float    @default(250)
+  porkLoinPricePerKg  Float    @default(350)
+  porkHipPricePerKg   Float    @default(350)
   lastPorkCleanupMonth String?
   lastSlipCleanupDate String?
   packingCutoffDate   String? // date (YYYY-MM-DD) Packing last closed out — new orders created while today matches this date get numbered under the next day instead

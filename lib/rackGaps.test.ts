@@ -5,6 +5,10 @@ function rack(rackNo: string, isUsedUp = false) {
   return { rackNo, isUsedUp };
 }
 
+function loinRack(rackNo: string, isUsedUp = false) {
+  return { rackNo, isUsedUp, productType: "PORK_LOIN" };
+}
+
 describe("findMissingRackCodes", () => {
   it("returns nothing when the sequence is complete", () => {
     const racks = ["A001-1", "A001-2", "A001-3", "A001-4", "A001-5", "A002-1"].map((n) => rack(n));
@@ -63,5 +67,28 @@ describe("findMissingRackCodes", () => {
   it("returns an empty array for an empty or single-item list", () => {
     expect(findMissingRackCodes([])).toEqual([]);
     expect(findMissingRackCodes([rack("A001-1")])).toEqual([]);
+  });
+
+  it("finds a single missing piece within a prefixed-format (PORK_LOIN) rack", () => {
+    const racks = ["L-A001-1", "L-A001-2", "L-A001-4", "L-A001-5"].map((n) => loinRack(n));
+    expect(findMissingRackCodes(racks)).toEqual(["L-A001-3"]);
+  });
+
+  it("finds a whole missing prefixed-format rack spanning a rack-number boundary", () => {
+    const racks = ["L-A004-1", "L-A004-2", "L-A004-3", "L-A004-4", "L-A004-5", "L-A006-1"].map((n) => loinRack(n));
+    expect(findMissingRackCodes(racks)).toEqual([
+      "L-A005-1",
+      "L-A005-2",
+      "L-A005-3",
+      "L-A005-4",
+      "L-A005-5",
+    ]);
+  });
+
+  it("regression: a mixed list of classic and prefixed racks detects each product's own gap independently, with no cross-contamination", () => {
+    const classicWithGap = ["A001-1", "A001-2", "A001-4", "A001-5"].map((n) => rack(n)); // missing A001-3
+    const prefixedWithGap = ["L-A001-1", "L-A001-2", "L-A001-4", "L-A001-5"].map((n) => loinRack(n)); // missing L-A001-3
+    const result = findMissingRackCodes([...classicWithGap, ...prefixedWithGap]);
+    expect(result.sort()).toEqual(["A001-3", "L-A001-3"].sort());
   });
 });
