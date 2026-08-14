@@ -170,9 +170,12 @@ export default function PackingPage() {
       });
       if (res.ok) {
         setOrders(orders.map(o => o.id === id ? { ...o, orderStatus: newStatus } : o));
+      } else {
+        alert("เปลี่ยนสถานะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       }
     } catch (e) {
       console.error(e);
+      alert("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
     }
   };
 
@@ -185,10 +188,49 @@ export default function PackingPage() {
       });
       if (res.ok) {
         setOrders(orders.map(o => o.id === id ? { ...o, trackingNumber: tracking } : o));
+      } else {
+        alert("บันทึกเลขพัสดุไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       }
     } catch (e) {
       console.error(e);
+      alert("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
     }
+  };
+
+  // Recovery for the "courier's cancelled-shipment rows got joined into a
+  // real tracking number" mess (see handleImportTracking's cancelled-row
+  // skip) — resets every EMS order on the currently-viewed date that still
+  // has no tracking number back to "รอดำเนินการ" (Pending), in case a bad
+  // import had already flipped it to "จัดส่งแล้ว" (Shipped) despite there
+  // being no real tracking number behind that status.
+  const resetMissingEmsToPending = async () => {
+    const targets = orders.filter((o) => o.shippingMethod === "EMS" && !o.trackingNumber && o.orderStatus !== "Pending");
+    if (targets.length === 0) {
+      alert("ไม่มีออเดอร์ EMS ที่ไม่มีเลข Tracking ต้องแก้ไข");
+      return;
+    }
+    if (!confirm(`ตั้งสถานะ "รอดำเนินการ" ให้ออเดอร์ EMS ที่ไม่มีเลข Tracking จำนวน ${targets.length} รายการ ใช่หรือไม่?\n\n${targets.map((o) => `- #${o.orderNo || "?"} ${o.customerName}`).join("\n")}`)) {
+      return;
+    }
+    let failCount = 0;
+    for (const o of targets) {
+      try {
+        const res = await fetch(`${BASE_PATH}/api/orders/${o.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderStatus: "Pending", editedBy: currentUser?.name }),
+        });
+        if (res.ok) {
+          setOrders((prev) => prev.map((p) => (p.id === o.id ? { ...p, orderStatus: "Pending" } : p)));
+        } else {
+          failCount++;
+        }
+      } catch (e) {
+        console.error(e);
+        failCount++;
+      }
+    }
+    alert(failCount > 0 ? `ตั้งสถานะสำเร็จ ${targets.length - failCount} รายการ, ล้มเหลว ${failCount} รายการ` : `ตั้งสถานะ "รอดำเนินการ" สำเร็จ ${targets.length} รายการ`);
   };
 
   interface RackPiece { assignmentId: string; rackNo: string; weight: number }
@@ -997,6 +1039,15 @@ export default function PackingPage() {
             title="Export เฉพาะออเดอร์ EMS ที่ยังไม่มีเลข Tracking (เทมเพลต Postone เดิม)"
           >
             📋 Export ที่ยังไม่มี Track
+          </button>
+
+          <button
+            onClick={resetMissingEmsToPending}
+            className={styles.toolbarBtn}
+            style={{ background: 'rgba(255,172,51,0.15)', border: '1px solid #ffac33', color: '#ffac33' }}
+            title="ตั้งสถานะ 'รอดำเนินการ' ให้ออเดอร์ EMS ที่ยังไม่มีเลข Tracking ของวันที่กำลังดูอยู่ (แก้เคสสถานะเพี้ยนจากการ import track ที่ยกเลิกรายการ)"
+          >
+            🔄 EMS ไม่มี Track → รอดำเนินการ
           </button>
 
           <button
