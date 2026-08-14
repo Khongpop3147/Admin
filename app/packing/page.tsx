@@ -719,19 +719,31 @@ export default function PackingPage() {
       }
 
       const rawRows: TrackingRow[] = [];
+      let cancelledSkippedCount = 0;
 
       rows.forEach((row: any) => {
         // The column names might vary slightly, but according to user it's "ชื่อผู้รับ" and "Tracking"
         const name = row["ชื่อผู้รับ"] || row["ชื่อ-สกุล"] || row["Customer Name"];
         const tracking = row["Tracking"] || row["tracking"] || row["Tracking Number"];
 
-        if (name && tracking) {
-          rawRows.push({
-            customerName: String(name).trim(),
-            trackingNumber: String(tracking).trim(),
-            rowDate: extractCellDateStr(row["กำหนดส่ง"]),
-          });
+        if (!name || !tracking) return;
+
+        // The courier's export includes cancelled shipments alongside real
+        // ones — their tracking number was never actually used, so
+        // importing it would comma-join a dead number onto (or even
+        // overwrite) the customer's real one. Skip the row entirely rather
+        // than let it reach the name-matcher at all.
+        const status = String(row["สถานะล่าสุด"] || "").trim();
+        if (status.includes("ยกเลิก")) {
+          cancelledSkippedCount++;
+          return;
         }
+
+        rawRows.push({
+          customerName: String(name).trim(),
+          trackingNumber: String(tracking).trim(),
+          rowDate: extractCellDateStr(row["กำหนดส่ง"]),
+        });
       });
 
       if (rawRows.length === 0) {
@@ -766,6 +778,9 @@ export default function PackingPage() {
         // customer name didn't match closely enough to the courier's sheet.
         const missingEms = (freshOrders || []).filter((o) => o.shippingMethod === "EMS" && !o.trackingNumber);
         let message = `อัปเดต Tracking สำเร็จ ${result.successCount} รายการ`;
+        if (cancelledSkippedCount > 0) {
+          message += `\n\n🚫 ข้ามแถวที่ยกเลิกรายการ ${cancelledSkippedCount} รายการ (ไม่นำเลข Tracking มาใส่)`;
+        }
         if (result.ambiguousCount > 0) {
           message += `\n\n⚠️ ชื่อกำกวม ตรงกับหลายออเดอร์พร้อมกัน — ต้องกรอกเลข Tracking เองให้ (${result.ambiguousCount} รายการ):\n${(result.ambiguousNames || []).map((n: string) => `- ${n}`).join("\n")}`;
         }
