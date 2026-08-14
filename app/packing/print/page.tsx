@@ -90,15 +90,15 @@ function PrintSlipContent() {
             หน้า {groupIdx + 1} จาก {adminGroups.length}
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+          <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', marginTop: '20px' }}>
             <thead>
               <tr>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '6%' }}>Order #</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '26%' }}>ชื่อลูกค้า / ที่อยู่</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '17%' }}>วิธีจัดส่ง</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '24%' }}>รหัสถาด (Rack)</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '10%' }}>จำนวนแผ่น</th>
-                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '17%' }}>น้ำหนักรวม</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '5%' }}>Order #</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '23%' }}>ชื่อลูกค้า / ที่อยู่</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '12%' }}>วิธีจัดส่ง</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', width: '39%' }}>รหัสถาด (Rack)</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '9%' }}>จำนวนแผ่น</th>
+                <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'center', width: '12%' }}>น้ำหนักรวม</th>
               </tr>
             </thead>
             <tbody>
@@ -122,9 +122,13 @@ function PrintSlipContent() {
                     }}>
                       {getShippingLabel(order)}
                     </td>
-                    <td style={{ border: '1px solid #000', padding: '10px', fontSize: '18px' }}>
+                    <td style={{ border: '1px solid #000', padding: '10px', fontSize: '16px' }}>
                       {rackData.detailsArray?.map((line, idx) => (
-                        <div key={idx}>{line.replace(/ kg$/, '')}</div>
+                        // nowrap so a rack's own weight list (e.g. "A026 = 2.68 / 1.85 / 1.52")
+                        // never breaks mid-list onto the next line — with table-layout: fixed,
+                        // letting it wrap made weights for the same rack visually fall onto a
+                        // separate line, looking disconnected from their rack code.
+                        <div key={idx} style={{ whiteSpace: 'nowrap' }}>{line.replace(/ kg$/, '')}</div>
                       ))}
                       {extractShortageNote(order.adminNote) && (
                         <div style={{ fontSize: '14px', color: '#a00', marginTop: '4px' }}>{extractShortageNote(order.adminNote)}</div>
