@@ -39,7 +39,7 @@ interface PendingStockEntry {
   id: string;
   actualReceivedAmount: number | null;
   codAmount: number | null;
-  items: { price: number }[];
+  items: { price: number; weightKg: number }[];
   fulfilledAt: string | null;
 }
 
@@ -321,20 +321,18 @@ export default function DashboardPage() {
     }
   }, [currentUser, router]);
 
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" });
-    const d = new Date(today);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  });
   // "" = company-wide (super admin only). Otherwise a seller name.
   const [viewTarget, setViewTarget] = useState("");
   // How wide a window of orders feeds the stat cards / status / per-admin
-  // panels — "day" is exactly selectedDate, "7d" trails backward from it,
-  // "1m" is a real calendar month (independent of selectedDate) picked via
+  // panels — "day" is an admin-picked [rangeFrom, rangeTo] window (a single
+  // day when both are equal, same as "วันนี้"/"เมื่อวาน" set them), "1m" is a
+  // real calendar month (independent of rangeFrom/rangeTo) picked via
   // selectedMonth below, and "year" is a real calendar year picked via
   // selectedYear — all reset to a fresh 0 at their boundary instead of
   // rolling.
-  const [statsPeriod, setStatsPeriod] = useState<"day" | "7d" | "1m" | "year">("day");
+  const [statsPeriod, setStatsPeriod] = useState<"day" | "1m" | "year">("day");
+  const [rangeFrom, setRangeFrom] = useState(() => todayStr());
+  const [rangeTo, setRangeTo] = useState(() => todayStr());
   const [selectedMonth, setSelectedMonth] = useState(() => currentMonthStr());
   const [selectedYear, setSelectedYear] = useState(() => currentYear());
   const [orders, setOrders] = useState<Order[]>([]);
@@ -364,6 +362,18 @@ export default function DashboardPage() {
     return { from: `${selectedYear}-01-01`, to };
   }, [selectedYear]);
 
+  // The actual [from, to] window driving every fetch below — one place
+  // covering all three statsPeriod modes instead of the same ternary
+  // repeated at every call site. "day" swaps rangeFrom/rangeTo if an admin
+  // picks them backwards, so the window is never empty just because the two
+  // inputs were filled in out of order; picking the same date for both (or
+  // just "วันนี้"/"เมื่อวาน") is the single-day case.
+  const activeRange = useMemo(() => {
+    if (statsPeriod === "day") return rangeFrom <= rangeTo ? { from: rangeFrom, to: rangeTo } : { from: rangeTo, to: rangeFrom };
+    if (statsPeriod === "1m") return monthRange;
+    return yearRange;
+  }, [statsPeriod, rangeFrom, rangeTo, monthRange, yearRange]);
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -376,14 +386,7 @@ export default function DashboardPage() {
         // real createdAt instant, so a pending-stock entry converted days
         // later still counts on its original date, matching what "วันที่ลง
         // order" means everywhere else in the app.
-        const range =
-          statsPeriod === "day"
-            ? `entryDateFrom=${selectedDate}&entryDateTo=${selectedDate}`
-            : statsPeriod === "7d"
-              ? `entryDateFrom=${addDays(selectedDate, -6)}&entryDateTo=${selectedDate}`
-              : statsPeriod === "1m"
-                ? `entryDateFrom=${monthRange.from}&entryDateTo=${monthRange.to}`
-                : `entryDateFrom=${yearRange.from}&entryDateTo=${yearRange.to}`;
+        const range = `entryDateFrom=${activeRange.from}&entryDateTo=${activeRange.to}`;
         const url = sellerName
           ? `${BASE_PATH}/api/orders?${range}&sellerName=${encodeURIComponent(sellerName)}`
           : `${BASE_PATH}/api/orders?${range}`;
@@ -398,7 +401,7 @@ export default function DashboardPage() {
     };
 
     fetchOrders();
-  }, [selectedDate, viewTarget, statsPeriod, currentUser, isSuperAdmin, monthRange, yearRange]);
+  }, [activeRange, viewTarget, currentUser, isSuperAdmin]);
 
   // Same date window as fetchOrders above, but against PendingStock's own
   // GET (dateFrom/dateTo on createdAt — see app/api/pending-stock/route.ts)
@@ -411,14 +414,7 @@ export default function DashboardPage() {
     const fetchPendingStock = async () => {
       try {
         const admin = isSuperAdmin ? viewTarget : currentUser.name;
-        const range =
-          statsPeriod === "day"
-            ? `dateFrom=${selectedDate}&dateTo=${selectedDate}`
-            : statsPeriod === "7d"
-              ? `dateFrom=${addDays(selectedDate, -6)}&dateTo=${selectedDate}`
-              : statsPeriod === "1m"
-                ? `dateFrom=${monthRange.from}&dateTo=${monthRange.to}`
-                : `dateFrom=${yearRange.from}&dateTo=${yearRange.to}`;
+        const range = `dateFrom=${activeRange.from}&dateTo=${activeRange.to}`;
         const url = admin
           ? `${BASE_PATH}/api/pending-stock?${range}&admin=${encodeURIComponent(admin)}`
           : `${BASE_PATH}/api/pending-stock?${range}`;
@@ -431,7 +427,7 @@ export default function DashboardPage() {
     };
 
     fetchPendingStock();
-  }, [selectedDate, viewTarget, statsPeriod, currentUser, isSuperAdmin, monthRange, yearRange]);
+  }, [activeRange, viewTarget, currentUser, isSuperAdmin]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -466,12 +462,19 @@ export default function DashboardPage() {
         }
 
         let dates: string[];
-        if (statsPeriod === "1m") {
+        if (statsPeriod === "1m" || rangeFrom !== rangeTo) {
+          // Same day-by-day fetch "1m" already does — a custom range can in
+          // principle span many months too, which means just as many
+          // requests; not throttled here since "1m" never was either.
           dates = [];
-          for (let d = monthRange.from; d <= monthRange.to; d = addDays(d, 1)) dates.push(d);
+          for (let d = activeRange.from; d <= activeRange.to; d = addDays(d, 1)) dates.push(d);
         } else {
+          // A genuine single-day view (rangeFrom === rangeTo, e.g.
+          // "วันนี้"/"เมื่อวาน") — one bar wouldn't read as a "trend" at all,
+          // so show the trailing 7 days ending on that day for context
+          // instead, same as before range-picking lived in this same mode.
           const trendDays = 7;
-          dates = Array.from({ length: trendDays }, (_, i) => addDays(selectedDate, i - (trendDays - 1)));
+          dates = Array.from({ length: trendDays }, (_, i) => addDays(rangeTo, i - (trendDays - 1)));
         }
         const results = await Promise.all(
           dates.map(async (d) => {
@@ -494,7 +497,7 @@ export default function DashboardPage() {
     };
 
     fetchTrend();
-  }, [selectedDate, viewTarget, currentUser, isSuperAdmin, statsPeriod, monthRange, yearRange, selectedYear]);
+  }, [activeRange, rangeFrom, rangeTo, viewTarget, currentUser, isSuperAdmin, statsPeriod, yearRange, selectedYear]);
 
   const stats = useMemo(() => {
     const totalWeight = orders.reduce((sum, o) => sum + (parseFloat(o.crispyPorkWeight || "0") || 0), 0);
@@ -569,14 +572,7 @@ export default function DashboardPage() {
     const fetchCancelledCount = async () => {
       try {
         const admin = isSuperAdmin ? viewTarget : currentUser.name;
-        const range =
-          statsPeriod === "day"
-            ? `dateFrom=${selectedDate}&dateTo=${selectedDate}`
-            : statsPeriod === "7d"
-              ? `dateFrom=${addDays(selectedDate, -6)}&dateTo=${selectedDate}`
-              : statsPeriod === "1m"
-                ? `dateFrom=${monthRange.from}&dateTo=${monthRange.to}`
-                : `dateFrom=${yearRange.from}&dateTo=${yearRange.to}`;
+        const range = `dateFrom=${activeRange.from}&dateTo=${activeRange.to}`;
         const url = admin
           ? `${BASE_PATH}/api/dashboard/cancelled-count?${range}&admin=${encodeURIComponent(admin)}`
           : `${BASE_PATH}/api/dashboard/cancelled-count?${range}`;
@@ -589,7 +585,38 @@ export default function DashboardPage() {
       }
     };
     fetchCancelledCount();
-  }, [selectedDate, viewTarget, statsPeriod, currentUser, isSuperAdmin, monthRange, yearRange]);
+  }, [activeRange, viewTarget, currentUser, isSuperAdmin]);
+
+  // How many customers are on the "ลูกค้ารอหมู" waiting list RIGHT NOW —
+  // deliberately NOT scoped to the period selector above (activeRange)
+  // unlike everything else on this page: this is a live backlog ("how much
+  // pork do I still owe") rather than a reporting-period metric, so it stays
+  // the same number whether an admin is looking at today or last year's
+  // stats. Fetches every entry (no dateFrom/dateTo) and counts/sums the
+  // still-unfulfilled ones client-side — same shape as the pending-stock
+  // page's own unfiltered "รอส่งของ" list.
+  const [stillWaitingCount, setStillWaitingCount] = useState(0);
+  const [stillWaitingWeightKg, setStillWaitingWeightKg] = useState(0);
+  useEffect(() => {
+    if (!currentUser) return;
+    const fetchStillWaiting = async () => {
+      try {
+        const admin = isSuperAdmin ? viewTarget : currentUser.name;
+        const url = admin
+          ? `${BASE_PATH}/api/pending-stock?admin=${encodeURIComponent(admin)}`
+          : `${BASE_PATH}/api/pending-stock`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const entries: PendingStockEntry[] = data.entries || [];
+        const waiting = entries.filter((e) => !e.fulfilledAt);
+        setStillWaitingCount(waiting.length);
+        setStillWaitingWeightKg(waiting.reduce((sum, e) => sum + (e.items || []).reduce((s, it) => s + (Number(it.weightKg) || 0), 0), 0));
+      } catch (e) {
+        console.error("Failed to fetch still-waiting pending-stock backlog", e);
+      }
+    };
+    fetchStillWaiting();
+  }, [viewTarget, currentUser, isSuperAdmin]);
 
   const perAdminBreakdown = useMemo(() => {
     if (!isSuperAdmin || viewTarget !== "") return [];
@@ -726,14 +753,24 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>{statsPeriod === "day" ? "วันที่" : "ถึงวันที่"}</label>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className={styles.input}
-              style={{ padding: "10px 16px" }}
-            />
+            <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>วันที่</label>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <input
+                type="date"
+                value={rangeFrom}
+                onChange={(e) => e.target.value && setRangeFrom(e.target.value)}
+                className={styles.input}
+                style={{ padding: "10px 16px" }}
+              />
+              <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>ถึง</span>
+              <input
+                type="date"
+                value={rangeTo}
+                onChange={(e) => e.target.value && setRangeTo(e.target.value)}
+                className={styles.input}
+                style={{ padding: "10px 16px" }}
+              />
+            </div>
           </div>
         )}
 
@@ -741,18 +778,19 @@ export default function DashboardPage() {
           <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ช่วงเวลา</label>
           <div style={{ display: "flex", gap: "6px" }}>
             {/* วันนี้/เมื่อวาน are both statsPeriod "day" underneath, just a
-                quick-jump for selectedDate — the date picker above still
-                works normally for any other specific day, this just saves
-                a couple clicks for the two dates checked most often.
-                Highlighted only when selectedDate actually matches that
-                exact day, so picking some other date via the input above
-                correctly shows neither as active. */}
+                quick-jump that sets rangeFrom AND rangeTo to the same single
+                day — the two date inputs above still work normally for any
+                other day or a genuine multi-day range, this just saves a
+                couple clicks for the two dates checked most often.
+                Highlighted only when rangeFrom/rangeTo both actually match
+                that exact day, so picking some other date (or a range) via
+                the inputs above correctly shows neither as active. */}
             <button
               type="button"
-              onClick={() => { setStatsPeriod("day"); setSelectedDate(todayStr()); }}
+              onClick={() => { setStatsPeriod("day"); setRangeFrom(todayStr()); setRangeTo(todayStr()); }}
               style={{
-                background: statsPeriod === "day" && selectedDate === todayStr() ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
-                color: statsPeriod === "day" && selectedDate === todayStr() ? "#fff" : "var(--text-secondary)",
+                background: statsPeriod === "day" && rangeFrom === todayStr() && rangeTo === todayStr() ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                color: statsPeriod === "day" && rangeFrom === todayStr() && rangeTo === todayStr() ? "#fff" : "var(--text-secondary)",
                 border: "none",
                 borderRadius: "8px",
                 padding: "10px 16px",
@@ -765,10 +803,10 @@ export default function DashboardPage() {
             </button>
             <button
               type="button"
-              onClick={() => { setStatsPeriod("day"); setSelectedDate(addDays(todayStr(), -1)); }}
+              onClick={() => { setStatsPeriod("day"); setRangeFrom(addDays(todayStr(), -1)); setRangeTo(addDays(todayStr(), -1)); }}
               style={{
-                background: statsPeriod === "day" && selectedDate === addDays(todayStr(), -1) ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
-                color: statsPeriod === "day" && selectedDate === addDays(todayStr(), -1) ? "#fff" : "var(--text-secondary)",
+                background: statsPeriod === "day" && rangeFrom === addDays(todayStr(), -1) && rangeTo === addDays(todayStr(), -1) ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                color: statsPeriod === "day" && rangeFrom === addDays(todayStr(), -1) && rangeTo === addDays(todayStr(), -1) ? "#fff" : "var(--text-secondary)",
                 border: "none",
                 borderRadius: "8px",
                 padding: "10px 16px",
@@ -780,7 +818,6 @@ export default function DashboardPage() {
               เมื่อวาน
             </button>
             {([
-              { key: "7d", label: "7 วัน" },
               { key: "1m", label: "1 เดือน" },
               { key: "year", label: "รายปี" },
             ] as const).map((opt) => (
@@ -828,9 +865,9 @@ export default function DashboardPage() {
         <div style={{ textAlign: "center", padding: "60px", color: "var(--text-secondary)" }}>กำลังโหลด...</div>
       ) : (
         <>
-          {statsPeriod === "7d" && (
+          {statsPeriod === "day" && rangeFrom !== rangeTo && (
             <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
-              📅 แสดงข้อมูล {addDays(selectedDate, -6)} ถึง {selectedDate}
+              📅 แสดงข้อมูล {activeRange.from} ถึง {activeRange.to}
             </div>
           )}
           {statsPeriod === "1m" && (
@@ -850,21 +887,30 @@ export default function DashboardPage() {
             <StatCard label="ยอดรับจริงรวม" value={`฿${formatMoney(stats.totalReceived)}`} color="#3fb950" />
           </div>
 
+          {stillWaitingCount > 0 && (
+            <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px", border: "1px dashed rgba(88,166,255,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+              <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+                🐷 <strong style={{ color: "#58a6ff" }}>ลูกค้าที่ยังรอหมู</strong> — ยังไม่ได้ส่งของ ณ ตอนนี้ (ไม่ขึ้นกับช่วงเวลาที่เลือกด้านบน)
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#58a6ff" }}>{stillWaitingCount} ออเดอร์ · {stillWaitingWeightKg.toFixed(2)} กก.</div>
+            </div>
+          )}
+
           {stats.codHeldCount > 0 && (
             <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px", border: "1px dashed rgba(255,172,51,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
               <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
-                🔒 <strong style={{ color: "#ffac33" }}>ยอด COD ที่ยัง Hold ไว้</strong> — รอยืนยันว่าลูกค้ารับของและจ่ายเงินแล้ว ({stats.codHeldCount} ออเดอร์) ยังไม่นับรวมในยอดรับจริงด้านบน
+                🔒 <strong style={{ color: "#ffac33" }}>ยอด COD ที่ยัง Hold ไว้</strong> — รอยืนยันว่าลูกค้ารับของและจ่ายเงินแล้ว ยังไม่นับรวมในยอดรับจริงด้านบน
               </div>
-              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#ffac33" }}>฿{formatMoney(stats.totalCodHeld)}</div>
+              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#ffac33" }}>{stats.codHeldCount} ออเดอร์ · ฿{formatMoney(stats.totalCodHeld)}</div>
             </div>
           )}
 
           {cancelledCount > 0 && (
             <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px", border: "1px dashed rgba(255,107,107,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
               <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
-                🚫 <strong style={{ color: "#ff6b6b" }}>รายการที่ถูกยกเลิก</strong> — เคยนับเป็นยอดขายไปแล้ว แต่ถูกลบทิ้งภายหลัง (ลูกค้ารอหมูที่ยกเลิกก่อนส่ง packing + order ที่ถูกลบจาก packing รวม {cancelledCount} รายการ) ยอดขาย/ยอดรับจริงด้านบนหักออกให้แล้วอัตโนมัติ
+                🚫 <strong style={{ color: "#ff6b6b" }}>รายการที่ถูกยกเลิก</strong> — เคยนับเป็นยอดขายไปแล้ว แต่ถูกลบทิ้งภายหลัง ยอดขาย/ยอดรับจริงด้านบนหักออกให้แล้วอัตโนมัติ
               </div>
-              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#ff6b6b" }}>-฿{formatMoney(cancelledAmount)}</div>
+              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#ff6b6b" }}>{cancelledCount} รายการ · -฿{formatMoney(cancelledAmount)}</div>
             </div>
           )}
 
@@ -881,7 +927,7 @@ export default function DashboardPage() {
           <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "24px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
               <h3 style={{ fontSize: "15px", color: "var(--text-secondary)", margin: 0 }}>
-                แนวโน้ม {statsPeriod === "1m" ? monthLabel(selectedMonth) : statsPeriod === "year" ? `ปี ${selectedYear}` : "7 วันล่าสุด"}
+                แนวโน้ม {statsPeriod === "1m" ? monthLabel(selectedMonth) : statsPeriod === "year" ? `ปี ${selectedYear}` : rangeFrom !== rangeTo ? `${activeRange.from} ถึง ${activeRange.to}` : "7 วันล่าสุด"}
               </h3>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 <div style={{ display: "flex", gap: "8px" }}>
