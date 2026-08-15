@@ -253,6 +253,24 @@ export async function DELETE(
         },
       });
 
+      // A second, separate log entry purely for Dashboard's cancelled-sales
+      // banner (see GET /api/dashboard/cancelled-count) — this order's money
+      // already counted as sold in Dashboard's totals the moment it was
+      // created, so deleting it is a real reversal. Deliberately attributed
+      // to order.sellerName (whoever's revenue this reverses), not
+      // session.name (the Super Admin who clicked delete here — this route
+      // is Super-Admin-only, so session.name would never match a regular
+      // admin's own Dashboard view otherwise).
+      await tx.orderAuditLog.create({
+        data: {
+          orderId: id,
+          action: "ORDER_CANCELLED",
+          summary: `ลบออเดอร์ #${order.orderNo || "-"} (${order.customerName}) จาก Packing (฿${Math.round(order.actualReceivedAmount || 0)})`,
+          performedBy: order.sellerName,
+          amount: order.actualReceivedAmount,
+        },
+      });
+
       await tx.order.delete({ where: { id } });
     });
 

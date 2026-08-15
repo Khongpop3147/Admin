@@ -18,14 +18,17 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export const dynamic = "force-dynamic";
 
-// How many still-waiting "ลูกค้ารอหมู" entries got deleted (never sent to
-// packing) within a date range — Dashboard's own sales figures count this
-// money the moment it's logged, so a delete before conversion is a real
-// reversal of money already shown as sold, not just tidying up a mistake.
-// Reads the "PENDING_STOCK_CANCELLED" log DELETE /api/pending-stock/[id]
-// writes to OrderAuditLog. Same per-admin scoping as GET /api/pending-stock
-// itself: a regular admin only ever sees their own, Super Admin sees
-// everyone (or one admin via ?admin=).
+// How many sales Dashboard already counted got reversed within a date range
+// — two sources, both read back from OrderAuditLog:
+//   - "PENDING_STOCK_CANCELLED": a still-waiting "ลูกค้ารอหมู" entry deleted
+//     before it ever shipped (see DELETE /api/pending-stock/[id]).
+//   - "ORDER_CANCELLED": a real Order deleted from Packing (see
+//     DELETE /api/orders/[id]).
+// Both count toward Dashboard's totalSales the moment they're created, so
+// either kind of delete is a genuine reversal of money already shown as
+// sold, not just tidying up a mistake — surfaced together as one banner.
+// Same per-admin scoping as the rest of Dashboard: a regular admin only
+// ever sees their own, Super Admin sees everyone (or one admin via ?admin=).
 export async function GET(req: Request) {
   try {
     const session = await getSessionUser();
@@ -38,7 +41,7 @@ export async function GET(req: Request) {
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
 
-    const whereClause: any = { action: "PENDING_STOCK_CANCELLED" };
+    const whereClause: any = { action: { in: ["PENDING_STOCK_CANCELLED", "ORDER_CANCELLED"] } };
     if (isSuperAdminRole(session.role)) {
       if (adminParam) whereClause.performedBy = adminParam;
     } else {
@@ -57,7 +60,7 @@ export async function GET(req: Request) {
     ]);
     return NextResponse.json({ success: true, count, totalAmount: sum._sum.amount || 0 }, { status: 200 });
   } catch (error) {
-    console.error("Error counting cancelled pending stock entries:", error);
+    console.error("Error counting cancelled sales:", error);
     return NextResponse.json({ error: "เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง" }, { status: 500 });
   }
 }

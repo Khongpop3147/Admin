@@ -556,12 +556,12 @@ export default function DashboardPage() {
     };
   }, [orders, pendingStockEntries]);
 
-  // How many still-waiting entries got deleted (cancelled before ever
-  // shipping) within the same window `orders`/`pendingStockEntries` cover —
-  // since their money was already counted as sales above the moment they
-  // were logged, a delete is a real reversal, not silent tidying. See
-  // DELETE /api/pending-stock/[id] (writes the log) and
-  // /api/pending-stock/cancelled-count (reads it back).
+  // How many sales already counted above got reversed within this window —
+  // either a still-waiting "ลูกค้ารอหมู" entry deleted before it ever shipped
+  // (DELETE /api/pending-stock/[id]) or a real Order deleted from Packing
+  // (DELETE /api/orders/[id]) — both count toward totalSales the moment
+  // they're created, so either kind of delete is a genuine reversal, not
+  // silent tidying. See GET /api/dashboard/cancelled-count (reads both back).
   const [cancelledCount, setCancelledCount] = useState(0);
   const [cancelledAmount, setCancelledAmount] = useState(0);
   useEffect(() => {
@@ -578,14 +578,14 @@ export default function DashboardPage() {
                 ? `dateFrom=${monthRange.from}&dateTo=${monthRange.to}`
                 : `dateFrom=${yearRange.from}&dateTo=${yearRange.to}`;
         const url = admin
-          ? `${BASE_PATH}/api/pending-stock/cancelled-count?${range}&admin=${encodeURIComponent(admin)}`
-          : `${BASE_PATH}/api/pending-stock/cancelled-count?${range}`;
+          ? `${BASE_PATH}/api/dashboard/cancelled-count?${range}&admin=${encodeURIComponent(admin)}`
+          : `${BASE_PATH}/api/dashboard/cancelled-count?${range}`;
         const res = await fetch(url);
         const data = await res.json();
         setCancelledCount(data.count || 0);
         setCancelledAmount(data.totalAmount || 0);
       } catch (e) {
-        console.error("Failed to fetch cancelled pending-stock count", e);
+        console.error("Failed to fetch cancelled-sales count", e);
       }
     };
     fetchCancelledCount();
@@ -862,7 +862,7 @@ export default function DashboardPage() {
           {cancelledCount > 0 && (
             <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px", border: "1px dashed rgba(255,107,107,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
               <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
-                🚫 <strong style={{ color: "#ff6b6b" }}>ลูกค้ารอหมูที่ถูกยกเลิก</strong> — เคยนับเป็นยอดขายไปแล้วตอนลง order แต่ถูกลบก่อนส่งไป packing ({cancelledCount} รายการ) ยอดขาย/ยอดรับจริงด้านบนหักออกให้แล้วอัตโนมัติ
+                🚫 <strong style={{ color: "#ff6b6b" }}>รายการที่ถูกยกเลิก</strong> — เคยนับเป็นยอดขายไปแล้ว แต่ถูกลบทิ้งภายหลัง (ลูกค้ารอหมูที่ยกเลิกก่อนส่ง packing + order ที่ถูกลบจาก packing รวม {cancelledCount} รายการ) ยอดขาย/ยอดรับจริงด้านบนหักออกให้แล้วอัตโนมัติ
               </div>
               <div style={{ fontSize: "20px", fontWeight: "bold", color: "#ff6b6b" }}>-฿{formatMoney(cancelledAmount)}</div>
             </div>
