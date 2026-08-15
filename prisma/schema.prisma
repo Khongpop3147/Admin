@@ -209,6 +209,12 @@ model OrderAuditLog {
   summary     String
   performedBy String?
   createdAt   DateTime @default(now())
+  // Only set for actions a caller needs to sum later (currently just
+  // PENDING_STOCK_CANCELLED — see DELETE /api/pending-stock/[id] and
+  // /api/pending-stock/cancelled-count) — the baht amount that action
+  // reversed. Null for every plain EDIT/DELETE entry, which only ever
+  // needed the free-text summary already stored above.
+  amount      Float?
 }
 
 // A customer already committed to buying (paid up front, or agreed to COD),

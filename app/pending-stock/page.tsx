@@ -706,6 +706,23 @@ export default function PendingStockPage() {
   const slipCount = slipVerification ? 1 : 0;
   const totalVerifiedSlipAmount = sumUsableSlipAmounts([slipVerification]);
 
+  // How much of each product is still owed across every still-waiting entry
+  // currently shown (respects the admin/date filters above) — a line counts
+  // as still-owed once it has no rackDetails assigned yet, same definition
+  // Rack Management's own shortage badge uses. Grouped by product since a
+  // customer's order can mix หมูกรอบ/สันนอก/สะโพก and each is a separate
+  // physical stock the admin needs to go find.
+  const shortageByProduct = new Map<string, number>();
+  for (const entry of pending) {
+    for (const item of entry.items) {
+      if ((item.rackDetails?.length ?? 0) > 0) continue;
+      shortageByProduct.set(item.productType, (shortageByProduct.get(item.productType) || 0) + item.weightKg);
+    }
+  }
+  const shortageList = Array.from(shortageByProduct.entries())
+    .map(([productType, weight]) => ({ productType, weight, label: PRODUCT_TYPES[productType]?.label || productType }))
+    .sort((a, b) => b.weight - a.weight);
+
   return (
     <div style={{ padding: "24px", maxWidth: "900px", margin: "0 auto", color: "#fff" }}>
       <div className={styles.header} style={{ textAlign: "left", marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "16px" }}>
@@ -945,6 +962,17 @@ export default function PendingStockPage() {
               )}
             </div>
           </div>
+          {shortageList.length > 0 && (
+            <div style={{ background: "rgba(255,159,67,0.08)", border: "1px solid rgba(255,159,67,0.3)", borderRadius: "8px", padding: "12px 16px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "13px", color: "#ff9f43", fontWeight: "bold" }}>🐷 หมูที่ยังขาด (ยังไม่ได้ใส่):</span>
+              {shortageList.map((s, i) => (
+                <span key={s.productType} style={{ fontSize: "13px", color: "#ff9f43" }}>
+                  {i > 0 && "· "}
+                  {s.label} {s.weight.toFixed(2)} กก.
+                </span>
+              ))}
+            </div>
+          )}
           {pending.length === 0 ? (
             <div className="glass-panel" style={{ padding: "20px", borderRadius: "12px", marginBottom: "32px", color: "var(--text-secondary)", fontSize: "13px" }}>
               {filterDate ? "ไม่มีลูกค้ารอของในวันที่เลือก" : "ไม่มีลูกค้ารอของอยู่"}

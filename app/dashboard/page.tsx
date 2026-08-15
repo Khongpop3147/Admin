@@ -29,15 +29,17 @@ interface TrendPoint {
   orderCount: number;
 }
 
-// Only the fields Dashboard's own "รอดำเนินการ" figure needs — a
-// still-waiting "ลูกค้ารอหมู" entry (fulfilledAt null) counts as expected-
-// but-not-yet-confirmed money on the day it was logged, kept strictly
-// separate from totalSales/totalReceived (which only ever count real
-// Orders) so a customer still waiting on stock never inflates confirmed
-// revenue. See app/api/pending-stock/route.ts's GET.
+// A still-waiting "ลูกค้ารอหมู" entry (fulfilledAt null) counts straight
+// into totalSales/totalReceived below, the same moment it's logged — not
+// once it converts to a real Order. codAmount/items are needed to fold it
+// in using the exact same COD-holds-back-totalReceived rule real Orders
+// already follow (see isCodPending in lib/money.ts) rather than a cruder
+// all-or-nothing include. See app/api/pending-stock/route.ts's GET.
 interface PendingStockEntry {
   id: string;
   actualReceivedAmount: number | null;
+  codAmount: number | null;
+  items: { price: number }[];
   fulfilledAt: string | null;
 }
 
@@ -511,27 +513,80 @@ export default function DashboardPage() {
     const totalCodHeld = orders.reduce((sum, o) => sum + (isCodHeld(o) ? Number(o.actualReceivedAmount) || 0 : 0), 0);
     const codHeldCount = orders.filter(isCodHeld).length;
 
+    // Still-waiting "ลูกค้ารอหมู" entries count as sales the instant
+    // they're logged, not once they convert to a real Order — folded
+    // straight into the same totals above using the same COD rule a real
+    // order follows: COD money isn't actually in hand yet either way, so
+    // it goes to totalCodHeld instead of totalReceived. A fulfilled entry
+    // is skipped — its money is now a real Order's job to count via
+    // `orders` above, and counting both would double it. orderCount stays
+    // real-Orders-only; this is a money figure, not an order count.
+    let pendingSales = 0;
+    let pendingReceived = 0;
+    let pendingCodHeld = 0;
+    let pendingCodHeldCount = 0;
+    for (const e of pendingStockEntries) {
+      if (e.fulfilledAt) continue;
+      pendingSales += (e.items || []).reduce((s, it) => s + (Number(it.price) || 0), 0);
+      if ((Number(e.codAmount) || 0) > 0) {
+        pendingCodHeld += Number(e.actualReceivedAmount) || 0;
+        pendingCodHeldCount++;
+      } else {
+        pendingReceived += Number(e.actualReceivedAmount) || 0;
+      }
+    }
+
     const statusCounts: Record<string, number> = { Pending: 0, Packed: 0, Shipped: 0, Completed: 0 };
     orders.forEach((o) => {
       const key = o.orderStatus && statusCounts[o.orderStatus] !== undefined ? o.orderStatus : "Pending";
       statusCounts[key]++;
     });
 
-    return { orderCount, totalWeight, totalSales, totalReceived, totalCodHeld, codHeldCount, statusCounts };
-  }, [orders]);
+    return {
+      orderCount,
+      totalWeight,
+      totalSales: totalSales + pendingSales,
+      totalReceived: totalReceived + pendingReceived,
+      totalCodHeld: totalCodHeld + pendingCodHeld,
+      codHeldCount: codHeldCount + pendingCodHeldCount,
+      statusCounts,
+    };
+  }, [orders, pendingStockEntries]);
 
-  // Still-waiting "ลูกค้ารอหมู" money — counted from the moment it's logged
-  // (not once it converts to a real Order), but kept in its own figure
-  // rather than folded into totalSales/totalReceived above, so a customer
-  // who's still waiting on stock never reads as confirmed revenue. An
-  // entry that's already been sent to packing (fulfilledAt set) is excluded
-  // here — its money is now the real Order's job to count, via `stats`
-  // above, and double-counting both would overstate the day's total.
-  const pendingStockStats = useMemo(() => {
-    const unfulfilled = pendingStockEntries.filter((e) => !e.fulfilledAt);
-    const total = unfulfilled.reduce((sum, e) => sum + (Number(e.actualReceivedAmount) || 0), 0);
-    return { count: unfulfilled.length, total };
-  }, [pendingStockEntries]);
+  // How many still-waiting entries got deleted (cancelled before ever
+  // shipping) within the same window `orders`/`pendingStockEntries` cover —
+  // since their money was already counted as sales above the moment they
+  // were logged, a delete is a real reversal, not silent tidying. See
+  // DELETE /api/pending-stock/[id] (writes the log) and
+  // /api/pending-stock/cancelled-count (reads it back).
+  const [cancelledCount, setCancelledCount] = useState(0);
+  const [cancelledAmount, setCancelledAmount] = useState(0);
+  useEffect(() => {
+    if (!currentUser) return;
+    const fetchCancelledCount = async () => {
+      try {
+        const admin = isSuperAdmin ? viewTarget : currentUser.name;
+        const range =
+          statsPeriod === "day"
+            ? `dateFrom=${selectedDate}&dateTo=${selectedDate}`
+            : statsPeriod === "7d"
+              ? `dateFrom=${addDays(selectedDate, -6)}&dateTo=${selectedDate}`
+              : statsPeriod === "1m"
+                ? `dateFrom=${monthRange.from}&dateTo=${monthRange.to}`
+                : `dateFrom=${yearRange.from}&dateTo=${yearRange.to}`;
+        const url = admin
+          ? `${BASE_PATH}/api/pending-stock/cancelled-count?${range}&admin=${encodeURIComponent(admin)}`
+          : `${BASE_PATH}/api/pending-stock/cancelled-count?${range}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        setCancelledCount(data.count || 0);
+        setCancelledAmount(data.totalAmount || 0);
+      } catch (e) {
+        console.error("Failed to fetch cancelled pending-stock count", e);
+      }
+    };
+    fetchCancelledCount();
+  }, [selectedDate, viewTarget, statsPeriod, currentUser, isSuperAdmin, monthRange, yearRange]);
 
   const perAdminBreakdown = useMemo(() => {
     if (!isSuperAdmin || viewTarget !== "") return [];
@@ -682,8 +737,46 @@ export default function DashboardPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ช่วงเวลา</label>
           <div style={{ display: "flex", gap: "6px" }}>
+            {/* วันนี้/เมื่อวาน are both statsPeriod "day" underneath, just a
+                quick-jump for selectedDate — the date picker above still
+                works normally for any other specific day, this just saves
+                a couple clicks for the two dates checked most often.
+                Highlighted only when selectedDate actually matches that
+                exact day, so picking some other date via the input above
+                correctly shows neither as active. */}
+            <button
+              type="button"
+              onClick={() => { setStatsPeriod("day"); setSelectedDate(todayStr()); }}
+              style={{
+                background: statsPeriod === "day" && selectedDate === todayStr() ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                color: statsPeriod === "day" && selectedDate === todayStr() ? "#fff" : "var(--text-secondary)",
+                border: "none",
+                borderRadius: "8px",
+                padding: "10px 16px",
+                fontSize: "13px",
+                fontWeight: "bold",
+                cursor: "pointer",
+              }}
+            >
+              วันนี้
+            </button>
+            <button
+              type="button"
+              onClick={() => { setStatsPeriod("day"); setSelectedDate(addDays(todayStr(), -1)); }}
+              style={{
+                background: statsPeriod === "day" && selectedDate === addDays(todayStr(), -1) ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                color: statsPeriod === "day" && selectedDate === addDays(todayStr(), -1) ? "#fff" : "var(--text-secondary)",
+                border: "none",
+                borderRadius: "8px",
+                padding: "10px 16px",
+                fontSize: "13px",
+                fontWeight: "bold",
+                cursor: "pointer",
+              }}
+            >
+              เมื่อวาน
+            </button>
             {([
-              { key: "day", label: "ต่อวัน" },
               { key: "7d", label: "7 วัน" },
               { key: "1m", label: "1 เดือน" },
               { key: "year", label: "รายปี" },
@@ -763,12 +856,12 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {pendingStockStats.count > 0 && (
-            <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px", border: "1px dashed rgba(88,166,255,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+          {cancelledCount > 0 && (
+            <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px", border: "1px dashed rgba(255,107,107,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
               <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
-                🐷 <strong style={{ color: "var(--accent-blue)" }}>ยอดรอดำเนินการ (ลูกค้ารอหมู)</strong> — ลูกค้ายังไม่ได้ของ ({pendingStockStats.count} รายการ) ยังไม่นับรวมในยอดขาย/ยอดรับจริงด้านบน จนกว่าจะส่งไป packing
+                🚫 <strong style={{ color: "#ff6b6b" }}>ลูกค้ารอหมูที่ถูกยกเลิก</strong> — เคยนับเป็นยอดขายไปแล้วตอนลง order แต่ถูกลบก่อนส่งไป packing ({cancelledCount} รายการ) ยอดขาย/ยอดรับจริงด้านบนหักออกให้แล้วอัตโนมัติ
               </div>
-              <div style={{ fontSize: "20px", fontWeight: "bold", color: "var(--accent-blue)" }}>฿{formatMoney(pendingStockStats.total)}</div>
+              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#ff6b6b" }}>-฿{formatMoney(cancelledAmount)}</div>
             </div>
           )}
 

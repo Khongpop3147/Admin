@@ -155,6 +155,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 // would double-book the same pieces. Deleting only ever removes the
 // waiting-list tracking record; any real order already created from it is
 // untouched.
+//
+// Dashboard counts a still-waiting entry's money as real sales from the
+// moment it's logged (see app/dashboard/page.tsx), not once it converts to
+// an Order — so deleting one that never got that far is a genuine reversal
+// of money already shown as sold, not just tidying up a mistake. Logged
+// here (reusing OrderAuditLog, orderId left null) so Dashboard can surface
+// "N รายการถูกยกเลิก" for the period, rather than the number just quietly
+// dropping with no explanation. A FULFILLED entry's delete is never logged
+// this way — its money already belongs to a real Order that's untouched by
+// this delete, so there's nothing to reverse.
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSessionUser();
@@ -178,6 +188,17 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
             });
           }
         }
+      }
+      if (!entry.fulfilledAt) {
+        await tx.orderAuditLog.create({
+          data: {
+            orderId: null,
+            action: "PENDING_STOCK_CANCELLED",
+            summary: `ยกเลิกรายการลูกค้ารอหมู: ${entry.customerName} (฿${Math.round(entry.actualReceivedAmount || 0)})`,
+            performedBy: entry.createdBy,
+            amount: entry.actualReceivedAmount,
+          },
+        });
       }
       await tx.pendingStock.delete({ where: { id } });
     });
