@@ -256,14 +256,16 @@ export async function DELETE(
         },
       });
 
-      // A second, separate log entry distinguishing a genuine cancellation+
-      // refund from a data-entry mistake (nothing was ever really sold in
-      // that case, so there's nothing to reverse) — only written when it
-      // was genuine. Visible via the Audit Log page (GET /api/audit-log).
+      // A second, separate log entry purely for Dashboard's cancelled-sales
+      // banner (see GET /api/dashboard/cancelled-count) — only written when
+      // this was a genuine cancellation+refund, not a data-entry mistake
+      // (nothing was ever really sold, so there's nothing to reverse). This
+      // order's money already counted as sold in Dashboard's totals the
+      // moment it was created, so a genuine cancel here is a real reversal.
       // Deliberately attributed to order.sellerName (whoever's revenue this
       // reverses), not session.name (the Super Admin who clicked delete
       // here — this route is Super-Admin-only, so session.name would never
-      // match a regular admin's own record otherwise).
+      // match a regular admin's own Dashboard view otherwise).
       if (!isMistake) {
         await tx.orderAuditLog.create({
           data: {

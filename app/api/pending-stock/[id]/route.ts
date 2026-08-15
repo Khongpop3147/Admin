@@ -148,12 +148,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 // Handles two very different reasons an admin deletes a waiting-list entry
 // — the client asks which one via a popup and sends it as `reason`:
 //   - "mistake": typo'd customer/wrong product, nothing was ever really
-//     sold. Deleted with no audit trail beyond the delete itself.
+//     sold. Deleted with no trace in Dashboard's cancelled-sales banner.
 //   - "cancelled" (default if the client sends neither, for safety): the
 //     customer genuinely backed out and got refunded — a real reversal of
-//     money that was already logged as a sale (see app/dashboard/page.tsx),
-//     so it's logged to OrderAuditLog (reusing the table, orderId left
-//     null), visible via the Audit Log page (GET /api/audit-log).
+//     money Dashboard already counted as sold the moment this was logged
+//     (see app/dashboard/page.tsx), so it's logged to OrderAuditLog
+//     (reusing the table, orderId left null) so Dashboard can surface
+//     "N รายการถูกยกเลิก" for the period instead of the number just quietly
+//     dropping with no explanation.
 // Either way: if real stock was already assigned to some lines (see
 // assign-stock/route.ts) but the entry never got sent to packing, that
 // weight goes back to the racks it came from first, so deleting an entry
@@ -161,9 +163,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 // that HAS already become a real order (its own orderId, via
 // send-to-packing/route.ts) is skipped entirely — that stock legitimately
 // belongs to that order now, restoring it here would double-book the same
-// pieces. A FULFILLED entry's delete is never logged this way either — its
-// money already belongs to a real Order that's untouched by this delete, so
-// there's nothing to reverse.
+// pieces. A FULFILLED entry's delete is never logged to the cancelled-sales
+// banner either way — its money already belongs to a real Order that's
+// untouched by this delete, so there's nothing to reverse.
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSessionUser();
