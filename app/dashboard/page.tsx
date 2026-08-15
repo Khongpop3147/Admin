@@ -497,7 +497,6 @@ export default function DashboardPage() {
   }, [selectedDate, viewTarget, currentUser, isSuperAdmin, statsPeriod, monthRange, yearRange, selectedYear]);
 
   const stats = useMemo(() => {
-    const orderCount = orders.length;
     const totalWeight = orders.reduce((sum, o) => sum + (parseFloat(o.crispyPorkWeight || "0") || 0), 0);
     const totalSales = orders.reduce((sum, o) => sum + (isExcludedFromRevenue(o) ? 0 : Number(o.price) || 0), 0);
     const totalReceived = orders.reduce((sum, o) => {
@@ -519,14 +518,17 @@ export default function DashboardPage() {
     // order follows: COD money isn't actually in hand yet either way, so
     // it goes to totalCodHeld instead of totalReceived. A fulfilled entry
     // is skipped — its money is now a real Order's job to count via
-    // `orders` above, and counting both would double it. orderCount stays
-    // real-Orders-only; this is a money figure, not an order count.
+    // `orders` above, and counting both would double it. Same reasoning
+    // applies to orderCount itself: a fulfilled entry already has a real
+    // Order counted in `orders.length`, so only unfulfilled ones add here.
     let pendingSales = 0;
     let pendingReceived = 0;
     let pendingCodHeld = 0;
     let pendingCodHeldCount = 0;
+    let pendingOrderCount = 0;
     for (const e of pendingStockEntries) {
       if (e.fulfilledAt) continue;
+      pendingOrderCount++;
       pendingSales += (e.items || []).reduce((s, it) => s + (Number(it.price) || 0), 0);
       if ((Number(e.codAmount) || 0) > 0) {
         pendingCodHeld += Number(e.actualReceivedAmount) || 0;
@@ -535,6 +537,7 @@ export default function DashboardPage() {
         pendingReceived += Number(e.actualReceivedAmount) || 0;
       }
     }
+    const orderCount = orders.length + pendingOrderCount;
 
     const statusCounts: Record<string, number> = { Pending: 0, Packed: 0, Shipped: 0, Completed: 0 };
     orders.forEach((o) => {
