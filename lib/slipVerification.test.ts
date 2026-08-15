@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { isSlipUsable, sumUsableSlipAmounts, isTotalAmountMatched, hasAnySlipIssue } from "./slipVerification";
+import {
+  isSlipUsable,
+  sumUsableSlipAmounts,
+  isTotalAmountMatched,
+  hasAnySlipIssue,
+  isSlipIssueReasonComplete,
+  buildSlipIssueNote,
+  SLIP_ISSUE_OTHER,
+} from "./slipVerification";
 
 describe("isSlipUsable", () => {
   it("is false for null/undefined (no slip yet)", () => {
@@ -90,5 +98,46 @@ describe("hasAnySlipIssue", () => {
 
   it("is true if any single slip's account didn't match", () => {
     expect(hasAnySlipIssue([{ success: true, accountMatched: false }])).toBe(true);
+  });
+});
+
+describe("isSlipIssueReasonComplete", () => {
+  it("is false when no reason is picked yet", () => {
+    expect(isSlipIssueReasonComplete("", "")).toBe(false);
+  });
+
+  it("is true for any fixed reason, regardless of otherText", () => {
+    expect(isSlipIssueReasonComplete("สลิปไม่มี QR โค้ด", "")).toBe(true);
+  });
+
+  it("is false for SLIP_ISSUE_OTHER with no detail typed", () => {
+    expect(isSlipIssueReasonComplete(SLIP_ISSUE_OTHER, "")).toBe(false);
+    expect(isSlipIssueReasonComplete(SLIP_ISSUE_OTHER, "   ")).toBe(false);
+  });
+
+  it("is true for SLIP_ISSUE_OTHER once a detail is typed", () => {
+    expect(isSlipIssueReasonComplete(SLIP_ISSUE_OTHER, "ลูกค้าโอนผิดบัญชี")).toBe(true);
+  });
+});
+
+describe("buildSlipIssueNote", () => {
+  it("returns empty string when no reason is picked", () => {
+    expect(buildSlipIssueNote("", "")).toBe("");
+  });
+
+  it("wraps a fixed reason in the [หมายเหตุสลิป: ...] tag verbatim", () => {
+    expect(buildSlipIssueNote("ยอดเงินไม่ตรง แต่ตรวจสอบแล้วถูกต้อง", "")).toBe("[หมายเหตุสลิป: ยอดเงินไม่ตรง แต่ตรวจสอบแล้วถูกต้อง]");
+  });
+
+  it("uses the typed detail (not the generic label) for SLIP_ISSUE_OTHER", () => {
+    expect(buildSlipIssueNote(SLIP_ISSUE_OTHER, "ลูกค้าโอนผิดบัญชี")).toBe("[หมายเหตุสลิป: ลูกค้าโอนผิดบัญชี]");
+  });
+
+  it("trims the typed detail before building the note", () => {
+    expect(buildSlipIssueNote(SLIP_ISSUE_OTHER, "  ลูกค้าโอนผิดบัญชี  ")).toBe("[หมายเหตุสลิป: ลูกค้าโอนผิดบัญชี]");
+  });
+
+  it("returns empty string for SLIP_ISSUE_OTHER with no detail typed", () => {
+    expect(buildSlipIssueNote(SLIP_ISSUE_OTHER, "")).toBe("");
   });
 });

@@ -23,7 +23,7 @@ export interface RackAllocation {
 // available lands within tolerance either way, the function returns nothing
 // at all (an empty allocation) rather than force a mismatched amount.
 export const MAX_OVER_DEVIATION_KG = 0.1;
-export const MIN_UNDER_DEVIATION_KG = 0.17;
+export const MIN_UNDER_DEVIATION_KG = 0.15;
 export const MAX_UNDER_DEVIATION_KG = 0.4;
 
 // Picks a subset of available rack pieces whose weights sum as close as
@@ -128,4 +128,18 @@ export function computeRackAllocation(racks: AllocatableRack[], targetWeight: nu
     rackNo: rack.rackNo,
     weight: rack.remainingWeight,
   }));
+}
+
+// Same wording Order Entry itself shows after its own auto-allocation (see
+// OrderEntryForm.tsx's itemNotes) — flags whenever what actually got
+// assigned doesn't exactly match what was asked for, in either direction.
+// Shared so a line converted from a "ลูกค้ารอหมู" waiting entry (see
+// app/api/pending-stock/[id]/send-to-packing) carries the same note onto
+// its real Order that a normal Order Entry line would have gotten.
+export function buildAllocationDiffNote(label: string, targetWeight: number, allocatedWeight: number): string | null {
+  if (targetWeight <= 0) return null;
+  const diff = Number((targetWeight - allocatedWeight).toFixed(2));
+  if (diff === 0) return null;
+  if (diff > 0) return `${label}ในคลังไม่พอดี ขาดอีก ${diff} กก.`;
+  return `${label}ในคลังไม่พอดี เกินมา ${Math.abs(diff)} กก.`;
 }

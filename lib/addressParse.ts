@@ -66,6 +66,15 @@ export function isValidZip(zip: string | null | undefined): boolean {
   return /^\d{5}$/.test(zip || "");
 }
 
+// Strips non-digits and truncates by digit count, not raw character count —
+// a maxLength attribute on the input would instead truncate a dash-formatted
+// paste by raw characters, cutting real digits off the end.
+function cleanDigitsInput(value: string, maxLen: number): string {
+  return value.replace(/\D/g, "").slice(0, maxLen);
+}
+export const cleanPhoneInput = (value: string) => cleanDigitsInput(value, 10);
+export const cleanZipInput = (value: string) => cleanDigitsInput(value, 5);
+
 // Prefers an order's own explicit customerPhone/customerZip fields (entered
 // separately by an admin, see Order Entry/Details) over the regex-based
 // extraction above — falls back to parsing customerAddress only for orders

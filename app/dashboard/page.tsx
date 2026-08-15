@@ -29,6 +29,18 @@ interface TrendPoint {
   orderCount: number;
 }
 
+// Only the fields Dashboard's own "รอดำเนินการ" figure needs — a
+// still-waiting "ลูกค้ารอหมู" entry (fulfilledAt null) counts as expected-
+// but-not-yet-confirmed money on the day it was logged, kept strictly
+// separate from totalSales/totalReceived (which only ever count real
+// Orders) so a customer still waiting on stock never inflates confirmed
+// revenue. See app/api/pending-stock/route.ts's GET.
+interface PendingStockEntry {
+  id: string;
+  actualReceivedAmount: number | null;
+  fulfilledAt: string | null;
+}
+
 function formatMoney(value: unknown): string {
   const num = typeof value === "string" ? parseFloat(value) : (value as number);
   if (num === undefined || num === null || isNaN(num)) return "0";
@@ -325,6 +337,7 @@ export default function DashboardPage() {
   const [selectedYear, setSelectedYear] = useState(() => currentYear());
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingStockEntries, setPendingStockEntries] = useState<PendingStockEntry[]>([]);
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [trendMetric, setTrendMetric] = useState<"sales" | "orders">("sales");
   const [isTrendLoading, setIsTrendLoading] = useState(false);
@@ -356,14 +369,19 @@ export default function DashboardPage() {
       setIsLoading(true);
       try {
         const sellerName = isSuperAdmin ? viewTarget : currentUser.name;
+        // entryDateFrom/entryDateTo (not date/dateFrom/dateTo) — Dashboard
+        // shows an order under the day it was logged (entryDate), not the
+        // real createdAt instant, so a pending-stock entry converted days
+        // later still counts on its original date, matching what "วันที่ลง
+        // order" means everywhere else in the app.
         const range =
           statsPeriod === "day"
-            ? `date=${selectedDate}`
+            ? `entryDateFrom=${selectedDate}&entryDateTo=${selectedDate}`
             : statsPeriod === "7d"
-              ? `dateFrom=${addDays(selectedDate, -6)}&dateTo=${selectedDate}`
+              ? `entryDateFrom=${addDays(selectedDate, -6)}&entryDateTo=${selectedDate}`
               : statsPeriod === "1m"
-                ? `dateFrom=${monthRange.from}&dateTo=${monthRange.to}`
-                : `dateFrom=${yearRange.from}&dateTo=${yearRange.to}`;
+                ? `entryDateFrom=${monthRange.from}&entryDateTo=${monthRange.to}`
+                : `entryDateFrom=${yearRange.from}&entryDateTo=${yearRange.to}`;
         const url = sellerName
           ? `${BASE_PATH}/api/orders?${range}&sellerName=${encodeURIComponent(sellerName)}`
           : `${BASE_PATH}/api/orders?${range}`;
@@ -378,6 +396,39 @@ export default function DashboardPage() {
     };
 
     fetchOrders();
+  }, [selectedDate, viewTarget, statsPeriod, currentUser, isSuperAdmin, monthRange, yearRange]);
+
+  // Same date window as fetchOrders above, but against PendingStock's own
+  // GET (dateFrom/dateTo on createdAt — see app/api/pending-stock/route.ts)
+  // instead of Order's entryDateFrom/entryDateTo, since a waiting entry has
+  // no separate entryDate field; its createdAt's calendar day already IS
+  // "the day it was logged."
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const fetchPendingStock = async () => {
+      try {
+        const admin = isSuperAdmin ? viewTarget : currentUser.name;
+        const range =
+          statsPeriod === "day"
+            ? `dateFrom=${selectedDate}&dateTo=${selectedDate}`
+            : statsPeriod === "7d"
+              ? `dateFrom=${addDays(selectedDate, -6)}&dateTo=${selectedDate}`
+              : statsPeriod === "1m"
+                ? `dateFrom=${monthRange.from}&dateTo=${monthRange.to}`
+                : `dateFrom=${yearRange.from}&dateTo=${yearRange.to}`;
+        const url = admin
+          ? `${BASE_PATH}/api/pending-stock?${range}&admin=${encodeURIComponent(admin)}`
+          : `${BASE_PATH}/api/pending-stock?${range}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        setPendingStockEntries(data.entries || []);
+      } catch (e) {
+        console.error("Failed to fetch dashboard pending-stock entries", e);
+      }
+    };
+
+    fetchPendingStock();
   }, [selectedDate, viewTarget, statsPeriod, currentUser, isSuperAdmin, monthRange, yearRange]);
 
   useEffect(() => {
@@ -397,7 +448,7 @@ export default function DashboardPage() {
             months.map(async (ym) => {
               const from = `${ym}-01`;
               const to = ym === yearRange.to.slice(0, 7) ? yearRange.to : lastDayOfMonthStr(ym);
-              const dateParams = `dateFrom=${from}&dateTo=${to}`;
+              const dateParams = `entryDateFrom=${from}&entryDateTo=${to}`;
               const url = sellerName
                 ? `${BASE_PATH}/api/orders?${dateParams}&sellerName=${encodeURIComponent(sellerName)}`
                 : `${BASE_PATH}/api/orders?${dateParams}`;
@@ -423,8 +474,8 @@ export default function DashboardPage() {
         const results = await Promise.all(
           dates.map(async (d) => {
             const url = sellerName
-              ? `${BASE_PATH}/api/orders?date=${d}&sellerName=${encodeURIComponent(sellerName)}`
-              : `${BASE_PATH}/api/orders?date=${d}`;
+              ? `${BASE_PATH}/api/orders?entryDateFrom=${d}&entryDateTo=${d}&sellerName=${encodeURIComponent(sellerName)}`
+              : `${BASE_PATH}/api/orders?entryDateFrom=${d}&entryDateTo=${d}`;
             const res = await fetch(url);
             const data = await res.json();
             const dayOrders: Order[] = data.orders || [];
@@ -468,6 +519,19 @@ export default function DashboardPage() {
 
     return { orderCount, totalWeight, totalSales, totalReceived, totalCodHeld, codHeldCount, statusCounts };
   }, [orders]);
+
+  // Still-waiting "ลูกค้ารอหมู" money — counted from the moment it's logged
+  // (not once it converts to a real Order), but kept in its own figure
+  // rather than folded into totalSales/totalReceived above, so a customer
+  // who's still waiting on stock never reads as confirmed revenue. An
+  // entry that's already been sent to packing (fulfilledAt set) is excluded
+  // here — its money is now the real Order's job to count, via `stats`
+  // above, and double-counting both would overstate the day's total.
+  const pendingStockStats = useMemo(() => {
+    const unfulfilled = pendingStockEntries.filter((e) => !e.fulfilledAt);
+    const total = unfulfilled.reduce((sum, e) => sum + (Number(e.actualReceivedAmount) || 0), 0);
+    return { count: unfulfilled.length, total };
+  }, [pendingStockEntries]);
 
   const perAdminBreakdown = useMemo(() => {
     if (!isSuperAdmin || viewTarget !== "") return [];
@@ -696,6 +760,15 @@ export default function DashboardPage() {
                 🔒 <strong style={{ color: "#ffac33" }}>ยอด COD ที่ยัง Hold ไว้</strong> — รอยืนยันว่าลูกค้ารับของและจ่ายเงินแล้ว ({stats.codHeldCount} ออเดอร์) ยังไม่นับรวมในยอดรับจริงด้านบน
               </div>
               <div style={{ fontSize: "20px", fontWeight: "bold", color: "#ffac33" }}>฿{formatMoney(stats.totalCodHeld)}</div>
+            </div>
+          )}
+
+          {pendingStockStats.count > 0 && (
+            <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px", border: "1px dashed rgba(88,166,255,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+              <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+                🐷 <strong style={{ color: "var(--accent-blue)" }}>ยอดรอดำเนินการ (ลูกค้ารอหมู)</strong> — ลูกค้ายังไม่ได้ของ ({pendingStockStats.count} รายการ) ยังไม่นับรวมในยอดขาย/ยอดรับจริงด้านบน จนกว่าจะส่งไป packing
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: "bold", color: "var(--accent-blue)" }}>฿{formatMoney(pendingStockStats.total)}</div>
             </div>
           )}
 

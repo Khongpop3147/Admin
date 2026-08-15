@@ -26,7 +26,7 @@ interface DraftRack {
   selected?: boolean;
 }
 
-function ActionCard({ icon, title, subtitle, accent, onClick }: { icon: string; title: string; subtitle: string; accent: string; onClick: () => void }) {
+function ActionCard({ icon, title, subtitle, accent, badge, onClick }: { icon: string; title: string; subtitle: string; accent: string; badge?: string; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -36,7 +36,18 @@ function ActionCard({ icon, title, subtitle, accent, onClick }: { icon: string; 
       <div className={styles.ordersIcon} style={{ background: accent }}>{icon}</div>
       <div className={styles.ordersInfo}>
         <div className={styles.ordersTitle}>{title}</div>
-        <div className={styles.ordersSubtitle}>{subtitle}</div>
+        {/* Badge shares the subtitle's row (right-pinned via marginLeft:
+            auto) rather than the title's — the title needs its full width
+            to wrap normally; Thai text has no spaces to wrap at, so
+            squeezing it collapses into one syllable per line. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div className={styles.ordersSubtitle} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{subtitle}</div>
+          {badge && (
+            <span style={{ flexShrink: 0, marginLeft: 'auto', fontSize: '11px', fontWeight: 'bold', color: '#ff9f43', background: 'rgba(255,159,67,0.15)', border: '1px solid rgba(255,159,67,0.4)', borderRadius: '999px', padding: '3px 8px', whiteSpace: 'nowrap' }}>
+              {badge}
+            </span>
+          )}
+        </div>
       </div>
       <span className={styles.ordersChevron}>›</span>
     </button>
@@ -112,9 +123,26 @@ export default function RacksPage() {
     }
   };
 
+  // Every still-waiting "ลูกค้ารอหมู" entry across every admin — this page
+  // is Super Admin-only, so GET /api/pending-stock with no `admin` param
+  // returns everyone's, not just the caller's own. Used below to surface
+  // each admin's own pork shortage right where they're already checking
+  // stock levels.
+  const [pendingStockEntries, setPendingStockEntries] = useState<any[]>([]);
+  const fetchPendingStockEntries = async () => {
+    try {
+      const res = await fetch(`${BASE_PATH}/api/pending-stock`);
+      const data = await res.json();
+      if (data.success) setPendingStockEntries(data.entries);
+    } catch (e) {
+      console.error("Failed to fetch pending stock entries", e);
+    }
+  };
+
   useEffect(() => {
     if (isSuperAdminRole(currentUser?.role)) {
       fetchDeletedLogs();
+      fetchPendingStockEntries();
     }
   }, [currentUser]);
 
@@ -326,7 +354,10 @@ export default function RacksPage() {
         const racks = productRacksOf(u);
         const pieces = racks.filter((r: any) => !r.isUsedUp).length;
         const weight = racks.reduce((sum: number, r: any) => sum + (!r.isUsedUp ? (r.remainingWeight || 0) : 0), 0);
-        return { name: u.nickname || u.name, pieces, weight };
+        // realName (not the nickname-if-set display name) is what
+        // PendingStock.createdBy actually stores — kept alongside so
+        // shortageByAdmin below can be looked up correctly.
+        return { name: u.nickname || u.name, realName: u.name, pieces, weight };
       })
       .sort((a, b) => b.weight - a.weight);
 
@@ -339,6 +370,47 @@ export default function RacksPage() {
     return { perAdmin, centralPieces, centralWeight, totalPieces, totalWeight };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [users, productCentralRacks, selectedProduct]);
+
+  // How much of the currently-selected product each admin still owes their
+  // own "ลูกค้ารอหมู" customers — a line item counts as still-owed once its
+  // entry hasn't been sent to packing yet (fulfilledAt null) AND it has no
+  // rackDetails assigned yet (an assigned-but-not-yet-sent line already has
+  // real stock earmarked for it, so it's no longer a shortage). Keyed by
+  // createdBy, same name inventorySummary.perAdmin uses.
+  const shortageByAdmin = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of pendingStockEntries) {
+      if (entry.fulfilledAt || !entry.createdBy) continue;
+      const items = Array.isArray(entry.items) ? entry.items : [];
+      for (const item of items) {
+        if (item?.productType !== selectedProduct) continue;
+        if (Array.isArray(item?.rackDetails) && item.rackDetails.length > 0) continue;
+        map.set(entry.createdBy, (map.get(entry.createdBy) || 0) + (Number(item?.weightKg) || 0));
+      }
+    }
+    return map;
+  }, [pendingStockEntries, selectedProduct]);
+
+  // Company-wide roll-up of shortageByAdmin — surfaced on the "แจกจ่ายจาก
+  // คลังกลาง" action card so a Super Admin sees at a glance whether anyone
+  // needs distributing to before they even open that panel.
+  const totalShortage = useMemo(() => {
+    const weight = Array.from(shortageByAdmin.values()).reduce((sum, w) => sum + w, 0);
+    return { weight, adminCount: shortageByAdmin.size };
+  }, [shortageByAdmin]);
+
+  // Same shortageByAdmin data, resolved to each admin's nickname (not the
+  // real name shortageByAdmin is keyed by) and sorted worst-off first — fed
+  // into the distribute modal below so a Super Admin sees exactly who to
+  // prioritize before picking which pieces to send out.
+  const shortageList = useMemo(() => {
+    return Array.from(shortageByAdmin.entries())
+      .map(([realName, weight]) => {
+        const u = users.find((usr) => usr.name === realName);
+        return { name: u?.nickname || realName, weight };
+      })
+      .sort((a, b) => b.weight - a.weight);
+  }, [shortageByAdmin, users]);
 
   const handleSelectDistributeRange = () => {
     if (!productCentralRacks.length || !distributeStartRack || !distributeEndRack) return;
@@ -863,12 +935,20 @@ export default function RacksPage() {
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>🏭 คลังกลาง</div>
             <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{inventorySummary.centralPieces} ชิ้น · {inventorySummary.centralWeight.toFixed(2)} กก.</div>
           </div>
-          {inventorySummary.perAdmin.map((a) => (
-            <div key={a.name} style={{ flex: '1 1 160px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px 16px' }}>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>👤 {a.name}</div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{a.pieces} ชิ้น · {a.weight.toFixed(2)} กก.</div>
-            </div>
-          ))}
+          {inventorySummary.perAdmin.map((a) => {
+            const shortage = shortageByAdmin.get(a.realName) || 0;
+            return (
+              <div key={a.name} style={{ flex: '1 1 160px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px 16px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>👤 {a.name}</div>
+                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{a.pieces} ชิ้น · {a.weight.toFixed(2)} กก.</div>
+                {shortage > 0 && (
+                  <div style={{ fontSize: '12px', color: '#ff9f43', fontWeight: 'bold', marginTop: '4px' }}>
+                    🐷 ขาด {shortage.toFixed(2)} กก. (ลูกค้ารอหมู)
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -885,6 +965,7 @@ export default function RacksPage() {
           title="แจกจ่ายจากคลังกลาง"
           subtitle="ส่งชิ้นหมูจากคลังกลางให้แอดมิน"
           accent="rgba(255,172,51,0.15)"
+          badge={totalShortage.weight > 0 ? `🐷 ขาด ${totalShortage.weight.toFixed(2)} กก. (${totalShortage.adminCount} คน)` : undefined}
           onClick={() => setIsDistributeModalOpen(true)}
         />
         <ActionCard
@@ -1197,11 +1278,25 @@ export default function RacksPage() {
           <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#ffac33', fontSize: '24px' }}>แจกจ่ายจากคลังกลาง</h2>
-              <button 
+              <button
                 onClick={() => setIsDistributeModalOpen(false)}
                 style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
               >✕</button>
             </div>
+
+            {shortageList.length > 0 && (
+              <div style={{ background: 'rgba(255,159,67,0.08)', border: '1px solid rgba(255,159,67,0.3)', borderRadius: '8px', padding: '14px 16px', marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '14px', color: '#ff9f43', marginBottom: '10px' }}>🐷 คนที่ขาดหมู (ลูกค้ารอหมู)</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {shortageList.map((s) => (
+                    <div key={s.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                      <span>👤 {s.name}</span>
+                      <span style={{ fontWeight: 'bold', color: '#ff9f43' }}>ขาด {s.weight.toFixed(2)} กก.</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '16px', marginBottom: '24px', alignItems: 'end' }}>
               <div className={styles.formGroup} style={{ marginBottom: 0 }}>

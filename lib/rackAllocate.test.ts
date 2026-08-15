@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeRackAllocation, AllocatableRack } from "./rackAllocate";
+import { computeRackAllocation, buildAllocationDiffNote, AllocatableRack } from "./rackAllocate";
 
 function rack(id: string, remainingWeight: number, overrides: Partial<AllocatableRack> = {}): AllocatableRack {
   return { id, rackNo: id, remainingWeight, isUsedUp: false, createdAt: "2026-01-01T00:00:00Z", ...overrides };
@@ -13,7 +13,7 @@ describe("computeRackAllocation", () => {
   });
 
   it("prefers a slight over-shoot over an under-shoot within the under-band", () => {
-    // No combo hits 3.0 exactly: 2.8 (under by 0.2, inside the [0.17,0.4]
+    // No combo hits 3.0 exactly: 2.8 (under by 0.2, inside the [0.15,0.4]
     // under-band) vs 3.1 (over by 0.1, right at the over-cap) — the
     // over-shoot must still win, tier priority beats numeric distance.
     const racks = [rack("a", 2.8), rack("b", 3.1)];
@@ -23,7 +23,7 @@ describe("computeRackAllocation", () => {
 
   it("prefers an over-target candidate even when an under-target one is numerically closer", () => {
     // Target 1.4: a=1.35 (under by only 0.05 — inside the "too close" dead
-    // zone below the 0.17kg floor, so disqualified anyway) vs b=1.45 (over
+    // zone below the 0.15kg floor, so disqualified anyway) vs b=1.45 (over
     // by 0.05). Over wins either way.
     const racks = [rack("a", 1.35), rack("b", 1.45)];
     const result = computeRackAllocation(racks, 1.4);
@@ -33,22 +33,22 @@ describe("computeRackAllocation", () => {
   it("caps the acceptable overage at MAX_OVER_DEVIATION_KG (0.1kg) — beyond that, falls back to an in-band under-shoot", () => {
     // 3.5 (over by 0.5) is well past the 0.1kg over-cap. 2.9 (under by 0.1)
     // is closer numerically but falls inside the "too close" dead zone
-    // (below the 0.17kg floor), so it's disqualified too — nothing qualifies.
+    // (below the 0.15kg floor), so it's disqualified too — nothing qualifies.
     const racks = [rack("a", 2.9), rack("b", 3.5)];
     const result = computeRackAllocation(racks, 3);
     expect(result).toEqual([]);
   });
 
-  it("rejects a shortfall that's too close to target — below MIN_UNDER_DEVIATION_KG (0.17kg)", () => {
-    // 2.84 is only 0.16kg under target: closer than the 0.17kg floor allows,
+  it("rejects a shortfall that's too close to target — below MIN_UNDER_DEVIATION_KG (0.15kg)", () => {
+    // 2.86 is only 0.14kg under target: closer than the 0.15kg floor allows,
     // so it's treated the same as "nothing available", not "close enough".
-    const racks = [rack("a", 2.84)];
+    const racks = [rack("a", 2.86)];
     const result = computeRackAllocation(racks, 3);
     expect(result).toEqual([]);
   });
 
-  it("accepts a shortfall right at the MIN_UNDER_DEVIATION_KG floor (0.17kg)", () => {
-    const racks = [rack("a", 2.83)];
+  it("accepts a shortfall right at the MIN_UNDER_DEVIATION_KG floor (0.15kg)", () => {
+    const racks = [rack("a", 2.85)];
     const result = computeRackAllocation(racks, 3);
     expect(result.map((r) => r.assignmentId)).toEqual(["a"]);
   });
@@ -76,7 +76,7 @@ describe("computeRackAllocation", () => {
   it("finds an in-band subset even when the full remaining sum lands too close to target (regression)", () => {
     // Target 3: taking BOTH pieces (2.65 + 0.30 = 2.95) is only 0.05kg
     // under — inside the dead zone, disqualified. But taking piece "a"
-    // ALONE (2.65) is 0.35kg under — inside the [0.17,0.4] band, and valid.
+    // ALONE (2.65) is 0.35kg under — inside the [0.15,0.4] band, and valid.
     // The search must not stop at "the max reachable sum from here is
     // disqualified" and skip trying smaller subsets of the same branch.
     const racks = [rack("a", 2.65), rack("b", 0.3)];
@@ -85,7 +85,7 @@ describe("computeRackAllocation", () => {
   });
 
   it("still rounds up right at the over-cap boundary, even though the under-shoot is also now in-band", () => {
-    // a=2.7 (under by 0.3) falls inside the [0.17,0.4] under-band, but
+    // a=2.7 (under by 0.3) falls inside the [0.15,0.4] under-band, but
     // b=3.1 (over by 0.1, right at the over-cap) still wins on tier priority.
     const racks = [rack("a", 2.7), rack("b", 3.1)];
     const result = computeRackAllocation(racks, 3);
@@ -133,5 +133,28 @@ describe("computeRackAllocation", () => {
 
   it("returns an empty array when there are no available pieces", () => {
     expect(computeRackAllocation([], 3)).toEqual([]);
+  });
+});
+
+describe("buildAllocationDiffNote", () => {
+  it("returns null when the target weight is zero or negative", () => {
+    expect(buildAllocationDiffNote("หมู", 0, 0)).toBeNull();
+    expect(buildAllocationDiffNote("หมู", -1, 0)).toBeNull();
+  });
+
+  it("returns null when the allocated weight exactly matches the target", () => {
+    expect(buildAllocationDiffNote("หมู", 3, 3)).toBeNull();
+  });
+
+  it("reports a shortfall as 'ขาดอีก'", () => {
+    expect(buildAllocationDiffNote("หมู", 3, 2.8)).toBe("หมูในคลังไม่พอดี ขาดอีก 0.2 กก.");
+  });
+
+  it("reports an overage as 'เกินมา'", () => {
+    expect(buildAllocationDiffNote("หมู", 3, 3.05)).toBe("หมูในคลังไม่พอดี เกินมา 0.05 กก.");
+  });
+
+  it("uses whatever label the caller passes in", () => {
+    expect(buildAllocationDiffNote("หมูกรอบสันนอก", 1, 0.9)).toBe("หมูกรอบสันนอกในคลังไม่พอดี ขาดอีก 0.1 กก.");
   });
 });

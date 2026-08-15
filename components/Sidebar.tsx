@@ -59,6 +59,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             Order Details
           </Link>
         )}
+        {currentUser?.role !== "PACKING" && currentUser?.role !== "STOREFRONT" && (
+          <Link href="/pending-stock" className={`${styles.navItem} ${pathname === '/pending-stock' ? styles.active : ''}`}>
+            ลูกค้ารอหมู
+          </Link>
+        )}
         {isSuperAdminRole(currentUser?.role) && (
           <Link href="/private-clients" className={`${styles.navItem} ${pathname === '/private-clients' ? styles.active : ''}`}>
             Private clients
@@ -84,6 +89,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </Link>
           </>
         )}
+        {/* Just-for-fun feature — visible to everyone logged in, no role
+            gate, unlike every other link in this file. Kept last so it
+            never displaces a real work link above it. */}
+        <Link href="/pets" className={`${styles.navItem} ${pathname === '/pets' ? styles.active : ''}`}>
+          Pet 
+        </Link>
       </nav>
 
       <div className={styles.footer}>

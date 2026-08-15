@@ -36,3 +36,25 @@ export function findDuplicateOrder<T extends RecentOrderForDuplicateCheck>(
     );
   });
 }
+
+export interface RecentPendingStockForDuplicateCheck {
+  customerName: string;
+  totalWeightKg: number;
+}
+
+// Same "name + weight, within 7 days" duplicate check as findDuplicateOrder
+// above, adapted for "ลูกค้ารอหมู" entries — those don't have a single flat
+// weight field, so the caller sums each entry's line items into
+// totalWeightKg first (see app/api/pending-stock/route.ts).
+export function findDuplicatePendingStock<T extends RecentPendingStockForDuplicateCheck>(
+  newCustomerName: string,
+  newTotalWeightKg: number,
+  recentEntries: T[]
+): T | undefined {
+  const normalizedNewName = normalizeCustomerName(newCustomerName);
+  return recentEntries.find(
+    (e) =>
+      Math.abs(e.totalWeightKg - newTotalWeightKg) < 0.001 &&
+      normalizeCustomerName(e.customerName) === normalizedNewName
+  );
+}

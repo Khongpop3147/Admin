@@ -9,13 +9,16 @@ import { isSuperAdminRole } from "../lib/roles";
 import { BASE_PATH } from "../lib/basePath";
 import { calculateCodAmount, AppSettings, computeVatAmount, computeActualReceivedAmount, getPricePerKg } from "../lib/money";
 import { calculateShippingCost, computeBoxCount, MAX_WEIGHT_PER_BOX_KG } from "../lib/shipping";
-import { computeRackAllocation, MAX_OVER_DEVIATION_KG, MIN_UNDER_DEVIATION_KG, MAX_UNDER_DEVIATION_KG } from "../lib/rackAllocate";
-import { sumUsableSlipAmounts, isTotalAmountMatched, hasAnySlipIssue } from "../lib/slipVerification";
+import { computeRackAllocation, buildAllocationDiffNote, MAX_OVER_DEVIATION_KG, MIN_UNDER_DEVIATION_KG, MAX_UNDER_DEVIATION_KG } from "../lib/rackAllocate";
+import { sumUsableSlipAmounts, isTotalAmountMatched, hasAnySlipIssue, buildSlipIssueNote, isSlipIssueReasonComplete, SLIP_ISSUE_OTHER } from "../lib/slipVerification";
 import { nextDayStr, previousDayStr } from "../lib/packingCutoff";
-import { isValidPhone, isValidZip } from "../lib/addressParse";
+import { isValidPhone, isValidZip, cleanPhoneInput, cleanZipInput } from "../lib/addressParse";
 import { formatMoney, getOrderStatusInfo, DetailSection, DetailRow } from "./OrderDetailShared";
 import { getEffectiveItems } from "../lib/orderItems";
 import { PRODUCT_TYPES, DEFAULT_PRODUCT_TYPE, parseRackCode, getBaseRackKeyAuto } from "../lib/rackCode";
+import PetCorner from "./PetCorner";
+import { PLATFORM_OPTIONS } from "./PlatformIcons";
+import { SlipVerificationBadge, CombinedSlipSummary, SlipIssueReasonPicker } from "./SlipVerification";
 
 interface Order {
   id: string;
@@ -80,159 +83,8 @@ function computeItemPrice(item: Pick<OrderLineItem, 'promotion' | 'weightStr' | 
   return (parsedWeight * getPricePerKg(item.productType, settings)).toFixed(2);
 }
 
-// Strips everything but digits (dashes, spaces, parens from a pasted "099-
-//999-9999"-style number, or any other stray character) and caps at maxLen —
-// done here instead of via the input's own maxLength attribute, since
-// maxLength truncates a pasted value by raw character count (dashes
-// included) before this ever runs, which would cut real digits off the end
-// of a dash-formatted paste.
-function cleanDigitsInput(value: string, maxLen: number): string {
-  return value.replace(/\D/g, "").slice(0, maxLen);
-}
-const cleanPhoneInput = (value: string) => cleanDigitsInput(value, 10);
-const cleanZipInput = (value: string) => cleanDigitsInput(value, 5);
 
-// Simplified inline brand marks for the sales-channel picker — self-contained
-// SVGs so there's no dependency on an external icon CDN.
-function FacebookIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="12" fill="#1877F2" />
-      <path fill="#fff" d="M16.5 12.5h-2.2v7h-3v-7H9.7v-2.6h1.6V8.3c0-1.5.9-2.9 3.2-2.9.9 0 1.6.08 1.8.11v2.3h-1.3c-.7 0-.8.34-.8.83v1.86h2.4l-.1 2.6z" />
-    </svg>
-  );
-}
 
-function LineIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24">
-      <rect width="24" height="24" rx="6" fill="#06C755" />
-      <path fill="#fff" d="M19 11.2c0-3.1-3.1-5.7-7-5.7s-7 2.6-7 5.7c0 2.8 2.5 5.1 5.8 5.6.23.05.53.15.6.34.07.17.05.44.02.61l-.1.6c-.03.17-.13.66.58.36s3.8-2.24 5.2-3.83c.95-1.05 1.9-2.1 1.9-3.68z" />
-    </svg>
-  );
-}
-
-function TikTokIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24">
-      <rect width="24" height="24" rx="6" fill="#000" />
-      <path fill="#fff" d="M15.5 5.5c.4 1.8 1.6 3 3.5 3.2v2.4c-1.2 0-2.3-.4-3.2-1v5.1c0 2.6-2.1 4.8-4.8 4.8-2.6 0-4.8-2.1-4.8-4.8 0-2.6 2.1-4.8 4.8-4.8.3 0 .5 0 .8.07v2.5c-.25-.1-.5-.15-.8-.15-1.3 0-2.3 1-2.3 2.3s1 2.3 2.3 2.3 2.4-1 2.4-2.3V5.5h2.1z" />
-    </svg>
-  );
-}
-
-function ShopeeIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24">
-      <rect width="24" height="24" rx="6" fill="#EE4D2D" />
-      <path fill="#fff" d="M9.5 9V7.5a2.5 2.5 0 015 0V9h1.5l.8 9.4a1.5 1.5 0 01-1.5 1.6H8.7a1.5 1.5 0 01-1.5-1.6L8 9h1.5zm1.5 0h2V7.5a1 1 0 00-2 0V9z" />
-    </svg>
-  );
-}
-
-function OtherPlatformIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24">
-      <rect width="24" height="24" rx="6" fill="#6b7280" />
-      <circle cx="7" cy="12" r="1.5" fill="#fff" />
-      <circle cx="12" cy="12" r="1.5" fill="#fff" />
-      <circle cx="17" cy="12" r="1.5" fill="#fff" />
-    </svg>
-  );
-}
-
-// Renders the Thunder slip-check result — always advisory, never blocks saving.
-function SlipVerificationBadge({ result }: { result: any }) {
-  if (!result) return null;
-
-  if (!result.success) {
-    return (
-      <div style={{ marginTop: '8px', fontSize: '12px', color: '#ffac33', background: 'rgba(255,172,51,0.1)', border: '1px solid rgba(255,172,51,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
-        ⚠️ เช็คสลิปไม่สำเร็จ: {result.message || "ไม่ทราบสาเหตุ"} (ยังบันทึกออเดอร์ได้ตามปกติ)
-      </div>
-    );
-  }
-
-  if (result.isDuplicate) {
-    return (
-      <div style={{ marginTop: '8px', fontSize: '12px', color: '#ffac33', background: 'rgba(255,172,51,0.1)', border: '1px solid rgba(255,172,51,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
-        ⚠️ สลิปนี้เคยถูกใช้ยืนยันในออเดอร์อื่นมาแล้ว อาจเป็นสลิปซ้ำ กรุณาตรวจสอบ
-      </div>
-    );
-  }
-
-  if (result.amountMatched === false) {
-    return (
-      <div style={{ marginTop: '8px', fontSize: '12px', color: '#ffac33', background: 'rgba(255,172,51,0.1)', border: '1px solid rgba(255,172,51,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
-        ⚠️ ยอดเงินในสลิป (฿{formatMoney(result.slipAmount)}) ไม่ตรงกับยอดที่ต้องได้รับ (฿{formatMoney(result.expectedAmount)}) กรุณาตรวจสอบ
-      </div>
-    );
-  }
-
-  if (result.accountMatched === false) {
-    return (
-      <div style={{ marginTop: '8px', fontSize: '12px', color: '#ff6b6b', background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
-        ⚠️ ชื่อบัญชีปลายทางไม่ตรง — สลิปนี้โอนไปที่ {result.receiverName || 'บัญชีอื่น'} ({result.receiverBank || 'ไม่ทราบธนาคาร'}) ไม่ใช่บัญชีร้านที่ลงทะเบียนไว้ กรุณาตรวจสอบ
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
-      ✅ เช็คสลิปผ่าน โอนจาก {result.senderName || 'ไม่ทราบชื่อ'} {result.senderBank ? `(${result.senderBank})` : ''} ยอด ฿{formatMoney(result.slipAmount)}
-    </div>
-  );
-}
-
-// Shown once below every slip on the order (not per-slip) — sums whatever
-// Thunder confirmed across all of them (see lib/slipVerification.ts) and
-// compares that total to what the order actually needs, covering both the
-// single-slip case (same ±2 baht check Thunder used to do per-slip) and a
-// customer who paid in two transfers.
-function CombinedSlipSummary({ totalVerified, expectedTotal, slipCount }: { totalVerified: number; expectedTotal: number; slipCount: number }) {
-  if (slipCount === 0 || expectedTotal <= 0) return null;
-  const matched = isTotalAmountMatched(totalVerified, expectedTotal);
-  if (matched) {
-    return (
-      <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
-        ✅ รวมยอดจาก{slipCount > 1 ? `${slipCount} สลิป` : 'สลิป'}แล้ว: ฿{formatMoney(totalVerified)} ตรงกับยอดที่ต้องได้รับ
-      </div>
-    );
-  }
-  return (
-    <div style={{ marginTop: '8px', fontSize: '12px', color: '#ffac33', background: 'rgba(255,172,51,0.1)', border: '1px solid rgba(255,172,51,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
-      ⚠️ รวมยอดจาก{slipCount > 1 ? `${slipCount} สลิป` : 'สลิป'}แล้ว: ฿{formatMoney(totalVerified)} ไม่ตรงกับยอดที่ต้องได้รับ (฿{formatMoney(expectedTotal)}) กรุณาตรวจสอบ
-    </div>
-  );
-}
-
-const SLIP_ISSUE_REASONS = [
-  "สลิปไม่มี QR โค้ด",
-  "รีเฟรชหน้าเว็บซ้ำ ระบบเลยแจ้งว่าสลิปซ้ำ (จริงๆ ไม่ซ้ำ)",
-  "ชื่อบัญชีปลายทางไม่ตรง แต่ตรวจสอบแล้วถูกต้อง",
-  "ยอดเงินไม่ตรง แต่ตรวจสอบแล้วถูกต้อง",
-  "อื่นๆ (ระบุเพิ่มในช่องหมายเหตุ)",
-];
-
-function SlipIssueReasonPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div style={{ marginTop: '8px' }}>
-      <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: '#ff6b6b', fontWeight: 600 }}>
-        ⚠️ สลิปมีปัญหา — เลือกเหตุผลก่อนบันทึกออเดอร์ *
-      </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,107,107,0.4)', background: 'rgba(0,0,0,0.2)', color: '#fff', fontSize: '13px' }}
-      >
-        <option value="">-- เลือกเหตุผล --</option>
-        {SLIP_ISSUE_REASONS.map((reason) => (
-          <option key={reason} value={reason}>{reason}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
 
 // `mode="normal"` is the full order-entry form (Order Details page).
 // `mode="walkin"` is the fixed, always-on walk-in/private-client sale form
@@ -290,6 +142,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const [isUploading, setIsUploading] = useState(false);
   const [slipVerification, setSlipVerification] = useState<any | null>(null);
   const [slipIssueReason, setSlipIssueReason] = useState("");
+  const [slipIssueOtherText, setSlipIssueOtherText] = useState("");
   // Extra slips beyond the primary one (formData.transferSlip) — only used
   // when a customer paid short and transferred the rest separately.
   const [extraSlips, setExtraSlips] = useState<{ url: string; verification: any; uploading?: boolean }[]>([]);
@@ -300,6 +153,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const [isEditUploading, setIsEditUploading] = useState(false);
   const [editSlipVerification, setEditSlipVerification] = useState<any | null>(null);
   const [editSlipIssueReason, setEditSlipIssueReason] = useState("");
+  const [editSlipIssueOtherText, setEditSlipIssueOtherText] = useState("");
   const [editExtraSlips, setEditExtraSlips] = useState<{ url: string; verification: any; uploading?: boolean }[]>([]);
   const [alertData, setAlertData] = useState({
     show: false,
@@ -655,6 +509,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     setIsUploading(true);
     setSlipVerification(null);
     setSlipIssueReason("");
+    setSlipIssueOtherText("");
     const form = new FormData();
     form.append("file", file);
 
@@ -771,6 +626,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     setIsEditingOrder(true);
     setEditSlipVerification(null);
     setEditSlipIssueReason("");
+    setEditSlipIssueOtherText("");
     // Existing extra slips already saved on this order carry over into the
     // edit form as already-uploaded (no re-verification needed unless the
     // admin explicitly replaces one — verification is just advisory).
@@ -782,6 +638,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     setEditOrderData(null);
     setEditSlipVerification(null);
     setEditSlipIssueReason("");
+    setEditSlipIssueOtherText("");
     setEditExtraSlips([]);
   };
 
@@ -791,6 +648,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     setEditOrderData(null);
     setEditSlipVerification(null);
     setEditSlipIssueReason("");
+    setEditSlipIssueOtherText("");
     setEditExtraSlips([]);
   };
 
@@ -801,6 +659,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     setIsEditUploading(true);
     setEditSlipVerification(null);
     setEditSlipIssueReason("");
+    setEditSlipIssueOtherText("");
     const form = new FormData();
     form.append("file", file);
 
@@ -915,11 +774,15 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
   const handleSaveOrderEdit = async () => {
     if (!editOrderData) return;
-    if (editHasSlipIssue && !editSlipIssueReason) {
-      alert("สลิปมีปัญหา กรุณาเลือกเหตุผลก่อนบันทึกออเดอร์");
+    if (editHasSlipIssue && !isSlipIssueReasonComplete(editSlipIssueReason, editSlipIssueOtherText)) {
+      alert(
+        editSlipIssueReason === SLIP_ISSUE_OTHER
+          ? "กรุณาระบุว่าสลิปมีปัญหาอะไรก่อนบันทึกออเดอร์"
+          : "สลิปมีปัญหา กรุณาเลือกเหตุผลก่อนบันทึกออเดอร์"
+      );
       return;
     }
-    const slipIssueNote = editHasSlipIssue && editSlipIssueReason ? `[หมายเหตุสลิป: ${editSlipIssueReason}]` : "";
+    const slipIssueNote = editHasSlipIssue ? buildSlipIssueNote(editSlipIssueReason, editSlipIssueOtherText) : "";
     const combinedAdminNote = [editOrderData.adminNote, slipIssueNote].filter(Boolean).join(" ");
     setIsSavingEdit(true);
     try {
@@ -1043,12 +906,16 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
         return;
       }
     }
-    if (combinedHasSlipIssue && !slipIssueReason) {
-      alert("สลิปมีปัญหา กรุณาเลือกเหตุผลก่อนบันทึกออเดอร์");
+    if (combinedHasSlipIssue && !isSlipIssueReasonComplete(slipIssueReason, slipIssueOtherText)) {
+      alert(
+        slipIssueReason === SLIP_ISSUE_OTHER
+          ? "กรุณาระบุว่าสลิปมีปัญหาอะไรก่อนบันทึกออเดอร์"
+          : "สลิปมีปัญหา กรุณาเลือกเหตุผลก่อนบันทึกออเดอร์"
+      );
       return;
     }
 
-    const slipIssueNote = combinedHasSlipIssue && slipIssueReason ? `[หมายเหตุสลิป: ${slipIssueReason}]` : "";
+    const slipIssueNote = combinedHasSlipIssue ? buildSlipIssueNote(slipIssueReason, slipIssueOtherText) : "";
     const combinedAdminNote = [derivedAdminNote, slipIssueNote].filter(Boolean).join(" ");
 
     // Drop any line the admin added but never actually filled in (e.g.
@@ -1103,6 +970,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
         setAlertData({ show: false, message: "", customerName: "" });
         setSlipVerification(null);
         setSlipIssueReason("");
+        setSlipIssueOtherText("");
         setExtraSlips([]);
         if (fileInputRef.current) fileInputRef.current.value = "";
         // The order just saved under the logged-in user's own name — make sure the
@@ -1167,8 +1035,8 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const slipAmountMismatch = hasAnySlipUploaded && expectedPaymentTotal > 0 && !isTotalAmountMatched(totalVerifiedSlipAmount, expectedPaymentTotal);
   const combinedHasSlipIssue = hasAnySlipIssue(allSlipResults) || slipAmountMismatch;
 
-  // computeRackAllocation only ever lands within +0.2kg over target, or
-  // 0.17-0.4kg under it (a shortfall closer than 0.17kg is treated as "not
+  // computeRackAllocation only ever lands within +0.1kg over target, or
+  // 0.15-0.4kg under it (a shortfall closer than 0.15kg is treated as "not
   // close enough" too, same as nothing being available) — flag whichever
   // direction it landed in so the admin always sees exactly how far off it
   // is, and why nothing got picked when picking was impossible within that
@@ -1182,12 +1050,8 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     const itemAllocated = Number(item.rackDetails.reduce((sum, r) => sum + r.weight, 0).toFixed(2));
     const label = item.productType === DEFAULT_PRODUCT_TYPE ? "หมู" : (PRODUCT_TYPES[item.productType]?.label || item.productType);
     if (itemTargetWeight > 0 && item.rackDetails.length > 0 && itemAllocated !== itemTargetWeight) {
-      const diff = Number((itemTargetWeight - itemAllocated).toFixed(2));
-      if (diff > 0) {
-        return { adminNote: `${label}ในคลังไม่พอดี ขาดอีก ${diff} กก.`, warning: `⚠️ ${label}ในคลังไม่พอดี ขาดอีก ${diff} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ` };
-      }
-      const over = Math.abs(diff);
-      return { adminNote: `${label}ในคลังไม่พอดี เกินมา ${over} กก.`, warning: `⚠️ ${label}ในคลังไม่พอดี เกินมา ${over} กก. - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ` };
+      const adminNote = buildAllocationDiffNote(label, itemTargetWeight, itemAllocated)!;
+      return { adminNote, warning: `⚠️ ${adminNote} - ระบบจะบันทึกเป็น Comment ติดออเดอร์ไว้ให้ครับ` };
     }
     if (itemTargetWeight > 0 && item.rackDetails.length === 0) {
       return {
@@ -1292,13 +1156,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
                 <label className={styles.label}>ช่องทางการขาย <span style={{ color: '#ff6b6b' }}>*</span></label>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {[
-                    { value: 'Facebook', label: 'Facebook', icon: <FacebookIcon /> },
-                    { value: 'Line', label: 'Line', icon: <LineIcon /> },
-                    { value: 'TikTok', label: 'TikTok', icon: <TikTokIcon /> },
-                    { value: 'Shopee', label: 'Shopee', icon: <ShopeeIcon /> },
-                    { value: 'Other', label: 'อื่นๆ', icon: <OtherPlatformIcon /> },
-                  ].map((opt) => (
+                  {PLATFORM_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
                       type="button"
@@ -1711,7 +1569,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 {formData.transferSlip && (
                   <div style={{ marginTop: '8px', fontSize: '12px' }}>
                     <a href={formData.transferSlip} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิปที่อัปโหลด</a>
-                    <button type="button" onClick={() => { setFormData(prev => ({ ...prev, transferSlip: "" })); setSlipVerification(null); setSlipIssueReason(""); if (fileInputRef.current) fileInputRef.current.value = ""; }} style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer' }}>ลบสลิป</button>
+                    <button type="button" onClick={() => { setFormData(prev => ({ ...prev, transferSlip: "" })); setSlipVerification(null); setSlipIssueReason(""); setSlipIssueOtherText(""); if (fileInputRef.current) fileInputRef.current.value = ""; }} style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer' }}>ลบสลิป</button>
                   </div>
                 )}
                 <SlipVerificationBadge result={slipVerification} />
@@ -1752,7 +1610,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 )}
                 <CombinedSlipSummary totalVerified={totalVerifiedSlipAmount} expectedTotal={expectedPaymentTotal} slipCount={allSlipResults.filter(Boolean).length} />
                 {combinedHasSlipIssue && (
-                  <SlipIssueReasonPicker value={slipIssueReason} onChange={setSlipIssueReason} />
+                  <SlipIssueReasonPicker reason={slipIssueReason} onReasonChange={setSlipIssueReason} otherText={slipIssueOtherText} onOtherTextChange={setSlipIssueOtherText} />
                 )}
               </div>
               <div className={styles.formGroup}>
@@ -1781,6 +1639,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
             return (
             <div className={`${styles.card} glass-panel`} style={{ marginBottom: '24px' }}>
+              {mode === "normal" && <PetCorner />}
               <h2 className={styles.cardTitle} style={{ marginBottom: '16px', fontSize: '1.2rem' }}>📦 คลังหมูของฉัน</h2>
 
               {!useSimplifiedPicker && items.length > 1 && (
@@ -2351,7 +2210,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                       )}
                       <CombinedSlipSummary totalVerified={editTotalVerifiedSlipAmount} expectedTotal={editExpectedPaymentTotal} slipCount={editAllSlipResults.filter(Boolean).length} />
                       {editHasSlipIssue && (
-                        <SlipIssueReasonPicker value={editSlipIssueReason} onChange={setEditSlipIssueReason} />
+                        <SlipIssueReasonPicker reason={editSlipIssueReason} onReasonChange={setEditSlipIssueReason} otherText={editSlipIssueOtherText} onOtherTextChange={setEditSlipIssueOtherText} />
                       )}
                     </div>
 

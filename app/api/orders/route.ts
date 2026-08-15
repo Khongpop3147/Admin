@@ -4,8 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { getSessionUser } from "../../../lib/session";
 import { findDuplicateOrder } from "../../../lib/orderDuplicate";
-import { isShelfSale } from "../../../lib/money";
-import { effectiveOrderDateKey } from "../../../lib/packingCutoff";
+import { createOrderRecord } from "../../../lib/createOrder";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 
@@ -99,85 +98,14 @@ export async function POST(req: Request) {
 
     // Save the order and deduct rack weights in a transaction
     const newOrder = await prisma.$transaction(async (tx) => {
-      // 1. Get today's date in Thai time for the daily counter
-      const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
-      const todayDateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-      // An admin can explicitly pick which date this order counts as (e.g.
-      // logging a walk-in sale from yesterday's paper notes) — falls back to
-      // today when left blank. Either way, still run it through the cutoff
-      // shift below, so a backdated/forward-dated order lands consistently
-      // with whatever Packing has already closed out for that date.
-      const baseDateKey = typeof entryDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entryDate)
-        ? entryDate
-        : todayDateKey;
-
-      // Once Packing has closed out a date (see /api/orders/bulk), any order
-      // entered for the rest of that day gets numbered under the next day
-      // instead of tacking onto a batch Packing already considers finished.
-      const settings = await tx.settings.findUnique({ where: { id: "singleton" } });
-      const dateKey = effectiveOrderDateKey(baseDateKey, settings?.packingCutoffDate);
-
-      // 2. Increment DailyCounter atomically for every order EXCEPT an anonymous
-      // shelf placement ("วางขายหน้าร้าน") — that's just a stock deduction, not
-      // a trackable sale. A storefront order with a real customer name still
-      // gets a real sequential number, same as any other channel.
-      let currentOrderNo = 0;
-      if (!isShelfSale({ platform, customerName })) {
-        const counter = await tx.dailyCounter.upsert({
-          where: { date: dateKey },
-          update: { lastOrder: { increment: 1 } },
-          create: { date: dateKey, lastOrder: 1 }
-        });
-        currentOrderNo = counter.lastOrder;
-      }
-
-      // 3. Create the order
-      const validExtraSlipUrls: string[] = Array.isArray(extraSlipUrls)
-        ? extraSlipUrls.filter((u: unknown) => typeof u === "string" && u.trim())
-        : [];
-
-      const order = await tx.order.create({
-        data: {
-          orderNo: currentOrderNo,
-          customerName,
-          platform,
-          socialMediaName,
-          crispyPorkPiece,
-          crispyPorkWeight,
-          packedPork,
-          promotion,
-          price: price ? parseFloat(price) : null,
-          shippingMethod,
-          additionalShippingCost: additionalShippingCost ? parseFloat(additionalShippingCost) : null,
-          codAmount: codAmount ? parseFloat(codAmount) : null,
-          actualReceivedAmount: actualReceivedAmount ? parseFloat(actualReceivedAmount) : null,
-          transferSlip,
-          paymentStatus,
-          customerAddress,
-          customerPhone,
-          customerZip,
-          needsTaxInvoice: !!needsTaxInvoice,
-          orderStatus,
-          rackDetails, // Store the JSON string directly
-          sellerName,
-          trackingNumber,
-          adminNote,
-          entryDate: dateKey,
-          // Only ever non-empty when a customer paid short and transferred
-          // the rest separately — transferSlip above still holds the
-          // primary/first slip exactly as before.
-          extraSlips: validExtraSlipUrls.length > 0
-            ? { create: validExtraSlipUrls.map((url: string) => ({ url })) }
-            : undefined,
-          items: validItems.length > 0
-            ? { create: validItems }
-            : undefined,
-        },
-        include: { extraSlips: true, items: true },
+      const order = await createOrderRecord(tx, {
+        customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price,
+        shippingMethod, additionalShippingCost, codAmount, actualReceivedAmount,
+        transferSlip, paymentStatus, customerAddress, customerPhone, customerZip, needsTaxInvoice, orderStatus,
+        rackDetails, sellerName, trackingNumber, adminNote, entryDate, extraSlipUrls, items: validItems,
       });
 
-      // 4. Deduct weight from assigned racks atomically
+      // Deduct weight from assigned racks atomically
       for (const rack of parsedRackDetails) {
         if (!rack.assignmentId || !rack.weight) continue;
         const weightToDeduct = parseFloat(rack.weight);
@@ -240,10 +168,18 @@ export async function GET(req: Request) {
     const dateFrom = searchParams.get("dateFrom"); // format: YYYY-MM-DD, filters by createdAt
     const dateTo = searchParams.get("dateTo"); // format: YYYY-MM-DD, filters by createdAt
     // Exact match on the admin-chosen/effective entryDate — used by Packing
-    // instead of `date` so a backdated order shows on the day it was entered
-    // for, not the real instant it was submitted (which `date` still reflects
-    // for Order Details/Dashboard).
+    // so a backdated order shows on the day it was entered for, not the real
+    // instant it was submitted. Includes the packingEntryDate override (see
+    // below), since Packing specifically needs that divergence.
     const entryDateStr = searchParams.get("entryDate"); // format: YYYY-MM-DD
+    // Range match on the plain entryDate field only — no packingEntryDate
+    // involved, since Dashboard/exports want "the day this order was
+    // logged," period, same meaning entryDate has everywhere else (order
+    // numbering, HR Manage). A plain string range compare is safe: entryDate
+    // is always "YYYY-MM-DD", so lexicographic order equals chronological
+    // order.
+    const entryDateFrom = searchParams.get("entryDateFrom"); // format: YYYY-MM-DD
+    const entryDateTo = searchParams.get("entryDateTo"); // format: YYYY-MM-DD
     const platform = searchParams.get("platform");
     const excludePlatform = searchParams.get("excludePlatform"); // comma-separated, e.g. "Storefront,PrivateClient"
     const customerName = searchParams.get("customerName");
@@ -285,7 +221,24 @@ export async function GET(req: Request) {
     }
 
     if (entryDateStr) {
-      whereClause.entryDate = entryDateStr;
+      // Packing's own lookup — also needs to catch an order converted from
+      // a "ลูกค้ารอหมู" waiting entry, whose entryDate deliberately stays its
+      // original sale date (for Order Details/Dashboard) but which must
+      // surface in Packing on the day after stock actually got assigned
+      // instead (packingEntryDate), which can be many days later. This is
+      // an override, not an addition — an order with packingEntryDate set
+      // must ONLY match on that (excluded from the entryDate branch below),
+      // or it'd wrongly also show up in Packing on the day after its
+      // original entryDate too, before any stock existed for it. Composed
+      // via AND rather than assigning .OR directly, since `search` above
+      // may have already set its own top-level OR.
+      const entryDateCondition = { OR: [{ entryDate: entryDateStr, packingEntryDate: null }, { packingEntryDate: entryDateStr }] };
+      whereClause.AND = whereClause.AND ? [...whereClause.AND, entryDateCondition] : [entryDateCondition];
+    } else if (entryDateFrom || entryDateTo) {
+      whereClause.entryDate = {
+        ...(entryDateFrom ? { gte: entryDateFrom } : {}),
+        ...(entryDateTo ? { lte: entryDateTo } : {}),
+      };
     } else if (dateStr) {
       // Parse the date in Thai timezone (approximate by using UTC+7 offset or just treating input as local date)
       // Since server might be UTC, best to create start and end boundaries for the date string.
@@ -305,7 +258,7 @@ export async function GET(req: Request) {
     // Any explicit, scoped filter (date, platform, or a name search) means the
     // caller wants everything matching, not a "give me something recent"
     // sample — only cap the truly unscoped call.
-    const isScoped = Boolean(id || dateStr || dateFrom || dateTo || entryDateStr || platform || excludePlatform || customerName || search);
+    const isScoped = Boolean(id || dateStr || dateFrom || dateTo || entryDateStr || entryDateFrom || entryDateTo || platform || excludePlatform || customerName || search);
 
     const orders = await prisma.order.findMany({
       where: whereClause,

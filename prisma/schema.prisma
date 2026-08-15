@@ -64,6 +64,16 @@ model Order {
   // submission instant), which still drives Dashboard, Order Details, and
   // duplicate detection unchanged.
   entryDate             String
+  // Overrides which day this order shows up on in Packing, independent of
+  // entryDate — only set for an order converted from a "ลูกค้ารอหมู" waiting
+  // entry (see app/api/pending-stock/[id]/send-to-packing), where entryDate
+  // deliberately stays the day the customer originally paid (so Order
+  // Details/Dashboard/duplicate-detection show the real sale date), but
+  // Packing still needs to see it the day after stock actually got
+  // assigned, which can be many days later. Same "one day before it ships"
+  // meaning as entryDate has for every other order — null for all of them,
+  // Packing just falls back to its usual entryDate-based lookup.
+  packingEntryDate      String?
   createdAt             DateTime @default(now())
   // Extra slips beyond transferSlip (the primary one) — for when a customer
   // pays short the first time and transfers the rest separately. transferSlip
@@ -113,6 +123,7 @@ model User {
   password       String? // bcrypt hash; null = login not set up yet for this account
   sessionVersion Int     @default(0) // bumped to force-invalidate every existing login for this user
   racks          RackAssignment[]
+  pets           Pet[]
 }
 
 model DailyCounter {
@@ -165,6 +176,32 @@ model Settings {
   updatedAt           DateTime @updatedAt
 }
 
+// A for-fun, employee-morale feature — exactly one virtual pet per admin,
+// unrelated to real business data beyond reading that admin's own order
+// count (see app/api/pets/route.ts). Growth stage and item-unlock state are
+// never stored here — both are derived live from the admin's current order
+// count via lib/petCatalog.ts, so they can never drift out of sync with
+// reality; this row only persists what an admin actually chose (which
+// species is currently active, what's equipped).
+model Pet {
+  id     String @id @default(uuid())
+  // Unique (not part of a compound key) — exactly one pet row per admin,
+  // ever. Switching species is an update to this same row, not a new one;
+  // an admin can switch as often as they like, but only one is ever active.
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Key into lib/petCatalog.ts's SPECIES registry — a plain string (not a
+  // Prisma enum) so a new species only ever needs a catalog entry, no
+  // migration, same reasoning as RackAssignment.productType.
+  species String @default("PIG")
+  // DEV-only manual override of growth stage ("baby"|"adult"), null = use
+  // the normal order-count-derived stage. Every other role's pet always
+  // has this null and is unaffected — see app/api/pets/route.ts and
+  // app/api/pets/stage/route.ts, a DEV-only "see anything" toggle.
+  stageOverride String?
+  createdAt     DateTime @default(now())
+}
+
 model OrderAuditLog {
   id          String   @id @default(uuid())
   orderId     String?
@@ -172,4 +209,72 @@ model OrderAuditLog {
   summary     String
   performedBy String?
   createdAt   DateTime @default(now())
+}
+
+// A customer already committed to buying (paid up front, or agreed to COD),
+// but there was no pork on hand to give them at order time — tracked here
+// as its own lightweight waitlist (not a status on Order) since it's a
+// simpler, ad-hoc workflow: log who's owed what, then check it off once
+// stock arrives and it's delivered. Not linked to a specific Order row — an
+// admin logs this by hand when the shortage comes up, independent of
+// however that order itself was entered.
+model PendingStock {
+  id           String   @id @default(uuid())
+  customerName String
+  // Same customer-info fields Order Entry collects (platform through
+  // needsTaxInvoice) — captured here too so whoever delivers once stock
+  // arrives already has everything needed, without re-asking the customer.
+  platform         String?
+  socialMediaName  String?
+  customerAddress  String?
+  customerPhone    String?
+  customerZip      String?
+  needsTaxInvoice  Boolean  @default(false)
+  // Array of { productType, weightKg, pricePerKg, price } line items —
+  // productType keys into lib/rackCode.ts's PRODUCT_TYPES registry, same
+  // reasoning as RackAssignment.productType (a plain string, not an enum).
+  // A JSON column rather than a related table like Order.items: unlike real
+  // orders, these lines never need their own query/join, just display and a
+  // sum, so a table+relation here would be pure ceremony.
+  items        Json
+  shippingMethod         String?
+  additionalShippingCost Float?
+  // Set (auto-derived from total weight, same calculateCodAmount formula
+  // Order Entry uses) when the customer will pay on delivery instead of up
+  // front — null/0 for the normal pre-paid case. Carries straight through
+  // to the real Order's own codAmount once "ส่งไป packing" converts this
+  // entry, same as every other field here.
+  codAmount              Float?
+  // price + shipping + VAT(7%) + codAmount, same computeActualReceivedAmount
+  // formula Order Entry uses. Stored rather than only computed live,
+  // mirroring Order.actualReceivedAmount, so a later Settings rate change
+  // doesn't retroactively change what an already-logged entry says it
+  // expected.
+  actualReceivedAmount   Float?
+  // Same single-slip-only shape as Order.transferSlip, not the full
+  // multi-slip flow (Order.extraSlips) — a partial-payment second slip
+  // isn't a scenario that comes up here. Left empty for a COD entry, which
+  // has no slip until the courier collects on delivery.
+  transferSlip String?
+  // Purely an admin's own best guess ("น่าจะส่งได้ประมาณ...") for their own
+  // planning — optional, never required, and never read by any date/
+  // scheduling logic (send-to-packing still always uses the real day it's
+  // actually sent). "YYYY-MM-DD", not a DateTime — there's no time
+  // component to an estimate like this.
+  expectedShipDate String?
+  note         String?
+  createdBy    String?
+  // Set together with orderId once "ส่งไป packing" converts the WHOLE entry
+  // (every line at once, not per-item — see
+  // app/api/pending-stock/[id]/send-to-packing) into one real Order. Kept as
+  // a permanent record rather than deleted, so there's a history of what got
+  // resolved and when.
+  fulfilledAt  DateTime?
+  // The real Order this whole entry became once every line had stock
+  // assigned and got sent to packing together — null until then. Used by
+  // DELETE to know whether to restore assigned-but-unconverted stock (see
+  // app/api/pending-stock/[id]/route.ts): once set, that stock legitimately
+  // belongs to a real order, so it's left alone.
+  orderId      String?
+  createdAt    DateTime  @default(now())
 }
