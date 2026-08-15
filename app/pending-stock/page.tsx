@@ -635,11 +635,20 @@ export default function PendingStockPage() {
     }
   };
 
-  const deleteEntry = async (id: string) => {
-    if (!confirm("ลบรายการนี้?")) return;
+  // `reason` only matters for a still-waiting (unfulfilled) entry — it
+  // decides whether this delete counts toward Dashboard's cancelled-sales
+  // banner (see the `reason` comment on DELETE /api/pending-stock/[id]). A
+  // fulfilled entry's delete never touches that banner either way, so its
+  // own call site below just keeps the old plain confirm() and default
+  // reason instead of showing the same choice popup for no reason.
+  const deleteEntry = async (id: string, reason: "mistake" | "cancelled" = "cancelled") => {
     setIsBusy(true);
     try {
-      await fetch(`${BASE_PATH}/api/pending-stock/${id}`, { method: "DELETE" });
+      await fetch(`${BASE_PATH}/api/pending-stock/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
       await fetchEntries();
     } catch (e) {
       alert("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
@@ -647,6 +656,10 @@ export default function PendingStockPage() {
       setIsBusy(false);
     }
   };
+
+  // Opened by the still-waiting list's 🗑 button — see deleteEntry's reason
+  // comment above for why this popup only exists for that list.
+  const [deleteChoiceEntryId, setDeleteChoiceEntryId] = useState<string | null>(null);
 
   // For a line with nothing assigned yet, seed its selection from the same
   // nearest-weight auto-allocation Order Entry itself uses (see
@@ -1062,7 +1075,7 @@ export default function PendingStockPage() {
                         <button
                           type="button"
                           disabled={isBusy}
-                          onClick={() => deleteEntry(entry.id)}
+                          onClick={() => setDeleteChoiceEntryId(entry.id)}
                           title="ลบรายการ"
                           style={{ padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-color)", color: "var(--text-secondary)", cursor: isBusy ? "wait" : "pointer", fontSize: "13px" }}
                         >
@@ -1129,7 +1142,7 @@ export default function PendingStockPage() {
                       <button
                         type="button"
                         disabled={isBusy}
-                        onClick={() => deleteEntry(entry.id)}
+                        onClick={() => { if (confirm("ลบรายการนี้?")) deleteEntry(entry.id); }}
                         title="ลบรายการ (ไม่กระทบ order จริงที่สร้างไปแล้ว)"
                         style={{ padding: "6px 8px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-color)", color: "var(--text-secondary)", cursor: isBusy ? "wait" : "pointer", fontSize: "12px" }}
                       >
@@ -1189,6 +1202,42 @@ export default function PendingStockPage() {
                 </button>
                 <button className={styles.btnConfirm} onClick={() => confirmChoice(false)} disabled={isBusy}>
                   พรุ่งนี้ (ปกติ)
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {deleteChoiceEntryId && (() => {
+        const targetEntry = entries.find((e) => e.id === deleteChoiceEntryId);
+        const confirmChoice = (reason: "mistake" | "cancelled") => {
+          setDeleteChoiceEntryId(null);
+          deleteEntry(deleteChoiceEntryId, reason);
+        };
+        return (
+          <div className={styles.modalOverlay}>
+            <div className={styles.alertBox}>
+              <div className={styles.alertIcon}>🗑️</div>
+              <h3 className={styles.alertTitle}>ลบรายการ "{targetEntry?.customerName || ""}"</h3>
+              <p className={styles.alertText}>รายการนี้เกิดจากอะไร?</p>
+              <div className={styles.alertActions}>
+                <button className={styles.btnCancel} onClick={() => setDeleteChoiceEntryId(null)} disabled={isBusy}>
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={() => confirmChoice("mistake")}
+                  disabled={isBusy}
+                  style={{ padding: "10px 18px", borderRadius: "8px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)", color: "var(--text-secondary)", cursor: isBusy ? "wait" : "pointer", fontSize: "13px", fontWeight: "bold" }}
+                >
+                  ✏️ กรอกข้อมูลผิด
+                </button>
+                <button
+                  onClick={() => confirmChoice("cancelled")}
+                  disabled={isBusy}
+                  style={{ padding: "10px 18px", borderRadius: "8px", background: "rgba(255,107,107,0.15)", border: "1px solid #ff6b6b", color: "#ff6b6b", cursor: isBusy ? "wait" : "pointer", fontSize: "13px", fontWeight: "bold" }}
+                >
+                  🚫 ยกเลิกจริง คืนเงิน
                 </button>
               </div>
             </div>

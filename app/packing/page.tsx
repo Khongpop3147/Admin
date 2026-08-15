@@ -919,12 +919,20 @@ export default function PackingPage() {
     }
   };
 
-  const handleDeleteOrder = async (order: Order) => {
-    if (!confirm(`ลบออเดอร์ "${order.customerName}" ใช่ไหม? การลบนี้ย้อนกลับไม่ได้ (น้ำหนักหมูที่ตัดไปจะถูกคืนเข้าคลังให้อัตโนมัติ)`)) {
-      return;
-    }
+  // Opened by the 🗑️ button below — the actual delete only fires once the
+  // popup's "กรอกข้อมูลผิด" / "ยกเลิกจริง คืนเงิน" choice is made, since that
+  // choice decides whether Dashboard's cancelled-sales banner counts this
+  // (see the `reason` comment on DELETE /api/orders/[id]).
+  const [deleteChoiceOrder, setDeleteChoiceOrder] = useState<Order | null>(null);
+
+  const confirmDeleteOrder = async (order: Order, reason: "mistake" | "cancelled") => {
+    setDeleteChoiceOrder(null);
     try {
-      const res = await fetch(`${BASE_PATH}/api/orders/${order.id}`, { method: "DELETE" });
+      const res = await fetch(`${BASE_PATH}/api/orders/${order.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
       const data = await res.json();
       if (res.ok) {
         setOrders(orders.filter(o => o.id !== order.id));
@@ -1364,7 +1372,7 @@ export default function PackingPage() {
                       )}
                       {isSuperAdminRole(currentUser?.role) && (
                         <button
-                          onClick={() => handleDeleteOrder(order)}
+                          onClick={() => setDeleteChoiceOrder(order)}
                           style={{ background: 'rgba(255,107,107,0.15)', color: '#ff6b6b', border: '1px solid #ff6b6b', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
                         >
                           🗑️ ลบ
@@ -1603,6 +1611,35 @@ export default function PackingPage() {
           </div>
         );
       })()}
+
+      {deleteChoiceOrder && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.alertBox}>
+            <div className={styles.alertIcon}>🗑️</div>
+            <h3 className={styles.alertTitle}>ลบออเดอร์ "{deleteChoiceOrder.customerName}"</h3>
+            <p className={styles.alertText}>
+              การลบนี้ย้อนกลับไม่ได้ (น้ำหนักหมูที่ตัดไปจะถูกคืนเข้าคลังให้อัตโนมัติ) — ออเดอร์นี้เกิดจากอะไร?
+            </p>
+            <div className={styles.alertActions}>
+              <button className={styles.btnCancel} onClick={() => setDeleteChoiceOrder(null)}>
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => confirmDeleteOrder(deleteChoiceOrder, "mistake")}
+                style={{ padding: "10px 18px", borderRadius: "8px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)", color: "var(--text-secondary)", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
+              >
+                ✏️ กรอกข้อมูลผิด
+              </button>
+              <button
+                onClick={() => confirmDeleteOrder(deleteChoiceOrder, "cancelled")}
+                style={{ padding: "10px 18px", borderRadius: "8px", background: "rgba(255,107,107,0.15)", border: "1px solid #ff6b6b", color: "#ff6b6b", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
+              >
+                🚫 ยกเลิกจริง คืนเงิน
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

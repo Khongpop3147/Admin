@@ -145,32 +145,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 }
 
-// For logging mistakes (typo'd customer/wrong product). If real stock was
-// already assigned to some lines (see assign-stock/route.ts) but the entry
-// never got sent to packing, that weight goes back to the racks it came
-// from first, so deleting a mistaken entry never silently strands deducted
-// stock nobody actually received. An entry that HAS already become a real
-// order (its own orderId, via send-to-packing/route.ts) is skipped entirely
-// — that stock legitimately belongs to that order now, restoring it here
-// would double-book the same pieces. Deleting only ever removes the
-// waiting-list tracking record; any real order already created from it is
-// untouched.
-//
-// Dashboard counts a still-waiting entry's money as real sales from the
-// moment it's logged (see app/dashboard/page.tsx), not once it converts to
-// an Order — so deleting one that never got that far is a genuine reversal
-// of money already shown as sold, not just tidying up a mistake. Logged
-// here (reusing OrderAuditLog, orderId left null) so Dashboard can surface
-// "N รายการถูกยกเลิก" for the period, rather than the number just quietly
-// dropping with no explanation. A FULFILLED entry's delete is never logged
-// this way — its money already belongs to a real Order that's untouched by
-// this delete, so there's nothing to reverse.
+// Handles two very different reasons an admin deletes a waiting-list entry
+// — the client asks which one via a popup and sends it as `reason`:
+//   - "mistake": typo'd customer/wrong product, nothing was ever really
+//     sold. Deleted with no audit trail beyond the delete itself.
+//   - "cancelled" (default if the client sends neither, for safety): the
+//     customer genuinely backed out and got refunded — a real reversal of
+//     money that was already logged as a sale (see app/dashboard/page.tsx),
+//     so it's logged to OrderAuditLog (reusing the table, orderId left
+//     null), visible via the Audit Log page (GET /api/audit-log).
+// Either way: if real stock was already assigned to some lines (see
+// assign-stock/route.ts) but the entry never got sent to packing, that
+// weight goes back to the racks it came from first, so deleting an entry
+// never silently strands deducted stock nobody actually received. An entry
+// that HAS already become a real order (its own orderId, via
+// send-to-packing/route.ts) is skipped entirely — that stock legitimately
+// belongs to that order now, restoring it here would double-book the same
+// pieces. A FULFILLED entry's delete is never logged this way either — its
+// money already belongs to a real Order that's untouched by this delete, so
+// there's nothing to reverse.
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSessionUser();
     if (!session) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
+
+    const { reason } = await req.json().catch(() => ({ reason: "cancelled" }));
+    const isMistake = reason === "mistake";
 
     const { id } = await params;
     await prisma.$transaction(async (tx) => {
@@ -189,7 +191,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
           }
         }
       }
-      if (!entry.fulfilledAt) {
+      if (!entry.fulfilledAt && !isMistake) {
         await tx.orderAuditLog.create({
           data: {
             orderId: null,

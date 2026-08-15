@@ -559,34 +559,6 @@ export default function DashboardPage() {
     };
   }, [orders, pendingStockEntries]);
 
-  // How many sales already counted above got reversed within this window —
-  // either a still-waiting "ลูกค้ารอหมู" entry deleted before it ever shipped
-  // (DELETE /api/pending-stock/[id]) or a real Order deleted from Packing
-  // (DELETE /api/orders/[id]) — both count toward totalSales the moment
-  // they're created, so either kind of delete is a genuine reversal, not
-  // silent tidying. See GET /api/dashboard/cancelled-count (reads both back).
-  const [cancelledCount, setCancelledCount] = useState(0);
-  const [cancelledAmount, setCancelledAmount] = useState(0);
-  useEffect(() => {
-    if (!currentUser) return;
-    const fetchCancelledCount = async () => {
-      try {
-        const admin = isSuperAdmin ? viewTarget : currentUser.name;
-        const range = `dateFrom=${activeRange.from}&dateTo=${activeRange.to}`;
-        const url = admin
-          ? `${BASE_PATH}/api/dashboard/cancelled-count?${range}&admin=${encodeURIComponent(admin)}`
-          : `${BASE_PATH}/api/dashboard/cancelled-count?${range}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        setCancelledCount(data.count || 0);
-        setCancelledAmount(data.totalAmount || 0);
-      } catch (e) {
-        console.error("Failed to fetch cancelled-sales count", e);
-      }
-    };
-    fetchCancelledCount();
-  }, [activeRange, viewTarget, currentUser, isSuperAdmin]);
-
   // How many customers are on the "ลูกค้ารอหมู" waiting list RIGHT NOW —
   // deliberately NOT scoped to the period selector above (activeRange)
   // unlike everything else on this page: this is a live backlog ("how much
@@ -902,15 +874,6 @@ export default function DashboardPage() {
                 🔒 <strong style={{ color: "#ffac33" }}>ยอด COD ที่ยัง Hold ไว้</strong> — รอยืนยันว่าลูกค้ารับของและจ่ายเงินแล้ว ยังไม่นับรวมในยอดรับจริงด้านบน
               </div>
               <div style={{ fontSize: "20px", fontWeight: "bold", color: "#ffac33" }}>{stats.codHeldCount} ออเดอร์ · ฿{formatMoney(stats.totalCodHeld)}</div>
-            </div>
-          )}
-
-          {cancelledCount > 0 && (
-            <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px", border: "1px dashed rgba(255,107,107,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-              <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
-                🚫 <strong style={{ color: "#ff6b6b" }}>รายการที่ถูกยกเลิก</strong> — เคยนับเป็นยอดขายไปแล้ว แต่ถูกลบทิ้งภายหลัง ยอดขาย/ยอดรับจริงด้านบนหักออกให้แล้วอัตโนมัติ
-              </div>
-              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#ff6b6b" }}>{cancelledCount} รายการ · -฿{formatMoney(cancelledAmount)}</div>
             </div>
           )}
 
