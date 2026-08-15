@@ -5,7 +5,7 @@ import { Pool } from "pg";
 import { getSessionUser } from "../../../lib/session";
 import { PRODUCT_TYPES } from "../../../lib/rackCode";
 import { isValidPhone, isValidZip } from "../../../lib/addressParse";
-import { findDuplicatePendingStock } from "../../../lib/orderDuplicate";
+import { findDuplicatePendingStock, findDuplicateOrder } from "../../../lib/orderDuplicate";
 import { isSuperAdminRole } from "../../../lib/roles";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
@@ -148,6 +148,28 @@ export async function POST(req: Request) {
           {
             duplicate: true,
             message: `ชื่อ "${customerName}" และหมูมีน้ำหนักรวม ${totalWeightKg} กก. ตรงกับรายการรอหมูที่มีอยู่แล้ว อาจมีความเสี่ยงบันทึกซ้ำ ต้องการบันทึกรายการนี้ต่อไปหรือไม่?`,
+          },
+          { status: 200 }
+        );
+      }
+
+      // Same check against real Orders — logging a waiting-list entry for a
+      // customer who already has a real order (this weight, this window)
+      // is the same duplicate-shipment risk as two real Orders, just not
+      // caught by the check above since it only looks at PendingStock.
+      // Global across admins (not scoped to session.name like the check
+      // above), matching POST /api/orders' own reasoning: which staff
+      // member logged which one doesn't change the risk of shipping the
+      // same customer's pork twice.
+      const recentOrders = await prisma.order.findMany({
+        where: { createdAt: { gte: duplicateWindowCutoff } },
+      });
+      const matchingOrder = findDuplicateOrder(customerName, totalWeightKg, recentOrders);
+      if (matchingOrder) {
+        return NextResponse.json(
+          {
+            duplicate: true,
+            message: `ชื่อ "${customerName}" และหมูมีน้ำหนักรวม ${totalWeightKg} กก. ตรงกับออเดอร์จริงที่มีอยู่แล้ว อาจเป็นลูกค้าคนเดียวกันที่ถูกลงซ้ำ ต้องการบันทึกรายการนี้ต่อไปหรือไม่?`,
           },
           { status: 200 }
         );

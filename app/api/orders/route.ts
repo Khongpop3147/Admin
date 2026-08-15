@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { getSessionUser } from "../../../lib/session";
-import { findDuplicateOrder } from "../../../lib/orderDuplicate";
+import { findDuplicateOrder, findDuplicatePendingStock } from "../../../lib/orderDuplicate";
 import { createOrderRecord } from "../../../lib/createOrder";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
@@ -83,6 +83,36 @@ export async function POST(req: Request) {
           {
             duplicate: true,
             message: `ชื่อ "${customerName}" และหมูมีน้ำหนัก ${crispyPorkWeight} กก. ตรงกับออเดอร์เก่าที่มีอยู่แล้ว อาจมีความเสี่ยงในการส่งออเดอร์ซ้ำ ต้องการบันทึกออเดอร์นี้ต่อไปหรือไม่?`,
+          },
+          { status: 200 }
+        );
+      }
+
+      // Same check against still-waiting "ลูกค้ารอหมู" entries — an admin
+      // logging a real order here for a customer someone already put on the
+      // waiting list (or forgot they did themselves) is the same duplicate-
+      // shipment risk as two real Orders, just not caught by the check
+      // above since it only looks at the Order table. Global across admins
+      // (not scoped to session), matching that check's own reasoning: which
+      // staff member logged which one doesn't change the risk of shipping
+      // the same customer's pork twice. Fulfilled entries are excluded —
+      // those already became a real Order, which the check above already
+      // covers.
+      const recentPendingStock = await prisma.pendingStock.findMany({
+        where: { createdAt: { gte: duplicateWindowCutoff }, fulfilledAt: null },
+      });
+      const recentPendingForCheck = recentPendingStock.map((e) => ({
+        customerName: e.customerName,
+        totalWeightKg: (Array.isArray(e.items) ? (e.items as any[]) : []).reduce((sum, it) => sum + (Number(it?.weightKg) || 0), 0),
+        entry: e,
+      }));
+      const matchingPendingStock = findDuplicatePendingStock(customerName, parseFloat(String(crispyPorkWeight)), recentPendingForCheck);
+
+      if (matchingPendingStock) {
+        return NextResponse.json(
+          {
+            duplicate: true,
+            message: `ชื่อ "${customerName}" และหมูมีน้ำหนัก ${crispyPorkWeight} กก. ตรงกับรายการ "ลูกค้ารอหมู" ที่ยังไม่ส่งของ อาจเป็นลูกค้าคนเดียวกันที่ถูกลงซ้ำ ต้องการบันทึกออเดอร์นี้ต่อไปหรือไม่?`,
           },
           { status: 200 }
         );
