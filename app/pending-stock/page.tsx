@@ -196,6 +196,10 @@ export default function PendingStockPage() {
   const [assignSelections, setAssignSelections] = useState<Record<number, RackPiece[]>>({});
   const [isAssigning, setIsAssigning] = useState(false);
 
+  // Opened by the still-waiting list's 🗑 button — see deleteEntry's own
+  // comment (further down) for why this popup only exists for that list.
+  const [deleteChoiceEntryId, setDeleteChoiceEntryId] = useState<string | null>(null);
+
   const fetchEntries = async () => {
     try {
       const qs = isSuperAdmin && viewTarget ? `?admin=${encodeURIComponent(viewTarget)}` : "";
@@ -543,10 +547,6 @@ export default function PendingStockPage() {
       setIsBusy(false);
     }
   };
-
-  // Opened by the still-waiting list's 🗑 button — see deleteEntry's reason
-  // comment above for why this popup only exists for that list.
-  const [deleteChoiceEntryId, setDeleteChoiceEntryId] = useState<string | null>(null);
 
   // For a line with nothing assigned yet, seed its selection from the same
   // nearest-weight auto-allocation Order Entry itself uses (see
