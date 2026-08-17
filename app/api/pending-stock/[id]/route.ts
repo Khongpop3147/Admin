@@ -55,6 +55,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       codAmount,
       actualReceivedAmount,
       transferSlip,
+      extraSlipUrls,
       expectedShipDate,
       note,
     } = await req.json();
@@ -131,6 +132,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           codAmount: codAmount != null ? Number(codAmount) || 0 : null,
           actualReceivedAmount: actualReceivedAmount != null ? Number(actualReceivedAmount) || 0 : null,
           transferSlip: typeof transferSlip === "string" && transferSlip ? transferSlip : null,
+          extraSlipUrls: Array.isArray(extraSlipUrls) ? extraSlipUrls.filter((u: any) => typeof u === "string" && u.trim()) : [],
           expectedShipDate: typeof expectedShipDate === "string" && expectedShipDate ? expectedShipDate : null,
           note: typeof note === "string" && note.trim() ? note.trim() : null,
         },

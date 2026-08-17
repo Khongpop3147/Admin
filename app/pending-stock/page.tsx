@@ -43,6 +43,7 @@ interface PendingEntry {
   codAmount: number | null;
   actualReceivedAmount: number | null;
   transferSlip: string | null;
+  extraSlipUrls: string[];
   expectedShipDate: string | null;
   note: string | null;
   createdBy: string | null;
@@ -157,6 +158,9 @@ export default function PendingStockPage() {
   const [isCod, setIsCod] = useState(false);
   const [codAmountStr, setCodAmountStr] = useState("");
   const [transferSlip, setTransferSlip] = useState("");
+  // Extra slips beyond transferSlip (the primary one) — ลูกค้าโอนไม่ครบรอบแรก
+  // แล้วโอนเพิ่มรอบหลัง, same shape/flow as OrderEntryForm's own extraSlips.
+  const [extraSlips, setExtraSlips] = useState<{ url: string; verification: any; uploading?: boolean }[]>([]);
   const [slipVerification, setSlipVerification] = useState<any | null>(null);
   const [slipIssueReason, setSlipIssueReason] = useState("");
   const [slipIssueOtherText, setSlipIssueOtherText] = useState("");
@@ -268,9 +272,12 @@ export default function PendingStockPage() {
 
   // Same shape as OrderEntryForm's own combinedHasSlipIssue — skipped
   // entirely for a COD entry, since there's no slip to have an issue with
-  // yet (see the disabled slip section below).
-  const slipAmountMismatch = !isCod && !!transferSlip && expectedTotal > 0 && !isTotalAmountMatched(sumUsableSlipAmounts([slipVerification]), expectedTotal);
-  const combinedHasSlipIssue = !isCod && (hasAnySlipIssue([slipVerification]) || slipAmountMismatch);
+  // yet (see the disabled slip section below). Checked across every slip
+  // (primary + extra), not just the primary one, same reasoning as
+  // OrderEntryForm's own allSlipResults.
+  const allSlipResults = [slipVerification, ...extraSlips.map((s) => s.verification)];
+  const slipAmountMismatch = !isCod && !!transferSlip && expectedTotal > 0 && !isTotalAmountMatched(sumUsableSlipAmounts(allSlipResults), expectedTotal);
+  const combinedHasSlipIssue = !isCod && (hasAnySlipIssue(allSlipResults) || slipAmountMismatch);
 
   const addItemLine = () => setItems((prev) => [...prev, { productType: DEFAULT_PRODUCT_TYPE, weightKgStr: "" }]);
   const removeItemLine = (index: number) => setItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
@@ -348,6 +355,59 @@ export default function PendingStockPage() {
     }
   };
 
+  const addExtraSlipSlot = () => {
+    setExtraSlips((prev) => [...prev, { url: "", verification: null }]);
+  };
+
+  const removeExtraSlip = (index: number) => {
+    setExtraSlips((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadExtraSlipFile = async (index: number, file: File) => {
+    setExtraSlips((prev) => prev.map((s, i) => (i === index ? { ...s, uploading: true, verification: null } : s)));
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/upload`, { method: "POST", body: form });
+      const data = await res.json();
+      if (data.url) {
+        setExtraSlips((prev) => prev.map((s, i) => (i === index ? { ...s, url: data.url, uploading: false } : s)));
+        const absoluteSlipUrl = data.url.startsWith("http") ? data.url : `${window.location.origin}${data.url}`;
+        const result = await verifySlip(absoluteSlipUrl);
+        setExtraSlips((prev) => prev.map((s, i) => (i === index ? { ...s, verification: result } : s)));
+      } else {
+        alert("อัปโหลดไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+        setExtraSlips((prev) => prev.map((s, i) => (i === index ? { ...s, uploading: false } : s)));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะอัปโหลดไฟล์");
+      setExtraSlips((prev) => prev.map((s, i) => (i === index ? { ...s, uploading: false } : s)));
+    }
+  };
+
+  const handleExtraSlipFileInput = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadExtraSlipFile(index, file);
+  };
+
+  const handleExtraSlipPaste = (index: number, e: React.ClipboardEvent) => {
+    if (extraSlips[index]?.uploading) return;
+    const clipboardItems = e.clipboardData?.items;
+    if (!clipboardItems) return;
+    for (let i = 0; i < clipboardItems.length; i++) {
+      if (clipboardItems[i].type.startsWith("image/")) {
+        const file = clipboardItems[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          uploadExtraSlipFile(index, file);
+        }
+        return;
+      }
+    }
+  };
+
   const resetForm = () => {
     // Re-fills the admin's own default sales channel immediately (rather
     // than waiting on the currentUser-refresh effect above to refire),
@@ -359,6 +419,7 @@ export default function PendingStockPage() {
     setIsCod(false);
     setCodAmountStr("");
     setTransferSlip("");
+    setExtraSlips([]);
     setSlipVerification(null);
     setSlipIssueReason("");
     setSlipIssueOtherText("");
@@ -389,6 +450,11 @@ export default function PendingStockPage() {
     setIsCod(cod > 0);
     setCodAmountStr(cod > 0 ? String(cod) : "");
     setTransferSlip(entry.transferSlip || "");
+    // Existing extra slips already saved on this entry carry over as
+    // already-uploaded (no re-verification needed unless the admin
+    // explicitly replaces one — verification is just advisory), same as
+    // OrderEntryForm's own edit flow.
+    setExtraSlips((entry.extraSlipUrls || []).map((url) => ({ url, verification: null })));
     setSlipVerification(null);
     setSlipIssueReason("");
     setSlipIssueOtherText("");
@@ -445,6 +511,7 @@ export default function PendingStockPage() {
           codAmount: isCod ? codAmount : null,
           actualReceivedAmount: expectedTotal,
           transferSlip: isCod ? "" : transferSlip,
+          extraSlipUrls: isCod ? [] : extraSlips.map((s) => s.url).filter(Boolean),
           ...(isEditing ? {} : { bypassDuplicateCheck }),
         }),
       });
@@ -603,8 +670,8 @@ export default function PendingStockPage() {
 
   const pending = entries.filter((e) => !e.fulfilledAt && (!filterDate || bangkokDateKey(e.createdAt) === filterDate));
   const fulfilled = entries.filter((e) => e.fulfilledAt);
-  const slipCount = slipVerification ? 1 : 0;
-  const totalVerifiedSlipAmount = sumUsableSlipAmounts([slipVerification]);
+  const slipCount = allSlipResults.filter(Boolean).length;
+  const totalVerifiedSlipAmount = sumUsableSlipAmounts(allSlipResults);
 
   // How much of each product is still owed across every still-waiting entry
   // currently shown (respects the admin/date filters above) — a line counts
@@ -818,6 +885,42 @@ export default function PendingStockPage() {
           </div>
         )}
         {!isCod && <SlipVerificationBadge result={slipVerification} />}
+
+        {/* Extra slips — ลูกค้าโอนไม่ครบรอบแรกแล้วโอนเพิ่มรอบหลัง */}
+        {!isCod && extraSlips.map((slip, index) => (
+          <div key={index} style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed rgba(255,255,255,0.15)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>สลิปเพิ่มเติม #{index + 1}</span>
+              <button type="button" onClick={() => removeExtraSlip(index)} style={{ background: "none", border: "none", color: "#ff6b6b", cursor: "pointer", fontSize: "12px" }}>✕ ลบ</button>
+            </div>
+            {!slip.url ? (
+              <div
+                tabIndex={0}
+                onPaste={(e) => handleExtraSlipPaste(index, e)}
+                style={{ border: "2px dashed rgba(88,166,255,0.4)", borderRadius: "8px", padding: "14px", background: "rgba(88,166,255,0.05)" }}
+              >
+                <div style={{ fontSize: "13px", color: "var(--accent-blue)", marginBottom: "10px", fontWeight: "bold" }}>
+                  📋 คลิกตรงนี้แล้วกด Ctrl+V เพื่อวางรูปสลิป หรือเลือกไฟล์ด้านล่าง
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input type="file" accept="image/*" onChange={(e) => handleExtraSlipFileInput(index, e)} className={styles.input} style={{ padding: "8px" }} disabled={slip.uploading} />
+                  {slip.uploading && <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>กำลังอัปโหลด...</span>}
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: "12px" }}>
+                <a href={slip.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent-blue)", textDecoration: "underline" }}>ดูสลิปที่อัปโหลด</a>
+              </div>
+            )}
+            <SlipVerificationBadge result={slip.verification} />
+          </div>
+        ))}
+        {!isCod && transferSlip && (
+          <button type="button" onClick={addExtraSlipSlot} style={{ marginTop: "10px", background: "rgba(88,166,255,0.1)", border: "1px solid rgba(88,166,255,0.3)", color: "var(--accent-blue)", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "12px" }}>
+            + เพิ่มสลิป (ถ้าลูกค้าโอนไม่ครบแล้วโอนเพิ่ม)
+          </button>
+        )}
+
         {!isCod && <CombinedSlipSummary totalVerified={totalVerifiedSlipAmount} expectedTotal={expectedTotal} slipCount={slipCount} />}
         {combinedHasSlipIssue && (
           <SlipIssueReasonPicker reason={slipIssueReason} onReasonChange={setSlipIssueReason} otherText={slipIssueOtherText} onOtherTextChange={setSlipIssueOtherText} />
@@ -923,6 +1026,12 @@ export default function PendingStockPage() {
                               <a href={entry.transferSlip} target="_blank" rel="noreferrer" style={{ color: "var(--accent-blue)", textDecoration: "underline" }}>ดูสลิป</a>
                             </>
                           )}
+                          {entry.extraSlipUrls?.map((url, i) => (
+                            <span key={i}>
+                              {" · "}
+                              <a href={url} target="_blank" rel="noreferrer" style={{ color: "var(--accent-blue)", textDecoration: "underline" }}>ดูสลิปเพิ่มเติม #{i + 1}</a>
+                            </span>
+                          ))}
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: "8px" }}>
@@ -1195,6 +1304,21 @@ export default function PendingStockPage() {
                     label="สลิปโอนเงิน"
                     value={viewingOrder.transferSlip ? <a href={viewingOrder.transferSlip} target="_blank" rel="noreferrer" style={{ color: "var(--accent-blue)", textDecoration: "underline" }}>ดูสลิป</a> : "-"}
                   />
+                  {viewingOrder.extraSlips?.length > 0 && (
+                    <DetailRow
+                      label="สลิปเพิ่มเติม"
+                      value={
+                        <span>
+                          {viewingOrder.extraSlips.map((s: any, i: number) => (
+                            <span key={s.id}>
+                              {i > 0 && " · "}
+                              <a href={s.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent-blue)", textDecoration: "underline" }}>#{i + 1}</a>
+                            </span>
+                          ))}
+                        </span>
+                      }
+                    />
+                  )}
                 </DetailSection>
 
                 {viewingOrder.adminNote && (

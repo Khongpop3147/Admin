@@ -264,11 +264,17 @@ model PendingStock {
   // doesn't retroactively change what an already-logged entry says it
   // expected.
   actualReceivedAmount   Float?
-  // Same single-slip-only shape as Order.transferSlip, not the full
-  // multi-slip flow (Order.extraSlips) — a partial-payment second slip
-  // isn't a scenario that comes up here. Left empty for a COD entry, which
-  // has no slip until the courier collects on delivery.
+  // Left empty for a COD entry, which has no slip until the courier
+  // collects on delivery.
   transferSlip String?
+  // Extra slips beyond transferSlip (the primary one) — for when a
+  // customer pays short the first time and transfers the rest separately,
+  // same reason Order.extraSlips exists. A plain string array (not a
+  // related table like OrderSlip) since PendingStock has no other related
+  // tables and these only ever need their URL, no per-slip metadata beyond
+  // that. Carries straight through to the real Order's own extraSlips once
+  // "ส่งไป packing" converts this entry (see send-to-packing/route.ts).
+  extraSlipUrls String[] @default([])
   // Purely an admin's own best guess ("น่าจะส่งได้ประมาณ...") for their own
   // planning — optional, never required, and never read by any date/
   // scheduling logic (send-to-packing still always uses the real day it's
