@@ -139,6 +139,10 @@ describe("isExcludedFromRevenue", () => {
   it("a returned COD-held order is still excluded (regression: this used to leak into 'held forever')", () => {
     expect(isExcludedFromRevenue({ isReturned: true, codAmount: 200, codConfirmed: false })).toBe(true);
   });
+
+  it("excludes a claim replacement — never charged for in the first place", () => {
+    expect(isExcludedFromRevenue({ isClaim: true, price: 375 })).toBe(true);
+  });
 });
 
 describe("commissionForOrder", () => {
@@ -166,5 +170,9 @@ describe("commissionForOrder", () => {
     expect(commissionForOrder({ price: 250, isReturned: true }, DEFAULT_SETTINGS)).toBe(-50);
     // even a returned COD order gets the flat penalty, not 0
     expect(commissionForOrder({ price: 250, isReturned: true, codAmount: 350, codConfirmed: false }, DEFAULT_SETTINGS)).toBe(-50);
+  });
+
+  it("is 0 for a claim replacement — no commission on a free giveaway", () => {
+    expect(commissionForOrder({ price: 0, isClaim: true }, DEFAULT_SETTINGS)).toBe(0);
   });
 });

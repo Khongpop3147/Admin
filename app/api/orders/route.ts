@@ -31,11 +31,21 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const {
-      customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price,
-      shippingMethod, additionalShippingCost, codAmount, actualReceivedAmount,
+      customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion,
+      shippingMethod,
       transferSlip, paymentStatus, customerAddress, customerPhone, customerZip, needsTaxInvoice, orderStatus, rackDetails, sellerName, trackingNumber,
-      bypassDuplicateCheck, adminNote, entryDate, extraSlipUrls, items
+      bypassDuplicateCheck, adminNote, entryDate, extraSlipUrls, items, isClaim
     } = body;
+
+    // A claim ("ลูกค้าเคลม") replacement never charges the customer anything
+    // — forced here rather than trusted from the client, same reasoning as
+    // every other money field this route already computes itself. Real pork
+    // still gets picked/deducted normally (rackDetails/items below are
+    // untouched), only the money side is zeroed.
+    const price = isClaim ? 0 : body.price;
+    const additionalShippingCost = isClaim ? 0 : body.additionalShippingCost;
+    const codAmount = isClaim ? 0 : body.codAmount;
+    const actualReceivedAmount = isClaim ? 0 : body.actualReceivedAmount;
 
     // Product line items — one per line the admin added in Order Entry.
     // crispyPorkWeight/crispyPorkPiece/price above are still written as sent
@@ -49,7 +59,7 @@ export async function POST(req: Request) {
             productType: typeof it?.productType === "string" && it.productType ? it.productType : "PORK",
             weight: Number(it?.weight) || 0,
             pieceCount: it?.pieceCount != null ? Number(it.pieceCount) : null,
-            price: Number(it?.price) || 0,
+            price: isClaim ? 0 : Number(it?.price) || 0,
             pricePerKg: it?.pricePerKg != null ? Number(it.pricePerKg) : null,
           }))
           .filter((it: any) => it.weight > 0 || (it.pieceCount ?? 0) > 0)
@@ -58,6 +68,39 @@ export async function POST(req: Request) {
     if (!customerName) {
       return NextResponse.json(
         { error: "Customer Name is required." },
+        { status: 400 }
+      );
+    }
+
+    // An order with no pork in it at all isn't a real sale — reject before
+    // even running the duplicate-check queries below, since there's nothing
+    // worth checking for an order that's about to be rejected anyway.
+    if (validItems.length === 0) {
+      return NextResponse.json(
+        { error: "ออเดอร์ต้องมีน้ำหนักหรือจำนวนหมูอย่างน้อย 1 รายการ กรุณาใส่หมูก่อนบันทึกออเดอร์" },
+        { status: 400 }
+      );
+    }
+
+    let parsedRackDetails: any[] = [];
+    if (rackDetails) {
+      try {
+        parsedRackDetails = JSON.parse(rackDetails);
+      } catch(e) { }
+    }
+
+    // An order claiming pork was sold but backed by no real rack deduction
+    // at all would silently understate inventory usage — the customer paid
+    // for weight nobody actually pulled from stock. "ลูกค้ารอหมู" exists
+    // specifically for "sold, but no matching stock yet"; a real Order here
+    // should always have real stock behind it. Checked as one combined
+    // total rather than per-item, since rackDetails isn't tagged per item —
+    // still catches the case this exists for (nothing assigned anywhere).
+    const totalItemWeight = validItems.reduce((sum, it) => sum + it.weight, 0);
+    const totalRackWeight = parsedRackDetails.reduce((sum: number, d: any) => sum + (Number(d?.weight) || 0), 0);
+    if (totalItemWeight > 0 && totalRackWeight === 0) {
+      return NextResponse.json(
+        { error: `ยังไม่ได้เลือกชิ้นหมูจากคลังจริง กรุณาเลือกชิ้นหมูก่อนบันทึกออเดอร์ (ถ้ายังไม่มีของจริง ให้ใช้หน้า "ลูกค้ารอหมู" แทน)` },
         { status: 400 }
       );
     }
@@ -119,13 +162,6 @@ export async function POST(req: Request) {
       }
     }
 
-    let parsedRackDetails: any[] = [];
-    if (rackDetails) {
-      try {
-        parsedRackDetails = JSON.parse(rackDetails);
-      } catch(e) { }
-    }
-
     // Save the order and deduct rack weights in a transaction
     const newOrder = await prisma.$transaction(async (tx) => {
       const order = await createOrderRecord(tx, {
@@ -133,6 +169,7 @@ export async function POST(req: Request) {
         shippingMethod, additionalShippingCost, codAmount, actualReceivedAmount,
         transferSlip, paymentStatus, customerAddress, customerPhone, customerZip, needsTaxInvoice, orderStatus,
         rackDetails, sellerName, trackingNumber, adminNote, entryDate, extraSlipUrls, items: validItems,
+        isClaim: !!isClaim,
       });
 
       // Deduct weight from assigned racks atomically

@@ -73,6 +73,7 @@ export interface RevenueOrder {
   codAmount?: number | null;
   codConfirmed?: boolean | null;
   isReturned?: boolean | null;
+  isClaim?: boolean | null;
   price?: number | null;
 }
 
@@ -102,18 +103,21 @@ export function isCodPending(o: RevenueOrder): boolean {
   return Number(o.codAmount) > 0 && !o.codConfirmed;
 }
 
-// A returned ("ตีกลับ") package means the sale never actually happened — the
-// pork stock deduction stands, but no revenue or commission should count.
+// A returned ("ตีกลับ") package means the sale never actually happened, and
+// a claim ("ลูกค้าเคลม") replacement was never charged for in the first
+// place — either way, the pork stock deduction stands, but no revenue or
+// commission should count.
 export function isExcludedFromRevenue(o: RevenueOrder): boolean {
-  return isPendingStorefrontMoney(o) || o.isReturned === true;
+  return isPendingStorefrontMoney(o) || o.isReturned === true || o.isClaim === true;
 }
 
-// Commission per order: 0 for any Storefront sale or a still-pending COD
-// (nothing confirmed sold yet), a flat penalty if returned, otherwise
-// commissionRate of the product price. Rate/penalty come from Super Admin
-// Setting so policy changes don't require a code change.
+// Commission per order: 0 for any Storefront sale, a still-pending COD
+// (nothing confirmed sold yet), or a free claim replacement, a flat penalty
+// if returned, otherwise commissionRate of the product price. Rate/penalty
+// come from Super Admin Setting so policy changes don't require a code
+// change.
 export function commissionForOrder(o: RevenueOrder, settings: AppSettings): number {
   if (o.isReturned) return -settings.returnPenalty;
-  if (isPendingStorefrontMoney(o) || isCodPending(o)) return 0;
+  if (isPendingStorefrontMoney(o) || isCodPending(o) || o.isClaim) return 0;
   return (Number(o.price) || 0) * settings.commissionRate;
 }

@@ -14,11 +14,12 @@ import { sumUsableSlipAmounts, isTotalAmountMatched, hasAnySlipIssue, buildSlipI
 import { nextDayStr, previousDayStr } from "../lib/packingCutoff";
 import { isValidPhone, isValidZip, cleanPhoneInput, cleanZipInput } from "../lib/addressParse";
 import { formatMoney, getOrderStatusInfo, DetailSection, DetailRow } from "./OrderDetailShared";
-import { getEffectiveItems } from "../lib/orderItems";
+import { getEffectiveItems, sumItemsWeight } from "../lib/orderItems";
 import { PRODUCT_TYPES, DEFAULT_PRODUCT_TYPE, parseRackCode, getBaseRackKeyAuto } from "../lib/rackCode";
 import PetCorner from "./PetCorner";
 import { PLATFORM_OPTIONS } from "./PlatformIcons";
 import { SlipVerificationBadge, CombinedSlipSummary, SlipIssueReasonPicker } from "./SlipVerification";
+import { RackPiece, AssignItemPicker } from "./AssignStockPicker";
 
 interface Order {
   id: string;
@@ -32,6 +33,7 @@ interface Order {
   trackingNumber?: string;
   shippingMethod?: string;
   createdAt: string;
+  isClaim?: boolean;
 }
 
 interface RackDetail {
@@ -83,6 +85,26 @@ function computeItemPrice(item: Pick<OrderLineItem, 'promotion' | 'weightStr' | 
   return (parsedWeight * getPricePerKg(item.productType, settings)).toFixed(2);
 }
 
+// True for an order that claims a real weight was sold but has zero actual
+// rack stock behind it — the gap POST /api/orders' own "no real stock"
+// check now blocks going forward (see handleSubmit's itemWithNoStock
+// check), but an order created before that check existed can still be
+// sitting in this state. Drives both the list's red-border flag and the
+// detail view's "เติมหมู" banner below.
+function orderHasNoRealStock(order: any): boolean {
+  const weight = parseFloat(order?.crispyPorkWeight) || 0;
+  if (weight <= 0) return false;
+  if (!order.rackDetails) return true;
+  try {
+    const parsed = JSON.parse(order.rackDetails);
+    if (!Array.isArray(parsed)) return true;
+    const total = parsed.reduce((sum: number, r: any) => sum + (Number(r?.weight) || 0), 0);
+    return total <= 0;
+  } catch (e) {
+    return true;
+  }
+}
+
 
 
 
@@ -121,6 +143,12 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     trackingNumber: "",
     adminNote: "",
     entryDate: "",
+    // A free replacement for a customer's quality complaint ("ลูกค้าเคลม") —
+    // real pork still gets picked from stock exactly like a normal order,
+    // only the money side is zeroed (see the effect below and handleSubmit's
+    // own override — the server also force-zeroes it independently, see
+    // POST /api/orders).
+    isClaim: false,
   };
 
   const isStorefrontMode = mode === "walkin";
@@ -147,6 +175,18 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   // when a customer paid short and transferred the rest separately.
   const [extraSlips, setExtraSlips] = useState<{ url: string; verification: any; uploading?: boolean }[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  // "เติมหมู" picker for an order that has zero real rack stock behind its
+  // claimed weight (see orderHasNoRealStock) — seeded with an auto-allocated
+  // suggestion (same nearest-weight matching Order Entry's own create flow
+  // uses) whenever a different order with this problem is opened, so an
+  // admin usually just confirms rather than hand-picking from scratch.
+  const [assignOrderSelections, setAssignOrderSelections] = useState<RackPiece[]>([]);
+  const [isAssigningOrderStock, setIsAssigningOrderStock] = useState(false);
+  // Opened by the detail view's 🗑️ ลบ button — the actual delete only fires
+  // once the popup's "กรอกข้อมูลผิด" / "ยกเลิกจริง คืนเงิน" choice is made
+  // (same pattern as app/packing/page.tsx's own delete-choice popup).
+  const [deleteChoiceOrder, setDeleteChoiceOrder] = useState<any | null>(null);
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
   const [isEditingOrder, setIsEditingOrder] = useState(false);
   const [editOrderData, setEditOrderData] = useState<any | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -192,6 +232,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   const [customerSearch, setCustomerSearch] = useState("");
   const [showInventory, setShowInventory] = useState(false);
   const [showOrdersModal, setShowOrdersModal] = useState(false);
+  const [isOrdersModalFullscreen, setIsOrdersModalFullscreen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { currentUser, users, fetchUsers } = useUser();
@@ -289,6 +330,26 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     });
   }, [items]);
 
+  // Seeds the "เติมหมู" picker with an auto-allocated suggestion (same
+  // nearest-weight matching the create flow's own auto-allocation uses)
+  // whenever a different order missing real stock is opened — an admin
+  // usually just confirms rather than hand-picking from scratch. Targets
+  // the order's first product line, since Order.rackDetails is one flat
+  // pool for the whole order rather than itemized per line (see the
+  // assign-stock route's own comment on why).
+  useEffect(() => {
+    if (!selectedOrder || !orderHasNoRealStock(selectedOrder)) {
+      setAssignOrderSelections([]);
+      return;
+    }
+    const effectiveItems = getEffectiveItems(selectedOrder);
+    const targetProductType = effectiveItems[0]?.productType || DEFAULT_PRODUCT_TYPE;
+    const targetWeight = sumItemsWeight(effectiveItems);
+    const matchingRacks = (currentUser?.racks || []).filter((r: any) => (r.productType || DEFAULT_PRODUCT_TYPE) === targetProductType);
+    setAssignOrderSelections(targetWeight > 0 ? computeRackAllocation(matchingRacks as any, targetWeight) : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrder?.id]);
+
   // COD/shipping are order-level, not per-line — a courier boxes and
   // collects cash by total kg regardless of product mix — so they derive
   // from the combined weight rather than from any one line item. Mirrors
@@ -315,6 +376,19 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
       return { ...prev, additionalShippingCost, codAmount };
     });
   }, [formData.crispyPorkWeight, formData.shippingMethod, formData.isCod, settings]);
+
+  // A claim never collects any money — COD makes no sense on a free
+  // replacement, and there's nothing to owe, so payment status is trivially
+  // "Paid". Only fires forward (checking the box clears these); unchecking
+  // deliberately leaves them as-is rather than guessing what the admin meant
+  // to restore, same as every other "clear on uncheck" field in this form.
+  useEffect(() => {
+    if (!formData.isClaim) return;
+    setFormData(prev => {
+      if (!prev.isCod && prev.codAmount === "" && prev.additionalShippingCost === "0" && prev.paymentStatus === "Paid") return prev;
+      return { ...prev, isCod: false, codAmount: "", additionalShippingCost: "0", paymentStatus: "Paid" };
+    });
+  }, [formData.isClaim]);
 
   const fetchOrders = async (adminName?: string, date?: string, customerNameSearch?: string) => {
     try {
@@ -652,6 +726,78 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     setEditExtraSlips([]);
   };
 
+  const handleToggleOrderStockPiece = (piece: RackPiece) => {
+    setAssignOrderSelections((prev) =>
+      prev.some((p) => p.assignmentId === piece.assignmentId)
+        ? prev.filter((p) => p.assignmentId !== piece.assignmentId)
+        : [...prev, piece]
+    );
+  };
+
+  // Saves the "เติมหมู" picker's selection onto an already-placed order —
+  // see app/api/orders/[id]/assign-stock's own comment for why this exists
+  // (retrofitting real stock onto an order that has none) and why it's one
+  // flat pool rather than itemized per line.
+  const handleSaveOrderStock = async () => {
+    if (!selectedOrder) return;
+    setIsAssigningOrderStock(true);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/orders/${selectedOrder.id}/assign-stock`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rackDetails: assignOrderSelections }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSelectedOrder(data.order);
+        flashSaveToast();
+        await fetchUsers(); // Refresh currentUser.racks so the picker reflects the new remaining weights
+        const dateForFetch = customerSearch ? undefined : filterDate;
+        if (isSuperAdminRole(currentUser?.role)) {
+          fetchOrders(filterAdminName, dateForFetch, customerSearch);
+        } else {
+          fetchOrders(currentUser?.name, dateForFetch, customerSearch);
+        }
+      } else {
+        alert(data.error || "เติมหมูไม่สำเร็จ");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะเติมหมู");
+    } finally {
+      setIsAssigningOrderStock(false);
+    }
+  };
+
+  const confirmDeleteOrder = async (order: any, reason: "mistake" | "cancelled") => {
+    setDeleteChoiceOrder(null);
+    setIsDeletingOrder(true);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/orders/${order.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        handleCloseOrderDetail();
+        const dateForFetch = customerSearch ? undefined : filterDate;
+        if (isSuperAdminRole(currentUser?.role)) {
+          fetchOrders(filterAdminName, dateForFetch, customerSearch);
+        } else {
+          fetchOrders(currentUser?.name, dateForFetch, customerSearch);
+        }
+      } else {
+        alert(data.error || "ลบออเดอร์ไม่สำเร็จ");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะลบออเดอร์");
+    } finally {
+      setIsDeletingOrder(false);
+    }
+  };
+
   // Same "uploading a slip means it's paid" rule as the main new-order form —
   // covers the case where a customer sends the slip after the order was
   // already saved as unpaid.
@@ -774,6 +920,20 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
   const handleSaveOrderEdit = async () => {
     if (!editOrderData) return;
+    // Same "at least one real item" rule the create flow enforces (see
+    // handleSubmit above) — an edit that zeroes out every item's weight (or
+    // the flat weight field, for a single-item order) would otherwise
+    // silently leave an order with no pork in it at all.
+    const editTotalWeight = isMultiItemEdit
+      ? editOrderData.items.reduce((sum: number, it: any) => sum + (Number(it.weight) || 0), 0)
+      : parseFloat(editOrderData.crispyPorkWeight) || 0;
+    const editTotalPieces = isMultiItemEdit
+      ? editOrderData.items.reduce((sum: number, it: any) => sum + (Number(it.pieceCount) || 0), 0)
+      : parseFloat(editOrderData.crispyPorkPiece) || 0;
+    if (editTotalWeight <= 0 && editTotalPieces <= 0) {
+      alert("ออเดอร์ต้องมีน้ำหนักหรือจำนวนหมูอย่างน้อย 1 รายการ ลบออกจนหมดไม่ได้");
+      return;
+    }
     if (editHasSlipIssue && !isSlipIssueReasonComplete(editSlipIssueReason, editSlipIssueOtherText)) {
       alert(
         editSlipIssueReason === SLIP_ISSUE_OTHER
@@ -923,6 +1083,21 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     // second line never creates a zero-weight OrderItem row.
     const itemsToSubmit = items.filter(it => (parseFloat(it.weightStr) || 0) > 0 || it.rackDetails.length > 0);
 
+    if (itemsToSubmit.length === 0) {
+      alert("กรุณาใส่น้ำหนักหมูอย่างน้อย 1 รายการก่อนบันทึกออเดอร์");
+      return;
+    }
+
+    // A line with weight typed in but nothing actually picked from the rack
+    // already gets the ⚠️ warning above (itemNotes) — this turns it into a
+    // hard block instead, since a real Order should always have real stock
+    // behind it (that's exactly what "ลูกค้ารอหมู" is for when there isn't).
+    const itemWithNoStock = itemsToSubmit.find(it => (parseFloat(it.weightStr) || 0) > 0 && it.rackDetails.length === 0);
+    if (itemWithNoStock) {
+      alert('มีสินค้าที่ใส่น้ำหนักไว้แต่ยังไม่ได้เลือกชิ้นหมูจากคลังจริง กรุณาเลือกชิ้นหมูก่อนบันทึกออเดอร์ (ถ้ายังไม่มีของจริง ให้ใช้หน้า "ลูกค้ารอหมู" แทน)');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const res = await fetch(`${BASE_PATH}/api/orders`, {
@@ -937,7 +1112,11 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
             productType: it.productType,
             weight: parseFloat(it.weightStr) || 0,
             pieceCount: it.rackDetails.length || null,
-            price: parseFloat(it.priceStr) || 0,
+            // Zeroed client-side too for a claim, even though the server
+            // force-zeroes it independently — keeps what's shown right
+            // after saving (the refetched order) honest with what the
+            // summary above already displayed before submit.
+            price: formData.isClaim ? 0 : (parseFloat(it.priceStr) || 0),
             pricePerKg: getPricePerKg(it.productType, settings),
           })),
           extraSlipUrls: extraSlips.map(s => s.url).filter(Boolean),
@@ -1131,6 +1310,17 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                   </div>
                 ) : (
                   <input required type="text" name="customerName" value={formData.customerName} onChange={handleChange} className={styles.input} placeholder="ชื่อลูกค้า" />
+                )}
+              </div>
+              <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input type="checkbox" name="isClaim" checked={formData.isClaim} onChange={handleChange} style={{ width: '16px', height: '16px' }} />
+                  <span className={styles.label} style={{ margin: 0 }}>🎁 ออเดอร์เคลม (ลูกค้าเคลมหมู — ไม่คิดเงิน)</span>
+                </label>
+                {formData.isClaim && (
+                  <div style={{ fontSize: '12px', color: '#ffac33', marginTop: '4px' }}>
+                    ยังต้องเลือกหมูจริงจากคลังให้ลูกค้าตามปกติ แค่ไม่เก็บเงิน/ไม่คิดค่าคอม
+                  </div>
                 )}
               </div>
               <div className={styles.formGroup} style={{ display: isStorefrontMode ? 'none' : 'block' }}>
@@ -1490,34 +1680,40 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                 </div>
               </div>
 
-              {/* Optional extras */}
-              <div style={{ display: isStorefrontMode ? 'none' : 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>ค่าส่งเพิ่มเติม (บาท)</label>
-                  <input type="number" step="0.01" name="additionalShippingCost" value={formData.additionalShippingCost} onChange={handleChange} className={styles.input} placeholder="ระบบคำนวณให้อัตโนมัติเมื่อเลือกวิธีจัดส่ง" />
+              {/* Optional extras — hidden entirely for a claim: no shipping
+                  charge and no COD makes sense on a free replacement. */}
+              {!formData.isClaim && (
+                <div style={{ display: isStorefrontMode ? 'none' : 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>ค่าส่งเพิ่มเติม (บาท)</label>
+                    <input type="number" step="0.01" name="additionalShippingCost" value={formData.additionalShippingCost} onChange={handleChange} className={styles.input} placeholder="ระบบคำนวณให้อัตโนมัติเมื่อเลือกวิธีจัดส่ง" />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input type="checkbox" checked={formData.isCod} onChange={(e) => handleIsCodChange(e.target.checked)} style={{ width: '16px', height: '16px' }} />
+                      เก็บเงินปลายทาง (COD)
+                    </label>
+                    <input type="number" step="0.01" name="codAmount" value={formData.codAmount} readOnly className={styles.input} placeholder="ยอดเก็บปลายทาง" style={{ opacity: formData.isCod ? 1 : 0.5, background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
+                  </div>
                 </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input type="checkbox" checked={formData.isCod} onChange={(e) => handleIsCodChange(e.target.checked)} style={{ width: '16px', height: '16px' }} />
-                    เก็บเงินปลายทาง (COD)
-                  </label>
-                  <input type="number" step="0.01" name="codAmount" value={formData.codAmount} readOnly className={styles.input} placeholder="ยอดเก็บปลายทาง" style={{ opacity: formData.isCod ? 1 : 0.5, background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
-                </div>
-              </div>
+              )}
 
               {/* Auto-calculated summary — visually separated so it reads as
                   "the system worked this out", not more fields to fill in.
                   Shown in storefront mode too: VAT/total are already computed
                   off formData.price regardless of mode and saved with the
-                  order, they just weren't visible here before. */}
+                  order, they just weren't visible here before. A claim
+                  overrides both to plainly show ฿0, matching what's actually
+                  submitted (see handleSubmit and POST /api/orders' own
+                  force-zero). */}
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '16px' }}>
                 <div style={{ flex: '1 1 200px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', padding: '14px 16px' }}>
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>🧮 ภาษีมูลค่าเพิ่ม (VAT 7%)</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formData.vatAmount ? `฿${formData.vatAmount}` : '-'}</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formData.isClaim ? '฿0' : (formData.vatAmount ? `฿${formData.vatAmount}` : '-')}</div>
                 </div>
                 <div style={{ flex: '1 1 200px', background: 'rgba(63,185,80,0.08)', border: '1px solid rgba(63,185,80,0.25)', borderRadius: '10px', padding: '14px 16px' }}>
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>🧮 ยอดรับจริงทั้งหมด</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent-green)' }}>{formData.actualReceivedAmount ? `฿${formData.actualReceivedAmount}` : '-'}</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent-green)' }}>{formData.isClaim ? '฿0 (เคลม)' : (formData.actualReceivedAmount ? `฿${formData.actualReceivedAmount}` : '-')}</div>
                 </div>
               </div>
             </div>
@@ -1812,12 +2008,26 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
         <div className={styles.modalOverlay} onClick={() => setShowOrdersModal(false)}>
           <div
             className={styles.alertBox}
-            style={{ maxWidth: '600px', width: '92%', maxHeight: '85vh', textAlign: 'left', padding: '24px', display: 'flex', flexDirection: 'column' }}
+            style={
+              isOrdersModalFullscreen
+                ? { maxWidth: '100vw', width: '100vw', height: '100vh', maxHeight: '100vh', borderRadius: 0, textAlign: 'left', padding: '24px', display: 'flex', flexDirection: 'column' }
+                : { maxWidth: '600px', width: '92%', maxHeight: '85vh', textAlign: 'left', padding: '24px', display: 'flex', flexDirection: 'column' }
+            }
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px', marginBottom: '16px' }}>
               <h3 style={{ fontSize: '1.3rem', marginBottom: 0 }}>ออเดอร์ทั้งหมด</h3>
-              <button type="button" onClick={() => setShowOrdersModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsOrdersModalFullscreen(v => !v)}
+                  title={isOrdersModalFullscreen ? 'ย่อหน้าต่าง' : 'ขยายเต็มหน้าจอ'}
+                  style={{ background: 'rgba(255,255,255,0.08)', border: 'none', color: 'var(--text-secondary)', fontSize: '15px', cursor: 'pointer', padding: '6px 10px', borderRadius: '6px', lineHeight: 1 }}
+                >
+                  {isOrdersModalFullscreen ? '🗗' : '⛶'}
+                </button>
+                <button type="button" onClick={() => setShowOrdersModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+              </div>
             </div>
 
             <input
@@ -1909,14 +2119,31 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
               <div className={styles.emptyState}>{showUnpaidOnly ? "ไม่มีออเดอร์ที่ยังไม่จ่ายเงิน" : "ยังไม่มีออเดอร์"}</div>
             ) : (
               <ul className={styles.list} style={{ overflowY: 'auto', paddingRight: '4px' }}>
-                {displayedOrders.map((order) => (
-                  <li key={order.id} className={styles.listItem} onClick={() => { setSelectedOrder(order); setIsEditingOrder(false); setEditOrderData(null); }} style={{ cursor: 'pointer' }}>
+                {displayedOrders.map((order) => {
+                  const needsStock = orderHasNoRealStock(order);
+                  return (
+                  <li
+                    key={order.id}
+                    className={styles.listItem}
+                    onClick={() => { setSelectedOrder(order); setIsEditingOrder(false); setEditOrderData(null); }}
+                    style={needsStock ? { cursor: 'pointer', border: '1px solid #ff6b6b', background: 'rgba(255,107,107,0.06)' } : { cursor: 'pointer' }}
+                  >
                     <div className={styles.itemInfo}>
                       <span className={styles.itemName}>
                         {order.orderNo || "?"} - {order.customerName}
                         {order.paymentStatus === "Unpaid" && (
                           <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 'bold', color: '#ff6b6b', background: 'rgba(255,107,107,0.15)', padding: '2px 8px', borderRadius: '999px' }}>
                             ยังไม่จ่าย
+                          </span>
+                        )}
+                        {needsStock && (
+                          <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 'bold', color: '#ff6b6b', background: 'rgba(255,107,107,0.15)', padding: '2px 8px', borderRadius: '999px' }}>
+                            ⚠️ ยังไม่ได้ใส่หมู
+                          </span>
+                        )}
+                        {order.isClaim && (
+                          <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 'bold', color: '#ffac33', background: 'rgba(255,172,51,0.15)', padding: '2px 8px', borderRadius: '999px' }}>
+                            🎁 เคลม
                           </span>
                         )}
                       </span>
@@ -1932,7 +2159,8 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                       {new Date(order.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </span>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -2024,6 +2252,11 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                         ยังไม่จ่าย
                       </span>
                     )}
+                    {selectedOrder.isClaim && (
+                      <span style={{ display: 'inline-block', fontSize: '12px', fontWeight: 'bold', color: '#ffac33', background: 'rgba(255,172,51,0.15)', padding: '4px 12px', borderRadius: '999px' }}>
+                        🎁 เคลม — ไม่คิดเงิน
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
@@ -2034,6 +2267,18 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                       style={{ background: 'rgba(255,172,51,0.15)', border: 'none', color: '#ffac33', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', padding: '6px 14px', borderRadius: '8px' }}
                     >
                       ✏️ แก้ไข
+                    </button>
+                  )}
+                  {/* Super Admin can delete any order; a regular admin only
+                      their own — same scoping DELETE /api/orders/[id] itself
+                      enforces server-side. */}
+                  {!isEditingOrder && (isSuperAdminRole(currentUser?.role) || selectedOrder.sellerName === currentUser?.name) && (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteChoiceOrder(selectedOrder)}
+                      style={{ background: 'rgba(255,107,107,0.15)', border: 'none', color: '#ff6b6b', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', padding: '6px 14px', borderRadius: '8px' }}
+                    >
+                      🗑️ ลบ
                     </button>
                   )}
                   <button type="button" onClick={handleCloseOrderDetail} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
@@ -2289,6 +2534,25 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                       />
                     </DetailSection>
 
+                    {orderHasNoRealStock(selectedOrder) && (
+                      <div style={{ margin: '0 24px 20px', padding: '16px', borderRadius: '10px', border: '1px solid #ff6b6b', background: 'rgba(255,107,107,0.06)' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#ff6b6b', marginBottom: '10px' }}>
+                          ⚠️ ออเดอร์นี้ยังไม่ได้ตัดสต็อกหมูจริงเลย — กรุณาเติมหมูเข้าไป
+                        </div>
+                        <AssignItemPicker
+                          item={{
+                            productType: getEffectiveItems(selectedOrder)[0]?.productType || DEFAULT_PRODUCT_TYPE,
+                            weightKg: sumItemsWeight(getEffectiveItems(selectedOrder)),
+                          }}
+                          racks={currentUser?.racks || []}
+                          selected={assignOrderSelections}
+                          onToggle={handleToggleOrderStockPiece}
+                          onSave={handleSaveOrderStock}
+                          isBusy={isAssigningOrderStock}
+                        />
+                      </div>
+                    )}
+
                     <DetailSection title="การจัดส่ง">
                       <DetailRow
                         label="เลขพัสดุ"
@@ -2327,6 +2591,37 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
           </div>
         );
       })()}
+
+      {deleteChoiceOrder && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.alertBox}>
+            <div className={styles.alertIcon}>🗑️</div>
+            <h3 className={styles.alertTitle}>ลบออเดอร์ "{deleteChoiceOrder.customerName}"</h3>
+            <p className={styles.alertText}>
+              การลบนี้ย้อนกลับไม่ได้ (น้ำหนักหมูที่ตัดไปจะถูกคืนเข้าคลังให้อัตโนมัติ) — ออเดอร์นี้เกิดจากอะไร?
+            </p>
+            <div className={styles.alertActions}>
+              <button className={styles.btnCancel} onClick={() => setDeleteChoiceOrder(null)} disabled={isDeletingOrder}>
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => confirmDeleteOrder(deleteChoiceOrder, "mistake")}
+                disabled={isDeletingOrder}
+                style={{ padding: "10px 18px", borderRadius: "8px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)", color: "var(--text-secondary)", cursor: isDeletingOrder ? "wait" : "pointer", fontSize: "13px", fontWeight: "bold" }}
+              >
+                ✏️ กรอกข้อมูลผิด
+              </button>
+              <button
+                onClick={() => confirmDeleteOrder(deleteChoiceOrder, "cancelled")}
+                disabled={isDeletingOrder}
+                style={{ padding: "10px 18px", borderRadius: "8px", background: "rgba(255,107,107,0.15)", border: "1px solid #ff6b6b", color: "#ff6b6b", cursor: isDeletingOrder ? "wait" : "pointer", fontSize: "13px", fontWeight: "bold" }}
+              >
+                🚫 ยกเลิกจริง คืนเงิน
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

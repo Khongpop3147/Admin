@@ -27,6 +27,13 @@ model Order {
   codAmount             Float?
   codConfirmed          Boolean  @default(false)
   isReturned            Boolean  @default(false)
+  // A free replacement for a customer's quality complaint ("ลูกค้าเคลม") —
+  // real pork still gets picked and deducted from stock normally (see
+  // rackDetails below), but price/shipping/COD are all forced to 0 server-
+  // side regardless of what the client sends, and it's excluded from
+  // revenue/commission the same way a returned order is (see
+  // isExcludedFromRevenue / commissionForOrder in lib/money.ts).
+  isClaim               Boolean  @default(false)
   actualReceivedAmount  Float?
   transferSlip          String?
   paymentStatus         String?

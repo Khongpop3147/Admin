@@ -38,6 +38,14 @@ export interface CreateOrderInput {
   packingEntryDate?: string | null;
   extraSlipUrls?: string[];
   items?: { productType: string; weight: number; pieceCount: number | null; price: number; pricePerKg: number | null }[];
+  isClaim?: boolean;
+}
+
+// A real 0 (from a claim order's own force-zero) counts as provided; an
+// untouched form field ("", null, undefined) doesn't — see the callers
+// below for why the difference matters.
+function isProvidedNumber(v: unknown): boolean {
+  return v !== null && v !== undefined && v !== "";
 }
 
 // `tx` is a Prisma transaction client — typed loosely (matching this
@@ -75,11 +83,16 @@ export async function createOrderRecord(tx: any, input: CreateOrderInput) {
       crispyPorkWeight: input.crispyPorkWeight,
       packedPork: input.packedPork,
       promotion: input.promotion,
-      price: input.price ? Number(input.price) : null,
+      // Distinguishes "not provided" (null/undefined, or "" — an untouched
+      // form field) from an intentional 0 — a claim order sends a real 0
+      // for all four of these (see POST /api/orders' own force-zero), which
+      // a plain truthy check would silently store as null instead, making
+      // it indistinguishable from "never filled in".
+      price: isProvidedNumber(input.price) ? Number(input.price) : null,
       shippingMethod: input.shippingMethod,
-      additionalShippingCost: input.additionalShippingCost ? Number(input.additionalShippingCost) : null,
-      codAmount: input.codAmount ? Number(input.codAmount) : null,
-      actualReceivedAmount: input.actualReceivedAmount ? Number(input.actualReceivedAmount) : null,
+      additionalShippingCost: isProvidedNumber(input.additionalShippingCost) ? Number(input.additionalShippingCost) : null,
+      codAmount: isProvidedNumber(input.codAmount) ? Number(input.codAmount) : null,
+      actualReceivedAmount: isProvidedNumber(input.actualReceivedAmount) ? Number(input.actualReceivedAmount) : null,
       transferSlip: input.transferSlip,
       paymentStatus: input.paymentStatus,
       customerAddress: input.customerAddress,
@@ -91,6 +104,7 @@ export async function createOrderRecord(tx: any, input: CreateOrderInput) {
       sellerName: input.sellerName,
       trackingNumber: input.trackingNumber,
       adminNote: input.adminNote,
+      isClaim: !!input.isClaim,
       entryDate: dateKey,
       packingEntryDate: input.packingEntryDate ?? null,
       extraSlips: validExtraSlipUrls.length > 0 ? { create: validExtraSlipUrls.map((url) => ({ url })) } : undefined,

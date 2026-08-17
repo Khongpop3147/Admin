@@ -124,6 +124,20 @@ export async function PATCH(
       updateData.price = totalPrice;
     }
 
+    // An edit that zeroes out every item's weight (or the flat weight field,
+    // for a single-item order) would otherwise silently leave an order with
+    // no pork in it at all — same "must have at least one real item" rule
+    // Order Entry's own create flow enforces (see POST /api/orders below).
+    // Only checked when this request actually touches weight, so an
+    // unrelated edit (tracking number, note, COD confirm, ...) is unaffected.
+    if ((itemUpdates.length > 0 || body.crispyPorkWeight !== undefined) && updateData.crispyPorkWeight !== undefined) {
+      const totalWeight = parseFloat(updateData.crispyPorkWeight) || 0;
+      const totalPieces = parseFloat(updateData.crispyPorkPiece) || 0;
+      if (totalWeight <= 0 && totalPieces <= 0) {
+        return NextResponse.json({ error: "ออเดอร์ต้องมีน้ำหนักหรือจำนวนหมูอย่างน้อย 1 รายการ ลบออกจนหมดไม่ได้" }, { status: 400 });
+      }
+    }
+
     // actualReceivedAmount is never sent by any client — it's derived once
     // at order creation as round((price + shipping) * 1.07 + codAmount) and
     // then never touched again. If price or codAmount changes here without
@@ -206,7 +220,7 @@ export async function DELETE(
 ) {
   try {
     const session = await getSessionUser();
-    if (!session || !isSuperAdminRole(session.role)) {
+    if (!session) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
 
@@ -219,6 +233,12 @@ export async function DELETE(
     const order = await prisma.order.findUnique({ where: { id } });
     if (!order) {
       return NextResponse.json({ error: "ไม่พบออเดอร์นี้ อาจถูกลบไปแล้ว" }, { status: 404 });
+    }
+    // Super Admin can delete any order (matches Packing's own delete
+    // button); a regular admin can only delete their own — same "your own
+    // stock, your own mistakes to fix" scoping the rest of the app uses.
+    if (!isSuperAdminRole(session.role) && order.sellerName !== session.name) {
+      return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
 
     let rackDetails: { assignmentId?: string; rackNo?: string; weight?: number }[] = [];
@@ -263,9 +283,10 @@ export async function DELETE(
       // order's money already counted as sold in Dashboard's totals the
       // moment it was created, so a genuine cancel here is a real reversal.
       // Deliberately attributed to order.sellerName (whoever's revenue this
-      // reverses), not session.name (the Super Admin who clicked delete
-      // here — this route is Super-Admin-only, so session.name would never
-      // match a regular admin's own Dashboard view otherwise).
+      // reverses), not session.name — same value when an admin deletes
+      // their own order, but a Super Admin deleting someone ELSE's order
+      // must still land on the original seller's own Dashboard, not the
+      // Super Admin's.
       if (!isMistake) {
         await tx.orderAuditLog.create({
           data: {
