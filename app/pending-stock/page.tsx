@@ -142,6 +142,10 @@ export default function PendingStockPage() {
   // date). Client-side only since the already-fetched entries list is
   // scoped per-admin and never huge.
   const [filterDate, setFilterDate] = useState("");
+  // Matches against customerName, socialMediaName, and customerPhone — same
+  // "find this person however I remember them" idea HR Manage's own search
+  // uses. Client-side, same reasoning as filterDate above.
+  const [customerSearch, setCustomerSearch] = useState("");
   const adminOptions = users.filter((u) => u.role !== "CENTRAL_INVENTORY" && u.role !== "PACKING" && u.role !== "HR" && u.id !== currentUser?.id);
 
   // Non-null while the top form is editing an existing still-waiting entry
@@ -668,7 +672,16 @@ export default function PendingStockPage() {
     }
   };
 
-  const pending = entries.filter((e) => !e.fulfilledAt && (!filterDate || bangkokDateKey(e.createdAt) === filterDate));
+  const normalizedSearch = customerSearch.trim().toLowerCase();
+  const pending = entries.filter((e) => {
+    if (e.fulfilledAt) return false;
+    if (filterDate && bangkokDateKey(e.createdAt) !== filterDate) return false;
+    if (normalizedSearch) {
+      const haystack = `${e.customerName} ${e.socialMediaName || ""} ${e.customerPhone || ""}`.toLowerCase();
+      if (!haystack.includes(normalizedSearch)) return false;
+    }
+    return true;
+  });
   const fulfilled = entries.filter((e) => e.fulfilledAt);
   const slipCount = allSlipResults.filter(Boolean).length;
   const totalVerifiedSlipAmount = sumUsableSlipAmounts(allSlipResults);
@@ -949,7 +962,21 @@ export default function PendingStockPage() {
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
             <h2 style={{ fontSize: "16px", margin: 0 }}>รอส่งของ ({pending.length})</h2>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>ค้นหาลูกค้า</label>
+              <input
+                type="text"
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                placeholder="ชื่อ, ชื่อโซเชียล, เบอร์โทร..."
+                className={styles.input}
+                style={{ padding: "6px 10px", fontSize: "13px", width: "180px" }}
+              />
+              {customerSearch && (
+                <button type="button" onClick={() => setCustomerSearch("")} style={{ background: "none", border: "none", color: "var(--accent-blue)", cursor: "pointer", fontSize: "12px", textDecoration: "underline" }}>
+                  ล้าง
+                </button>
+              )}
               <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>วันที่ลง order</label>
               <input
                 type="date"
@@ -978,7 +1005,7 @@ export default function PendingStockPage() {
           )}
           {pending.length === 0 ? (
             <div className="glass-panel" style={{ padding: "20px", borderRadius: "12px", marginBottom: "32px", color: "var(--text-secondary)", fontSize: "13px" }}>
-              {filterDate ? "ไม่มีลูกค้ารอของในวันที่เลือก" : "ไม่มีลูกค้ารอของอยู่"}
+              {normalizedSearch ? "ไม่พบลูกค้าที่ตรงกับคำค้นหา" : filterDate ? "ไม่มีลูกค้ารอของในวันที่เลือก" : "ไม่มีลูกค้ารอของอยู่"}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "32px" }}>
