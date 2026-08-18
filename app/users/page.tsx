@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import * as XLSX from "xlsx";
 import { useUser } from "../../components/UserProvider";
 import { useSettings } from "../../components/SettingsProvider";
@@ -38,15 +39,6 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 const CLEAR_CONFIRM_PHRASE = "ลบข้อมูล";
-
-interface AuditLog {
-  id: string;
-  orderId: string | null;
-  action: string;
-  summary: string;
-  performedBy: string | null;
-  createdAt: string;
-}
 
 function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
@@ -116,11 +108,6 @@ export default function UsersPage() {
   const [moveDateTarget, setMoveDateTarget] = useState("");
   const [isMovingDate, setIsMovingDate] = useState(false);
   const [moveDateMsg, setMoveDateMsg] = useState("");
-
-  // --- Audit log state ---
-  const [isLogOpen, setIsLogOpen] = useState(false);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [isLoadingLog, setIsLoadingLog] = useState(false);
 
   if (!currentUser) return null;
   if (!isSuperAdminRole(currentUser.role)) {
@@ -337,23 +324,6 @@ export default function UsersPage() {
   };
 
   // --- Clear data handler ---
-  const fetchAuditLog = async () => {
-    setIsLoadingLog(true);
-    try {
-      const res = await fetch(`${BASE_PATH}/api/audit-log`);
-      const data = await res.json();
-      setAuditLogs(data.logs || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsLoadingLog(false);
-    }
-  };
-
-  const openLog = () => {
-    setIsLogOpen(true);
-    fetchAuditLog();
-  };
 
   const handleClearOrders = async () => {
     if (clearMode === "range" && (!clearFrom || !clearTo)) {
@@ -392,7 +362,6 @@ export default function UsersPage() {
       }
       setClearMsg(`✅ ลบออเดอร์ไปแล้ว ${data.deletedCount} รายการ`);
       setClearConfirmText("");
-      if (isLogOpen) fetchAuditLog();
     } catch (e) {
       setClearMsg("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
     } finally {
@@ -455,7 +424,6 @@ export default function UsersPage() {
       }
       setMoveDateMsg(`✅ ย้ายไปส่งวันที่ ${moveDateTarget} แล้ว เป็นเลข #${data.destRange[0]}-${data.destRange[1]}`);
       await fetchMoveDateOrders(moveDateViewDate);
-      if (isLogOpen) fetchAuditLog();
     } catch (e) {
       setMoveDateMsg("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
     } finally {
@@ -875,12 +843,12 @@ export default function UsersPage() {
         </div>
 
         <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "16px" }}>
-          <button
-            onClick={openLog}
-            style={{ background: "rgba(var(--surface-rgb),0.08)", color: "#fff", border: "none", borderRadius: "8px", padding: "10px 18px", fontSize: "13px", cursor: "pointer" }}
+          <Link
+            href="/audit-log"
+            style={{ display: "inline-block", background: "rgba(var(--surface-rgb),0.08)", color: "var(--text-primary)", border: "none", borderRadius: "8px", padding: "10px 18px", fontSize: "13px", textDecoration: "none" }}
           >
             📜 ดู Log การแก้ไข/ลบออเดอร์
-          </button>
+          </Link>
         </div>
       </SectionCard>
 
@@ -962,39 +930,6 @@ export default function UsersPage() {
             <button className={styles.button} style={{ width: "100%" }} onClick={handleAdd} disabled={isSaving}>
               {isSaving ? "กำลังบันทึก..." : "เพิ่ม User"}
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* ===== Audit log modal ===== */}
-      {isLogOpen && (
-        <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "var(--modal-bg)", padding: "32px", borderRadius: "12px", width: "90%", maxWidth: "800px", maxHeight: "85vh", overflowY: "auto", border: "1px solid var(--border-color)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-              <h2 style={{ margin: 0, color: "var(--accent-blue)", fontSize: "20px" }}>📜 Log การแก้ไข/ลบออเดอร์</h2>
-              <button
-                onClick={() => setIsLogOpen(false)}
-                style={{ background: "transparent", border: "none", color: "#888", cursor: "pointer", fontSize: "24px" }}
-              >✕</button>
-            </div>
-
-            {isLoadingLog ? (
-              <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>กำลังโหลด...</div>
-            ) : auditLogs.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>ยังไม่มีประวัติ</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {auditLogs.map((log) => (
-                  <div key={log.id} style={{ padding: "12px 14px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "8px", borderLeft: `3px solid ${log.action === "BULK_CLEAR" ? "#ff6b6b" : "var(--accent-blue)"}` }}>
-                    <div style={{ fontSize: "13px", marginBottom: "4px" }}>{log.summary}</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                      {new Date(log.createdAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })}
-                      {log.performedBy && ` · โดย ${log.performedBy}`}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}

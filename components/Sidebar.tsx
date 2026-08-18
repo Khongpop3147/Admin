@@ -98,6 +98,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <Link href="/users" className={`${styles.navItem} ${pathname === '/users' ? styles.active : ''}`}>
               Super Admin Setting
             </Link>
+            <Link href="/audit-log" className={`${styles.navItem} ${pathname === '/audit-log' ? styles.active : ''}`}>
+              ประวัติการทำงาน
+            </Link>
           </>
         )}
         {/* Just-for-fun feature — visible to everyone logged in, no role
