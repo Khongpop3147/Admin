@@ -236,6 +236,24 @@ model OrderAuditLog {
   amount      Float?
 }
 
+// A one-off message an HR/Super Admin writes and aims at specific admins —
+// pops up in-app (see components/HrAlertPopup.tsx, mounted in AppShell so
+// it's active on every page) next time each targeted admin has AdminSpace
+// open, until they acknowledge it. recipientIds/seenByIds are plain string
+// arrays rather than a join table since the only per-recipient fact that
+// matters is "have they seen it yet" — no other metadata needed, same
+// reasoning as PendingStock.extraSlipUrls. Not a relation to User (like
+// OrderAuditLog.performedBy) to avoid cascade-delete complexity for what's
+// ultimately a disposable notification, not durable business data.
+model HrAlert {
+  id           String   @id @default(uuid())
+  message      String
+  createdBy    String
+  createdAt    DateTime @default(now())
+  recipientIds String[]
+  seenByIds    String[] @default([])
+}
+
 // A customer already committed to buying (paid up front, or agreed to COD),
 // but there was no pork on hand to give them at order time — tracked here
 // as its own lightweight waitlist (not a status on Order) since it's a

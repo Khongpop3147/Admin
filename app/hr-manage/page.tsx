@@ -84,7 +84,81 @@ export default function HrManagePage() {
   const [editViewOrderData, setEditViewOrderData] = useState<any>(null);
   const [isSavingViewOrder, setIsSavingViewOrder] = useState(false);
 
+  // --- HR alert (in-app pop-up message) state ---
+  const [alertMessage, setAlertMessage] = useState("");
+  const [alertRecipientIds, setAlertRecipientIds] = useState<Set<string>>(new Set());
+  const [isSendingAlert, setIsSendingAlert] = useState(false);
+  const [sendAlertMsg, setSendAlertMsg] = useState("");
+  const [sentAlerts, setSentAlerts] = useState<{ id: string; message: string; createdBy: string; createdAt: string; recipientIds: string[]; seenByIds: string[] }[]>([]);
+  const [isAlertHistoryOpen, setIsAlertHistoryOpen] = useState(false);
+
   const canAccess = !!currentUser && (isSuperAdminRole(currentUser.role) || currentUser.role === "HR");
+
+  // DEV is a hidden dev-only role (see lib/roles.ts) — never a real message
+  // recipient, so it's left out of the picker the same way /users leaves it
+  // out of visibleUsers.
+  const alertableUsers = users.filter((u) => u.role !== "DEV");
+
+  const fetchSentAlerts = () => {
+    fetch(`${BASE_PATH}/api/hr-alerts`)
+      .then((res) => res.json())
+      .then((data) => setSentAlerts(data.alerts || []))
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!canAccess) return;
+    fetchSentAlerts();
+  }, [canAccess]);
+
+  const toggleAlertRecipient = (id: string) => {
+    setAlertRecipientIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllAlertRecipients = () => {
+    setAlertRecipientIds((prev) =>
+      prev.size === alertableUsers.length ? new Set() : new Set(alertableUsers.map((u) => u.id))
+    );
+  };
+
+  const sendAlert = async () => {
+    const message = alertMessage.trim();
+    if (!message) {
+      setSendAlertMsg("กรุณาใส่ข้อความ");
+      return;
+    }
+    if (alertRecipientIds.size === 0) {
+      setSendAlertMsg("กรุณาเลือกผู้รับอย่างน้อย 1 คน");
+      return;
+    }
+    setIsSendingAlert(true);
+    setSendAlertMsg("");
+    try {
+      const res = await fetch(`${BASE_PATH}/api/hr-alerts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, recipientIds: Array.from(alertRecipientIds) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSendAlertMsg(data.error || "เกิดข้อผิดพลาด");
+        return;
+      }
+      setSendAlertMsg(`✅ ส่งแล้วถึง ${alertRecipientIds.size} คน`);
+      setAlertMessage("");
+      setAlertRecipientIds(new Set());
+      fetchSentAlerts();
+    } catch (e) {
+      setSendAlertMsg("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setIsSendingAlert(false);
+    }
+  };
 
   useEffect(() => {
     if (!canAccess) return;
@@ -218,6 +292,74 @@ export default function HrManagePage() {
       <div className={styles.header} style={{ textAlign: "left", marginBottom: "24px" }}>
         <h1 className={styles.title} style={{ fontSize: "2rem" }}>HR Manage</h1>
         <p className={styles.subtitle}>ดูสถานะออเดอร์ของแต่ละแอดมิน และออเดอร์ EMS ที่ยังไม่มีเลข Tracking</p>
+      </div>
+
+      <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "24px" }}>
+        <h3 style={{ fontSize: "16px", marginBottom: "4px" }}>📢 ส่งข้อความแจ้งเตือน</h3>
+        <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "16px" }}>
+          เขียนข้อความแล้วเลือกคนที่อยากให้ pop-up ขึ้นเตือน — จะขึ้นให้เห็นครั้งถัดไปที่คนนั้นเปิด AdminSpace
+        </p>
+        <textarea
+          value={alertMessage}
+          onChange={(e) => setAlertMessage(e.target.value)}
+          placeholder="พิมพ์ข้อความที่อยากแจ้ง..."
+          rows={3}
+          style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.1)", border: "1px solid rgba(var(--surface-rgb),0.2)", color: "var(--text-primary)", fontSize: "14px", resize: "vertical", marginBottom: "12px", fontFamily: "inherit" }}
+        />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+          <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ผู้รับ ({alertRecipientIds.size}/{alertableUsers.length})</span>
+          <button
+            type="button"
+            onClick={toggleAllAlertRecipients}
+            style={{ background: "none", border: "none", color: "var(--accent-blue)", cursor: "pointer", fontSize: "13px", padding: 0 }}
+          >
+            {alertRecipientIds.size === alertableUsers.length ? "ยกเลิกเลือกทั้งหมด" : "เลือกทั้งหมด"}
+          </button>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "16px" }}>
+          {alertableUsers.map((u) => {
+            const selected = alertRecipientIds.has(u.id);
+            return (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => toggleAlertRecipient(u.id)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                  border: selected ? "1px solid var(--accent-blue)" : "1px solid var(--border-color)",
+                  background: selected ? "rgba(var(--accent-blue-rgb),0.15)" : "rgba(var(--surface-rgb),0.04)",
+                  color: selected ? "var(--accent-blue)" : "var(--text-primary)",
+                }}
+              >
+                {selected ? "✓ " : ""}{u.nickname || u.name}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <button
+            type="button"
+            onClick={sendAlert}
+            disabled={isSendingAlert}
+            className={styles.button}
+            style={{ padding: "10px 20px", fontSize: "13px" }}
+          >
+            {isSendingAlert ? "กำลังส่ง..." : "ส่งข้อความ"}
+          </button>
+          {sendAlertMsg && (
+            <span style={{ fontSize: "13px", color: sendAlertMsg.startsWith("✅") ? "var(--accent-green)" : "#ff6b6b" }}>{sendAlertMsg}</span>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsAlertHistoryOpen(true)}
+            style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: "13px", marginLeft: "auto" }}
+          >
+            ดูประวัติที่ส่งไป ({sentAlerts.length})
+          </button>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "center", marginBottom: "24px" }}>
@@ -530,6 +672,34 @@ export default function HrManagePage() {
           </div>
         );
       })()}
+
+      {isAlertHistoryOpen && (
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "var(--modal-bg)", padding: "32px", borderRadius: "12px", width: "90%", maxWidth: "700px", maxHeight: "85vh", overflowY: "auto", border: "1px solid var(--border-color)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h2 style={{ margin: 0, color: "var(--accent-blue)", fontSize: "20px" }}>📢 ประวัติข้อความที่ส่งไป</h2>
+              <button
+                onClick={() => setIsAlertHistoryOpen(false)}
+                style={{ background: "transparent", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: "24px" }}
+              >✕</button>
+            </div>
+            {sentAlerts.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>ยังไม่เคยส่งข้อความ</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {sentAlerts.map((a) => (
+                  <div key={a.id} style={{ padding: "12px 14px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+                    <div style={{ fontSize: "14px", color: "var(--text-primary)", marginBottom: "6px", whiteSpace: "pre-wrap" }}>{a.message}</div>
+                    <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                      {new Date(a.createdAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })} · โดย {a.createdBy} · อ่านแล้ว {a.seenByIds.length}/{a.recipientIds.length} คน
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

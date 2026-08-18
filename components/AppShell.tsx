@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
+import HrAlertPopup from "./HrAlertPopup";
 import styles from "./AppShell.module.css";
 
 // The login page has no identity yet, so it renders full-page without the
@@ -48,6 +49,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <main style={{ flex: 1, overflowY: "auto", minWidth: 0 }}>{children}</main>
+      <HrAlertPopup />
     </>
   );
 }
