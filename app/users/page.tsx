@@ -561,7 +561,7 @@ export default function UsersPage() {
                     </button>
                     <button
                       onClick={cancelEdit}
-                      style={{ background: "rgba(255,255,255,0.08)", color: "#fff", border: "none", borderRadius: "6px", padding: "8px 14px", cursor: "pointer", fontSize: "13px" }}
+                      style={{ background: "rgba(var(--surface-rgb),0.08)", color: "#fff", border: "none", borderRadius: "6px", padding: "8px 14px", cursor: "pointer", fontSize: "13px" }}
                     >
                       ยกเลิก
                     </button>
@@ -590,7 +590,7 @@ export default function UsersPage() {
                   </div>
                   <button
                     onClick={() => startEdit(u)}
-                    style={{ background: "rgba(255,255,255,0.08)", color: "#fff", border: "none", borderRadius: "6px", padding: "8px 14px", cursor: "pointer", fontSize: "13px" }}
+                    style={{ background: "rgba(var(--surface-rgb),0.08)", color: "#fff", border: "none", borderRadius: "6px", padding: "8px 14px", cursor: "pointer", fontSize: "13px" }}
                   >
                     ✏️ แก้ไข
                   </button>
@@ -816,7 +816,7 @@ export default function UsersPage() {
             style={{
               padding: "8px 16px", borderRadius: "8px", fontSize: "13px", cursor: "pointer",
               border: clearMode === "range" ? "1px solid var(--accent-blue)" : "1px solid var(--border-color)",
-              background: clearMode === "range" ? "rgba(88,166,255,0.15)" : "rgba(255,255,255,0.04)",
+              background: clearMode === "range" ? "rgba(88,166,255,0.15)" : "rgba(var(--surface-rgb),0.04)",
               color: "#fff",
             }}
           >
@@ -827,7 +827,7 @@ export default function UsersPage() {
             style={{
               padding: "8px 16px", borderRadius: "8px", fontSize: "13px", cursor: "pointer",
               border: clearMode === "all" ? "1px solid #ff6b6b" : "1px solid var(--border-color)",
-              background: clearMode === "all" ? "rgba(255,107,107,0.15)" : "rgba(255,255,255,0.04)",
+              background: clearMode === "all" ? "rgba(255,107,107,0.15)" : "rgba(var(--surface-rgb),0.04)",
               color: "#fff",
             }}
           >
@@ -877,7 +877,7 @@ export default function UsersPage() {
         <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "16px" }}>
           <button
             onClick={openLog}
-            style={{ background: "rgba(255,255,255,0.08)", color: "#fff", border: "none", borderRadius: "8px", padding: "10px 18px", fontSize: "13px", cursor: "pointer" }}
+            style={{ background: "rgba(var(--surface-rgb),0.08)", color: "#fff", border: "none", borderRadius: "8px", padding: "10px 18px", fontSize: "13px", cursor: "pointer" }}
           >
             📜 ดู Log การแก้ไข/ลบออเดอร์
           </button>
@@ -887,7 +887,7 @@ export default function UsersPage() {
       {/* ===== Add user modal ===== */}
       {isAddOpen && (
         <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "#1a1a1a", padding: "32px", borderRadius: "12px", width: "90%", maxWidth: "420px", border: "1px solid var(--border-color)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+          <div style={{ background: "var(--modal-bg)", padding: "32px", borderRadius: "12px", width: "90%", maxWidth: "420px", border: "1px solid var(--border-color)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
               <h2 style={{ margin: 0, color: "var(--accent-blue)", fontSize: "20px" }}>เพิ่ม User ใหม่</h2>
               <button
@@ -969,7 +969,7 @@ export default function UsersPage() {
       {/* ===== Audit log modal ===== */}
       {isLogOpen && (
         <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "#1a1a1a", padding: "32px", borderRadius: "12px", width: "90%", maxWidth: "800px", maxHeight: "85vh", overflowY: "auto", border: "1px solid var(--border-color)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+          <div style={{ background: "var(--modal-bg)", padding: "32px", borderRadius: "12px", width: "90%", maxWidth: "800px", maxHeight: "85vh", overflowY: "auto", border: "1px solid var(--border-color)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
               <h2 style={{ margin: 0, color: "var(--accent-blue)", fontSize: "20px" }}>📜 Log การแก้ไข/ลบออเดอร์</h2>
               <button
@@ -985,7 +985,7 @@ export default function UsersPage() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 {auditLogs.map((log) => (
-                  <div key={log.id} style={{ padding: "12px 14px", background: "rgba(255,255,255,0.04)", borderRadius: "8px", borderLeft: `3px solid ${log.action === "BULK_CLEAR" ? "#ff6b6b" : "var(--accent-blue)"}` }}>
+                  <div key={log.id} style={{ padding: "12px 14px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "8px", borderLeft: `3px solid ${log.action === "BULK_CLEAR" ? "#ff6b6b" : "var(--accent-blue)"}` }}>
                     <div style={{ fontSize: "13px", marginBottom: "4px" }}>{log.summary}</div>
                     <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
                       {new Date(log.createdAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })}

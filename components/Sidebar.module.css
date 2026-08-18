@@ -1,6 +1,6 @@
 .sidebar {
   width: 260px;
-  background: rgba(13, 17, 23, 0.8);
+  background: var(--panel-bg);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -37,7 +37,7 @@
   font-size: 1.25rem;
   font-weight: 700;
   margin: 0;
-  background: linear-gradient(135deg, #fff, #c9d1d9);
+  background: linear-gradient(135deg, var(--text-heading), var(--text-primary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -62,7 +62,7 @@
 }
 
 .navItem:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--surface-rgb),0.05);
   color: var(--text-primary);
 }
 
@@ -70,7 +70,7 @@
   background: var(--panel-bg);
   color: var(--accent-color);
   border: 1px solid var(--border-color);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 12px var(--input-bg);
 }
 
 .icon {
@@ -94,7 +94,7 @@
 }
 
 .user:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--surface-rgb),0.05);
 }
 
 .avatar {
@@ -107,7 +107,7 @@
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-heading);
 }
 
 .userInfo {
@@ -118,7 +118,7 @@
 .userName {
   font-weight: 600;
   font-size: 0.9rem;
-  color: #fff;
+  color: var(--text-heading);
 }
 
 .userRole {

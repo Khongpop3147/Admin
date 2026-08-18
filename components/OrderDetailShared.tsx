@@ -15,9 +15,9 @@ export function getOrderStatusInfo(status?: string) {
     case "Completed":
       return { label: "เสร็จสิ้น", color: "#3fb950", bg: "rgba(63,185,80,0.15)" };
     case "Shipped":
-      return { label: "จัดส่งแล้ว", color: "#58a6ff", bg: "rgba(88,166,255,0.15)" };
+      return { label: "จัดส่งแล้ว", color: "var(--accent-blue)", bg: "rgba(var(--accent-blue-rgb), 0.15)" };
     case "Packed":
-      return { label: "แพ็คแล้ว", color: "#58a6ff", bg: "rgba(88,166,255,0.15)" };
+      return { label: "แพ็คแล้ว", color: "var(--accent-blue)", bg: "rgba(var(--accent-blue-rgb), 0.15)" };
     case "Pending":
       return { label: "รอดำเนินการ", color: "#ffac33", bg: "rgba(255,172,51,0.15)" };
     default:

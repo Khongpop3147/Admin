@@ -95,7 +95,7 @@ export default function LoginPage() {
             placeholder="ชื่อของคุณ"
             autoFocus
             style={{
-              background: "rgba(0,0,0,0.2)",
+              background: "var(--input-bg)",
               border: "1px solid var(--border-color)",
               borderRadius: "8px",
               padding: "12px 14px",
@@ -112,7 +112,7 @@ export default function LoginPage() {
             onChange={setPassword}
             placeholder="••••••••"
             style={{
-              background: "rgba(0,0,0,0.2)",
+              background: "var(--input-bg)",
               border: "1px solid var(--border-color)",
               borderRadius: "8px",
               padding: "12px 14px",

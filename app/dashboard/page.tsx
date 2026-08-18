@@ -205,7 +205,7 @@ function TrendBarChart({
             left: `${((hoverIdx + 0.5) / n) * 100}%`,
             top: 0,
             transform: "translate(-50%, -100%)",
-            background: "#1a1a1a",
+            background: "var(--modal-bg)",
             border: "1px solid var(--border-color)",
             borderRadius: "8px",
             padding: "8px 12px",
@@ -248,7 +248,7 @@ function TrendListChart({
         return (
           <div key={d.date} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{ width: "52px", fontSize: "12px", color: "var(--text-secondary)", flexShrink: 0 }}>{labelFn(d.date)}</div>
-            <div style={{ flex: 1, background: "rgba(255,255,255,0.05)", borderRadius: "6px", height: "18px" }}>
+            <div style={{ flex: 1, background: "rgba(var(--surface-rgb),0.05)", borderRadius: "6px", height: "18px" }}>
               <div
                 style={{
                   width: `${(value / max) * 100}%`,
@@ -288,7 +288,7 @@ function AdminBarChart({ data, color }: { data: { name: string; sales: number }[
           >
             {d.name}
           </div>
-          <div style={{ flex: 1, background: "rgba(255,255,255,0.05)", borderRadius: "6px", height: "18px" }}>
+          <div style={{ flex: 1, background: "rgba(var(--surface-rgb),0.05)", borderRadius: "6px", height: "18px" }}>
             <div
               style={{
                 width: `${(d.sales / max) * 100}%`,
@@ -705,7 +705,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))}
                 aria-label="เดือนก่อนหน้า"
-                style={{ background: "rgba(255,255,255,0.08)", color: "var(--text-secondary)", border: "none", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", cursor: "pointer" }}
+                style={{ background: "rgba(var(--surface-rgb),0.08)", color: "var(--text-secondary)", border: "none", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", cursor: "pointer" }}
               >
                 ◀
               </button>
@@ -720,7 +720,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))}
                 aria-label="เดือนถัดไป"
-                style={{ background: "rgba(255,255,255,0.08)", color: "var(--text-secondary)", border: "none", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", cursor: "pointer" }}
+                style={{ background: "rgba(var(--surface-rgb),0.08)", color: "var(--text-secondary)", border: "none", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", cursor: "pointer" }}
               >
                 ▶
               </button>
@@ -734,7 +734,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setSelectedYear(selectedYear - 1)}
                 aria-label="ปีก่อนหน้า"
-                style={{ background: "rgba(255,255,255,0.08)", color: "var(--text-secondary)", border: "none", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", cursor: "pointer" }}
+                style={{ background: "rgba(var(--surface-rgb),0.08)", color: "var(--text-secondary)", border: "none", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", cursor: "pointer" }}
               >
                 ◀
               </button>
@@ -749,7 +749,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setSelectedYear(selectedYear + 1)}
                 aria-label="ปีถัดไป"
-                style={{ background: "rgba(255,255,255,0.08)", color: "var(--text-secondary)", border: "none", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", cursor: "pointer" }}
+                style={{ background: "rgba(var(--surface-rgb),0.08)", color: "var(--text-secondary)", border: "none", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", cursor: "pointer" }}
               >
                 ▶
               </button>
@@ -793,7 +793,7 @@ export default function DashboardPage() {
               type="button"
               onClick={() => { setStatsPeriod("day"); setRangeFrom(todayStr()); setRangeTo(todayStr()); }}
               style={{
-                background: statsPeriod === "day" && rangeFrom === todayStr() && rangeTo === todayStr() ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                background: statsPeriod === "day" && rangeFrom === todayStr() && rangeTo === todayStr() ? "var(--accent-blue)" : "rgba(var(--surface-rgb),0.08)",
                 color: statsPeriod === "day" && rangeFrom === todayStr() && rangeTo === todayStr() ? "#fff" : "var(--text-secondary)",
                 border: "none",
                 borderRadius: "8px",
@@ -809,7 +809,7 @@ export default function DashboardPage() {
               type="button"
               onClick={() => { setStatsPeriod("day"); setRangeFrom(addDays(todayStr(), -1)); setRangeTo(addDays(todayStr(), -1)); }}
               style={{
-                background: statsPeriod === "day" && rangeFrom === addDays(todayStr(), -1) && rangeTo === addDays(todayStr(), -1) ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                background: statsPeriod === "day" && rangeFrom === addDays(todayStr(), -1) && rangeTo === addDays(todayStr(), -1) ? "var(--accent-blue)" : "rgba(var(--surface-rgb),0.08)",
                 color: statsPeriod === "day" && rangeFrom === addDays(todayStr(), -1) && rangeTo === addDays(todayStr(), -1) ? "#fff" : "var(--text-secondary)",
                 border: "none",
                 borderRadius: "8px",
@@ -830,7 +830,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setStatsPeriod(opt.key)}
                 style={{
-                  background: statsPeriod === opt.key ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                  background: statsPeriod === opt.key ? "var(--accent-blue)" : "rgba(var(--surface-rgb),0.08)",
                   color: statsPeriod === opt.key ? "#fff" : "var(--text-secondary)",
                   border: "none",
                   borderRadius: "8px",
@@ -885,7 +885,7 @@ export default function DashboardPage() {
             </div>
           )}
           <div className={styles.statGrid} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px", marginBottom: "24px" }}>
-            <StatCard label="จำนวนออเดอร์" value={stats.orderCount.toLocaleString("th-TH")} color="#58a6ff" />
+            <StatCard label="จำนวนออเดอร์" value={stats.orderCount.toLocaleString("th-TH")} color="var(--accent-blue)" />
             <StatCard label="น้ำหนักหมูที่ขาย" value={`${stats.totalWeight.toFixed(2)} กก.`} color="#3fb950" />
             <StatCard label="ยอดขายสินค้า" value={`฿${formatMoney(stats.totalSales)}`} color="#ffac33" />
             <StatCard label="ยอดรับจริงรวม" value={`฿${formatMoney(stats.totalReceived)}`} color="#3fb950" />
@@ -894,9 +894,9 @@ export default function DashboardPage() {
           {stillWaitingCount > 0 && (
             <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px", border: "1px dashed rgba(88,166,255,0.4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
               <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
-                🐷 <strong style={{ color: "#58a6ff" }}>ลูกค้าที่ยังรอหมู</strong> — ยังไม่ได้ส่งของ ณ ตอนนี้ (ไม่ขึ้นกับช่วงเวลาที่เลือกด้านบน)
+                🐷 <strong style={{ color: "var(--accent-blue)" }}>ลูกค้าที่ยังรอหมู</strong> — ยังไม่ได้ส่งของ ณ ตอนนี้ (ไม่ขึ้นกับช่วงเวลาที่เลือกด้านบน)
               </div>
-              <div style={{ fontSize: "20px", fontWeight: "bold", color: "#58a6ff" }}>{stillWaitingCount} ออเดอร์ · {stillWaitingWeightKg.toFixed(2)} กก.</div>
+              <div style={{ fontSize: "20px", fontWeight: "bold", color: "var(--accent-blue)" }}>{stillWaitingCount} ออเดอร์ · {stillWaitingWeightKg.toFixed(2)} กก.</div>
             </div>
           )}
 
@@ -923,7 +923,7 @@ export default function DashboardPage() {
             <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
               <StatusPill label="รอดำเนินการ" count={stats.statusCounts.Pending} color="#ffac33" />
               <StatusPill label="แพ็คแล้ว" count={stats.statusCounts.Packed} color="#4facfe" />
-              <StatusPill label="จัดส่งแล้ว" count={stats.statusCounts.Shipped} color="#58a6ff" />
+              <StatusPill label="จัดส่งแล้ว" count={stats.statusCounts.Shipped} color="var(--accent-blue)" />
               <StatusPill label="เสร็จสิ้น" count={stats.statusCounts.Completed} color="#3fb950" />
             </div>
           </div>
@@ -939,7 +939,7 @@ export default function DashboardPage() {
                     type="button"
                     onClick={() => setTrendMetric("sales")}
                     style={{
-                      background: trendMetric === "sales" ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                      background: trendMetric === "sales" ? "var(--accent-blue)" : "rgba(var(--surface-rgb),0.08)",
                       color: trendMetric === "sales" ? "#fff" : "var(--text-secondary)",
                       border: "none",
                       borderRadius: "999px",
@@ -955,7 +955,7 @@ export default function DashboardPage() {
                     type="button"
                     onClick={() => setTrendMetric("orders")}
                     style={{
-                      background: trendMetric === "orders" ? "var(--accent-blue)" : "rgba(255,255,255,0.08)",
+                      background: trendMetric === "orders" ? "var(--accent-blue)" : "rgba(var(--surface-rgb),0.08)",
                       color: trendMetric === "orders" ? "#fff" : "var(--text-secondary)",
                       border: "none",
                       borderRadius: "999px",
@@ -1009,7 +1009,7 @@ export default function DashboardPage() {
                       </thead>
                       <tbody>
                         {perAdminBreakdown.map((a) => (
-                          <tr key={a.name} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <tr key={a.name} style={{ borderBottom: "1px solid rgba(var(--surface-rgb),0.05)" }}>
                             <td style={{ padding: "10px 12px", fontWeight: "bold" }}>{a.name}</td>
                             <td style={{ padding: "10px 12px" }}>{a.orderCount}</td>
                             <td style={{ padding: "10px 12px" }}>{a.weight.toFixed(2)}</td>
@@ -1035,7 +1035,7 @@ export default function DashboardPage() {
                           <div>{a.orderCount} ออเดอร์</div>
                           <div>{a.weight.toFixed(2)} กก.</div>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", borderTop: "1px solid rgba(var(--surface-rgb),0.06)", paddingTop: "8px" }}>
                           <div style={{ color: a.returnedCount > 0 ? "#ff6b6b" : "var(--text-secondary)" }}>
                             ตีกลับ: {a.returnedCount > 0 ? `${a.returnedCount} ออเดอร์` : "-"}
                           </div>
@@ -1065,11 +1065,11 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", borderTop: "1px solid var(--border-color)", paddingTop: "16px" }}>
-                <div style={{ flex: "1 1 160px", background: "rgba(255,255,255,0.04)", borderRadius: "10px", padding: "12px 16px" }}>
+                <div style={{ flex: "1 1 160px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 16px" }}>
                   <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "4px" }}>👤 ในมือแอดมิน</div>
                   <div style={{ fontSize: "16px", fontWeight: "bold" }}>{companyInventoryTotals.adminPieces} ชิ้น · {companyInventoryTotals.adminWeight.toFixed(2)} กก.</div>
                 </div>
-                <div style={{ flex: "1 1 160px", background: "rgba(255,255,255,0.04)", borderRadius: "10px", padding: "12px 16px" }}>
+                <div style={{ flex: "1 1 160px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 16px" }}>
                   <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "4px" }}>🏭 คลังกลาง</div>
                   <div style={{ fontSize: "16px", fontWeight: "bold" }}>{companyInventoryTotals.centralPieces} ชิ้น · {companyInventoryTotals.centralWeight.toFixed(2)} กก.</div>
                 </div>

@@ -903,7 +903,7 @@ export default function RacksPage() {
             type="button"
             onClick={() => setSelectedProduct(p.code)}
             style={{
-              background: selectedProduct === p.code ? 'var(--accent-blue)' : 'rgba(255,255,255,0.06)',
+              background: selectedProduct === p.code ? 'var(--accent-blue)' : 'rgba(var(--surface-rgb),0.06)',
               color: selectedProduct === p.code ? '#fff' : 'var(--text-secondary)',
               border: selectedProduct === p.code ? 'none' : '1px solid var(--border-color)',
               padding: '10px 20px',
@@ -938,7 +938,7 @@ export default function RacksPage() {
           {inventorySummary.perAdmin.map((a) => {
             const shortage = shortageByAdmin.get(a.realName) || 0;
             return (
-              <div key={a.name} style={{ flex: '1 1 160px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px 16px' }}>
+              <div key={a.name} style={{ flex: '1 1 160px', background: 'rgba(var(--surface-rgb),0.04)', borderRadius: '10px', padding: '12px 16px' }}>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>👤 {a.name}</div>
                 <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{a.pieces} ชิ้น · {a.weight.toFixed(2)} กก.</div>
                 {shortage > 0 && (
@@ -972,7 +972,7 @@ export default function RacksPage() {
           icon="📋"
           title="รายการที่มอบหมายแล้ว"
           subtitle="ดู แก้ไข หรือเพิกถอนชิ้นของแต่ละแอดมิน"
-          accent="rgba(255,255,255,0.12)"
+          accent="rgba(var(--surface-rgb),0.12)"
           onClick={() => setIsAssignmentsModalOpen(true)}
         />
         <ActionCard
@@ -987,7 +987,7 @@ export default function RacksPage() {
       {/* Batch Assign Modal */}
       {isBatchModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className={styles.rackModal} style={{ background: 'var(--modal-bg)', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: 'var(--accent-blue)', fontSize: '24px' }}>เพิ่มชิ้นหมูใหม่</h2>
               <button
@@ -996,10 +996,10 @@ export default function RacksPage() {
               >✕</button>
             </div>
 
-            <div style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', marginBottom: '20px' }}>
+            <div style={{ padding: '16px', background: 'rgba(var(--surface-rgb),0.05)', borderRadius: '8px', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>สร้างลำดับชิ้นหมูจากไฟล์ Excel</h3>
               {lastPiece && (
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', padding: '8px 12px' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px', background: 'rgba(var(--surface-rgb),0.03)', borderRadius: '6px', padding: '8px 12px' }}>
                   📍 ถาดสุดท้ายในระบบตอนนี้: <strong style={{ color: 'var(--text-primary)' }}>{getBaseRackKey(lastPiece.rackNo, selectedProduct)} ชิ้นที่ {lastPiece.piece}</strong> ({lastPiece.owner}) — ระบบเริ่มให้ที่ {getBaseRackKey(formatRackCode({ prefix, num: startNum, piece: 1 }, selectedProduct), selectedProduct)} ต่ออัตโนมัติ
                 </div>
               )}
@@ -1097,7 +1097,7 @@ export default function RacksPage() {
                             <span style={{ position: 'absolute', right: '12px', top: '10px', color: '#666', fontSize: '12px' }}>กก.</span>
                           </div>
                           <div className={styles.rackItemActions} style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => handleInsertGap(rack.originalIdx)} title="แทรกช่องว่างตรงนี้" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>+</button>
+                            <button onClick={() => handleInsertGap(rack.originalIdx)} title="แทรกช่องว่างตรงนี้" style={{ background: 'rgba(var(--surface-rgb),0.1)', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>+</button>
                             <button onClick={() => handleRemoveDraft(rack.originalIdx)} title="ลบรายการนี้" style={{ background: 'rgba(255,0,0,0.2)', border: 'none', color: '#ff6b6b', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>✕</button>
                           </div>
                         </div>
@@ -1133,7 +1133,7 @@ export default function RacksPage() {
                         onClick={handleAssignBatch}
                         className={styles.button}
                         disabled={isLoading || !selectedUserId}
-                        style={{ width: '100%', background: 'var(--accent-blue)', color: 'white' }}
+                        style={{ width: '100%', background: 'var(--accent-blue)', color: 'var(--text-primary)' }}
                       >
                         {isLoading ? "กำลังมอบหมาย..." : `มอบให้ ${selectedUserId === currentUser.id ? "คลังกลาง" : (displayName(selectedUser) || "แอดมิน")}`}
                       </button>
@@ -1201,7 +1201,7 @@ export default function RacksPage() {
                           <button
                             onClick={() => handleBulkShift('down')}
                             disabled={isShifting || !bulkShiftTarget}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '10px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                            style={{ background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: '#fff', padding: '10px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
                             title="เลื่อนลง (ใช้เมื่อของหายจริงจากถาด)"
                           >
                             + เลื่อนลง
@@ -1275,7 +1275,7 @@ export default function RacksPage() {
       {/* Distribution Modal */}
       {isDistributeModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className={styles.rackModal} style={{ background: 'var(--modal-bg)', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#ffac33', fontSize: '24px' }}>แจกจ่ายจากคลังกลาง</h2>
               <button
@@ -1326,7 +1326,7 @@ export default function RacksPage() {
               <button
                 onClick={handleSelectDistributeRange}
                 disabled={!distributeStartRack || !distributeEndRack}
-                style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white', cursor: 'pointer', padding: '12px 24px', borderRadius: '8px', fontSize: '14px', height: '100%', fontWeight: 'bold' }}
+                style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', cursor: 'pointer', padding: '12px 24px', borderRadius: '8px', fontSize: '14px', height: '100%', fontWeight: 'bold' }}
               >
                 เลือกช่วง
               </button>
@@ -1347,7 +1347,7 @@ export default function RacksPage() {
               ))}
             </datalist>
 
-            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
+            <div style={{ background: 'rgba(var(--surface-rgb),0.05)', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>เลือกถาดอัตโนมัติตามลำดับ</h3>
               <div className={styles.rackToolbarRow} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <input
@@ -1445,7 +1445,7 @@ export default function RacksPage() {
                       <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '15px' }}>⚠️ ขาดหาย: {rack.rackNo}</span>
                     </div>
                   ) : (
-                  <label key={rack.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px', opacity: rack.isUsedUp ? 0.5 : 1, cursor: 'pointer', border: selectedCentralRacks.has(rack.id) ? '1px solid #ffac33' : '1px solid transparent' }}>
+                  <label key={rack.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(var(--surface-rgb),0.02)', borderRadius: '6px', opacity: rack.isUsedUp ? 0.5 : 1, cursor: 'pointer', border: selectedCentralRacks.has(rack.id) ? '1px solid #ffac33' : '1px solid transparent' }}>
                     <input
                       type="checkbox"
                       checked={selectedCentralRacks.has(rack.id)}
@@ -1511,7 +1511,7 @@ export default function RacksPage() {
       {/* Current Assignments Modal */}
       {isAssignmentsModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '1000px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className={styles.rackModal} style={{ background: 'var(--modal-bg)', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '1000px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>รายการที่มอบหมายไปแล้ว</h2>
               <button
@@ -1563,7 +1563,7 @@ export default function RacksPage() {
                 />
                 <button
                   onClick={handleAutoSelectMoveRacks}
-                  style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 14px', cursor: 'pointer', fontSize: '13px' }}
+                  style={{ background: 'rgba(var(--surface-rgb),0.1)', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 14px', cursor: 'pointer', fontSize: '13px' }}
                 >
                   เลือก rack น้อยไปมาก
                 </button>
@@ -1597,14 +1597,14 @@ export default function RacksPage() {
               </div>
             )}
 
-            <div className={styles.rackScrollInner} style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignContent: 'start', background: 'rgba(0,0,0,0.2)' }}>
+            <div className={styles.rackScrollInner} style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignContent: 'start', background: 'var(--input-bg)' }}>
               {!users.find(u => u.id === selectedUserId) && selectedUserId !== currentUser.id ? (
                 <div className={styles.emptyState} style={{ gridColumn: '1 / -1', padding: '40px' }}>เลือกแอดมินเพื่อดูชิ้นหมูของเขา</div>
               ) : currentAdminPiecesWithGaps.length === 0 ? (
                 <div className={styles.emptyState} style={{ gridColumn: '1 / -1', padding: '40px' }}>ยังไม่มีชิ้นหมูที่มอบหมาย</div>
               ) : (
                 currentAdminPiecesWithGaps.map((rack: any) => (
-                    <div key={rack.id} style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: rack.isMissingPlaceholder ? 'rgba(255,107,107,0.1)' : 'rgba(255,255,255,0.03)', borderRadius: '8px', border: rack.isMissingPlaceholder ? '1px dashed #ff6b6b' : '1px solid rgba(255,255,255,0.1)', opacity: rack.isUsedUp ? 0.5 : 1 }}>
+                    <div key={rack.id} style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: rack.isMissingPlaceholder ? 'rgba(255,107,107,0.1)' : 'rgba(var(--surface-rgb),0.03)', borderRadius: '8px', border: rack.isMissingPlaceholder ? '1px dashed #ff6b6b' : '1px solid rgba(var(--surface-rgb),0.1)', opacity: rack.isUsedUp ? 0.5 : 1 }}>
                       {rack.isMissingPlaceholder ? (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                           <span style={{ color: '#ff6b6b', fontWeight: 'bold', fontSize: '16px' }}>⚠️ ขาดหาย: {rack.rackNo}</span>
@@ -1638,7 +1638,7 @@ export default function RacksPage() {
                             </button>
                             <button
                               onClick={() => setEditingRackId(null)}
-                              style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '8px', borderRadius: '4px', cursor: 'pointer', flex: 1 }}
+                              style={{ background: 'rgba(var(--surface-rgb),0.1)', border: 'none', color: '#fff', padding: '8px', borderRadius: '4px', cursor: 'pointer', flex: 1 }}
                             >
                               ยกเลิก
                             </button>
@@ -1703,7 +1703,7 @@ export default function RacksPage() {
       {/* Deleted Log Modal */}
       {isDeletedLogModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className={styles.rackModal} style={{ background: '#1a1a1a', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className={styles.rackModal} style={{ background: 'var(--modal-bg)', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '900px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, color: '#ffac33', fontSize: '24px' }}>ประวัติชิ้นหมูที่ถูกลบ / ขาดหาย</h2>
               <button
@@ -1718,7 +1718,7 @@ export default function RacksPage() {
                 <div className={styles.desktopOnly} style={{ overflow: 'auto', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                     <thead>
-                      <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                      <tr style={{ background: 'rgba(var(--surface-rgb),0.05)', textAlign: 'left' }}>
                         <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>วันที่ลบ</th>
                         <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>รหัสชิ้น</th>
                         <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>น้ำหนักก่อนลบ</th>

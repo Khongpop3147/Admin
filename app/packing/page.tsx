@@ -963,7 +963,7 @@ export default function PackingPage() {
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '14px' }}
+              style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: 'var(--text-primary)', fontSize: '14px' }}
             />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -971,7 +971,7 @@ export default function PackingPage() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '14px' }}
+              style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: 'var(--text-primary)', fontSize: '14px' }}
             >
               <option value="All" style={{ color: '#000' }}>ทั้งหมด</option>
               <option value="Pending" style={{ color: '#000' }}>รอดำเนินการ</option>
@@ -984,7 +984,7 @@ export default function PackingPage() {
             <select
               value={filterShipping}
               onChange={(e) => setFilterShipping(e.target.value)}
-              style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '14px' }}
+              style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: 'var(--text-primary)', fontSize: '14px' }}
             >
               <option value="All" style={{ color: '#000' }}>ทั้งหมด</option>
               <option value="EMS" style={{ color: '#000' }}>EMS</option>
@@ -997,7 +997,7 @@ export default function PackingPage() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as "date" | "admin")}
-              style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '14px' }}
+              style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: 'var(--text-primary)', fontSize: '14px' }}
             >
               <option value="date" style={{ color: '#000' }}>วันที่ล่าสุด</option>
               <option value="admin" style={{ color: '#000' }}>แอดมิน</option>
@@ -1010,7 +1010,7 @@ export default function PackingPage() {
           <button
             onClick={handlePreview}
             className={styles.toolbarBtn}
-            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff' }}
+            style={{ background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: '#fff' }}
           >
             👀 ดูตัวอย่างไฟล์
           </button>
@@ -1133,9 +1133,9 @@ export default function PackingPage() {
       {isLoading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>กำลังโหลด...</div>
       ) : (
-        <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--input-bg)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
+            <thead style={{ background: 'rgba(var(--surface-rgb),0.05)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
               <tr>
                 <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>ลูกค้า</th>
                 <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>รายการสินค้า</th>
@@ -1234,14 +1234,14 @@ export default function PackingPage() {
 
                         <button
                           onClick={() => openBoxPicker(order)}
-                          style={{ marginTop: '6px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', cursor: 'pointer', padding: '4px 10px', borderRadius: '4px', fontSize: '12px' }}
+                          style={{ marginTop: '6px', background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: '#fff', cursor: 'pointer', padding: '4px 10px', borderRadius: '4px', fontSize: '12px' }}
                         >
                           + เพิ่มกล่อง
                         </button>
                       </div>
                     )}
-                    <div style={{ fontSize: '12px', marginTop: '6px', color: '#a0a0a0', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
-                      หมู: ฿{formatMoney(order.price)} | ส่ง: ฿{formatMoney(order.additionalShippingCost)} | COD: {order.codAmount > 0 ? `฿${formatMoney(order.codAmount)}` : '-'} | <strong style={{ color: 'white' }}>รวม: ฿{
+                    <div style={{ fontSize: '12px', marginTop: '6px', color: '#a0a0a0', background: 'rgba(var(--surface-rgb),0.05)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
+                      หมู: ฿{formatMoney(order.price)} | ส่ง: ฿{formatMoney(order.additionalShippingCost)} | COD: {order.codAmount > 0 ? `฿${formatMoney(order.codAmount)}` : '-'} | <strong style={{ color: 'var(--text-primary)' }}>รวม: ฿{
                         (() => {
                           const p = Number(order.price) || 0;
                           const s = Number(order.additionalShippingCost) || 0;
@@ -1302,7 +1302,7 @@ export default function PackingPage() {
                             defaultValue={order.trackingNumber || ""}
                             onBlur={(e) => updateTracking(order.id, e.target.value)}
                             placeholder="เลขพัสดุ..."
-                            style={{ padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', color: 'white', width: '120px' }}
+                            style={{ padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)', width: '120px' }}
                           />
                         );
                       }
@@ -1331,7 +1331,7 @@ export default function PackingPage() {
                               defaultValue={existingParts[i] || ''}
                               onBlur={saveTrackingGroup}
                               placeholder={`เลขพัสดุ กล่อง ${i + 1}`}
-                              style={{ padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', color: 'white', width: '120px' }}
+                              style={{ padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)', width: '120px' }}
                             />
                           ))}
                         </div>
@@ -1398,10 +1398,10 @@ export default function PackingPage() {
       {/* Preview Modal */}
       {showPreview && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div style={{ background: '#1a1a1a', width: '100%', maxWidth: '1400px', maxHeight: '90vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid #333' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--modal-bg)', width: '100%', maxWidth: '1400px', maxHeight: '90vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border-color)' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>ตัวอย่างข้อมูล Excel</h2>
-              <button onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+              <button onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
             
             <div style={{ padding: '24px', overflow: 'auto', flex: 1 }}>
@@ -1436,34 +1436,34 @@ export default function PackingPage() {
       {/* Edit Order Modal */}
       {editingOrder && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div style={{ background: '#1a1a1a', width: '100%', maxWidth: '600px', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid #333' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--modal-bg)', width: '100%', maxWidth: '600px', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border-color)' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>แก้ไขรายละเอียดออเดอร์</h2>
-              <button onClick={() => setEditingOrder(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+              <button onClick={() => setEditingOrder(null)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
 
             <form onSubmit={handleSaveEdit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>ชื่อลูกค้า</label>
-                <input type="text" value={editingOrder.customerName} onChange={e => setEditingOrder({...editingOrder, customerName: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} required />
+                <input type="text" value={editingOrder.customerName} onChange={e => setEditingOrder({...editingOrder, customerName: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} required />
               </div>
 
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>ที่อยู่ลูกค้า</label>
-                <textarea value={editingOrder.customerAddress} onChange={e => setEditingOrder({...editingOrder, customerAddress: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white', minHeight: '80px' }} required />
+                <textarea value={editingOrder.customerAddress} onChange={e => setEditingOrder({...editingOrder, customerAddress: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)', minHeight: '80px' }} required />
               </div>
 
               <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>เบอร์โทร</label>
-                  <input type="text" value={editingOrder.customerPhone || ''} onChange={e => setEditingOrder({...editingOrder, customerPhone: e.target.value})} maxLength={10} placeholder="เช่น 0812345678" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  <input type="text" value={editingOrder.customerPhone || ''} onChange={e => setEditingOrder({...editingOrder, customerPhone: e.target.value})} maxLength={10} placeholder="เช่น 0812345678" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                   {!isValidPhone(editingOrder.customerPhone) && (
                     <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ เบอร์โทรต้องมี 10 หลัก</div>
                   )}
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>รหัสไปรษณีย์</label>
-                  <input type="text" value={editingOrder.customerZip || ''} onChange={e => setEditingOrder({...editingOrder, customerZip: e.target.value})} maxLength={5} placeholder="เช่น 10110" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  <input type="text" value={editingOrder.customerZip || ''} onChange={e => setEditingOrder({...editingOrder, customerZip: e.target.value})} maxLength={5} placeholder="เช่น 10110" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                   {!isValidZip(editingOrder.customerZip) && (
                     <div style={{ color: '#ff6b6b', fontSize: '12px', marginTop: '4px' }}>⚠️ รหัสไปรษณีย์ต้องมี 5 หลัก</div>
                   )}
@@ -1473,27 +1473,27 @@ export default function PackingPage() {
               <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>จำนวนชิ้นหมู</label>
-                  <input type="text" value={editingOrder.crispyPorkPiece || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkPiece: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  <input type="text" value={editingOrder.crispyPorkPiece || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkPiece: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>น้ำหนักหมู (กก.)</label>
-                  <input type="text" value={editingOrder.crispyPorkWeight || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkWeight: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  <input type="text" value={editingOrder.crispyPorkWeight || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkWeight: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                 </div>
               </div>
 
               <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>ยอดเก็บปลายทาง (฿)</label>
-                  <input type="number" value={editingOrder.codAmount || 0} onChange={e => setEditingOrder({...editingOrder, codAmount: Number(e.target.value)})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  <input type="number" value={editingOrder.codAmount || 0} onChange={e => setEditingOrder({...editingOrder, codAmount: Number(e.target.value)})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>หมายเหตุแอดมิน</label>
-                  <input type="text" value={editingOrder.adminNote || ''} onChange={e => setEditingOrder({...editingOrder, adminNote: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  <input type="text" value={editingOrder.adminNote || ''} onChange={e => setEditingOrder({...editingOrder, adminNote: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                 </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
-                <button type="button" onClick={() => setEditingOrder(null)} style={{ padding: '12px 24px', borderRadius: '8px', border: '1px solid #333', background: 'transparent', color: 'white', cursor: 'pointer' }}>ยกเลิก</button>
+                <button type="button" onClick={() => setEditingOrder(null)} style={{ padding: '12px 24px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}>ยกเลิก</button>
                 <button type="submit" style={{ padding: '12px 24px', borderRadius: '8px', border: 'none', background: 'var(--accent-green)', color: 'black', fontWeight: 'bold', cursor: 'pointer' }}>บันทึกการเปลี่ยนแปลง</button>
               </div>
             </form>
@@ -1504,10 +1504,10 @@ export default function PackingPage() {
       {/* View Racks Modal */}
       {viewingRacks && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div style={{ background: '#1a1a1a', width: '100%', maxWidth: '400px', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid #333' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--modal-bg)', width: '100%', maxWidth: '400px', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border-color)' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>ถาดที่ใช้</h2>
-              <button onClick={() => setViewingRacks(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+              <button onClick={() => setViewingRacks(null)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
 
             <div style={{ padding: '24px' }}>
@@ -1532,7 +1532,7 @@ export default function PackingPage() {
                   return (
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {finalRacks.map((r: any, idx: number) => (
-                        <li key={idx} style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <li key={idx} style={{ background: 'rgba(var(--surface-rgb),0.05)', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{r.rackNo}</span>
                           <span style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>{r.weight}</span>
                         </li>
@@ -1545,8 +1545,8 @@ export default function PackingPage() {
               })()}
             </div>
 
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #333', textAlign: 'right' }}>
-              <button onClick={() => setViewingRacks(null)} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}>ปิด</button>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', textAlign: 'right' }}>
+              <button onClick={() => setViewingRacks(null)} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'rgba(var(--surface-rgb),0.1)', color: 'var(--text-primary)', cursor: 'pointer' }}>ปิด</button>
             </div>
           </div>
         </div>
@@ -1562,10 +1562,10 @@ export default function PackingPage() {
         const pickedWeight = getBoxWeight(pickerOrder, pickedIndices);
         return (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-            <div style={{ background: '#1a1a1a', width: '100%', maxWidth: '420px', maxHeight: '80vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid #333' }}>
-              <div style={{ padding: '16px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ background: 'var(--modal-bg)', width: '100%', maxWidth: '420px', maxHeight: '80vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border-color)' }}>
+              <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>เลือกชิ้นหมูใส่กล่องใหม่</h2>
-                <button onClick={() => { setBoxPickerForId(null); setPickedIndices([]); }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+                <button onClick={() => { setBoxPickerForId(null); setPickedIndices([]); }} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
               </div>
 
               <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1 }}>
@@ -1581,7 +1581,7 @@ export default function PackingPage() {
                       const piece = pieces[i];
                       const checked = pickedIndices.includes(i);
                       return (
-                        <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: checked ? 'rgba(63,185,80,0.15)' : 'rgba(255,255,255,0.05)', border: checked ? '1px solid var(--accent-green)' : '1px solid transparent', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer' }}>
+                        <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: checked ? 'rgba(63,185,80,0.15)' : 'rgba(var(--surface-rgb),0.05)', border: checked ? '1px solid var(--accent-green)' : '1px solid transparent', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer' }}>
                           <input type="checkbox" checked={checked} onChange={() => togglePickedIndex(i)} />
                           <span style={{ fontWeight: 'bold' }}>{piece?.rackNo || 'ไม่ทราบถาด'}</span>
                           <span style={{ marginLeft: 'auto', color: 'var(--accent-green)' }}>{Number(piece?.weight || 0).toFixed(2)} กก.</span>
@@ -1592,12 +1592,12 @@ export default function PackingPage() {
                 )}
               </div>
 
-              <div style={{ padding: '16px 24px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+              <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                 <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                   เลือกแล้ว {pickedIndices.length} ชิ้น ({pickedWeight} กก.)
                 </span>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={() => { setBoxPickerForId(null); setPickedIndices([]); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #333', background: 'transparent', color: 'white', cursor: 'pointer' }}>ยกเลิก</button>
+                  <button onClick={() => { setBoxPickerForId(null); setPickedIndices([]); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}>ยกเลิก</button>
                   <button
                     onClick={() => confirmBoxPicker(pickerOrder)}
                     disabled={pickedIndices.length === 0}
@@ -1626,7 +1626,7 @@ export default function PackingPage() {
               </button>
               <button
                 onClick={() => confirmDeleteOrder(deleteChoiceOrder, "mistake")}
-                style={{ padding: "10px 18px", borderRadius: "8px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)", color: "var(--text-secondary)", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
+                style={{ padding: "10px 18px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.08)", border: "1px solid rgba(var(--surface-rgb),0.2)", color: "var(--text-secondary)", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
               >
                 ✏️ กรอกข้อมูลผิด
               </button>

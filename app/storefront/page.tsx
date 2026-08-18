@@ -250,7 +250,7 @@ export default function StorefrontPage() {
             type="button"
             onClick={() => handleProductChange(p.code)}
             style={{
-              background: selectedProduct === p.code ? "var(--accent-blue)" : "rgba(255,255,255,0.06)",
+              background: selectedProduct === p.code ? "var(--accent-blue)" : "rgba(var(--surface-rgb),0.06)",
               color: selectedProduct === p.code ? "#fff" : "var(--text-secondary)",
               border: selectedProduct === p.code ? "none" : "1px solid var(--border-color)",
               padding: "10px 20px",
@@ -274,7 +274,7 @@ export default function StorefrontPage() {
             🏪 ลูกค้าหน้าร้าน (walk-in ไม่ต้องระบุชื่อ)
           </div>
 
-          <div style={{ background: "rgba(255,255,255,0.05)", padding: "16px", borderRadius: "8px", marginBottom: "16px" }}>
+          <div style={{ background: "rgba(var(--surface-rgb),0.05)", padding: "16px", borderRadius: "8px", marginBottom: "16px" }}>
             <label className={styles.label} style={{ display: "block", marginBottom: "8px" }}>หมูที่ขาย</label>
             {selected.length === 0 ? (
               <p style={{ fontSize: "13px", color: "#ff6b6b", margin: 0 }}>⚠️ ยังไม่ได้เลือกชิ้นที่ขาย — เลือกจากรายการ "{usingSharedInventory ? "คลังหมูหน้าร้าน" : "คลังหมูของฉัน"}" ด้านขวา</p>
@@ -327,7 +327,7 @@ export default function StorefrontPage() {
               🖨️ ปริ้นหมูคงเหลือ
             </button>
           </div>
-          <div style={{ marginBottom: "16px", padding: "14px", background: "rgba(255,255,255,0.05)", borderRadius: "8px", display: "flex", justifyContent: "space-around", textAlign: "center" }}>
+          <div style={{ marginBottom: "16px", padding: "14px", background: "rgba(var(--surface-rgb),0.05)", borderRadius: "8px", display: "flex", justifyContent: "space-around", textAlign: "center" }}>
             <div>
               <div style={{ fontSize: "24px", fontWeight: "bold", color: "var(--accent-blue)" }}>{productPieces.length}</div>
               <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>ชิ้นคงเหลือ</div>
@@ -363,8 +363,8 @@ export default function StorefrontPage() {
                       style={{
                         display: "flex", justifyContent: "space-between", alignItems: "center",
                         padding: "13px 14px", borderRadius: "8px", flexShrink: 0, cursor: "pointer",
-                        background: isAdded ? "rgba(88,166,255,0.16)" : isClose ? "rgba(63,185,80,0.12)" : "rgba(255,255,255,0.03)",
-                        border: `1px solid ${isAdded ? "var(--accent-blue)" : isClose ? "rgba(63,185,80,0.5)" : "rgba(255,255,255,0.08)"}`,
+                        background: isAdded ? "rgba(88,166,255,0.16)" : isClose ? "rgba(63,185,80,0.12)" : "rgba(var(--surface-rgb),0.03)",
+                        border: `1px solid ${isAdded ? "var(--accent-blue)" : isClose ? "rgba(63,185,80,0.5)" : "rgba(var(--surface-rgb),0.08)"}`,
                       }}
                     >
                       <span style={{ fontSize: "14px", color: "#ddd" }}>
@@ -391,7 +391,7 @@ export default function StorefrontPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontSize: '14px' }}
+            style={{ padding: '10px 16px', borderRadius: '8px', background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: 'var(--text-primary)', fontSize: '14px' }}
           >
             <option value="All" style={{ color: '#000' }}>ทั้งหมด</option>
             <option value="Pending" style={{ color: '#000' }}>รอดำเนินการ</option>
@@ -440,7 +440,7 @@ export default function StorefrontPage() {
 
           if (filteredOrders.length === 0) {
             return (
-              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <div style={{ background: 'var(--input-bg)', borderRadius: '8px', border: '1px solid var(--border-color)', padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                 ไม่พบออเดอร์
               </div>
             );
@@ -449,9 +449,9 @@ export default function StorefrontPage() {
           return (
             <>
               {/* Desktop: dense table */}
-              <div className={styles.desktopOnly} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden', overflowX: 'auto' }}>
+              <div className={styles.desktopOnly} style={{ background: 'var(--input-bg)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden', overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '640px' }}>
-                  <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
+                  <thead style={{ background: 'rgba(var(--surface-rgb),0.05)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
                     <tr>
                       <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>ลูกค้า</th>
                       <th style={{ padding: '16px', fontWeight: 'normal', color: 'var(--text-secondary)' }}>รายการสินค้า</th>
@@ -555,21 +555,21 @@ export default function StorefrontPage() {
       {/* Edit Order Modal */}
       {editingOrder && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div style={{ background: '#1a1a1a', width: '100%', maxWidth: '600px', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid #333' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--modal-bg)', width: '100%', maxWidth: '600px', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border-color)' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>แก้ไขรายละเอียดออเดอร์</h2>
-              <button onClick={() => setEditingOrder(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+              <button onClick={() => setEditingOrder(null)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
 
             <form onSubmit={handleSaveEdit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>ชื่อลูกค้า</label>
-                <input type="text" value={editingOrder.customerName} onChange={e => setEditingOrder({...editingOrder, customerName: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} required />
+                <input type="text" value={editingOrder.customerName} onChange={e => setEditingOrder({...editingOrder, customerName: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} required />
               </div>
 
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>ที่อยู่ลูกค้า (รวมเบอร์โทรและรหัสไปรษณีย์)</label>
-                <textarea value={editingOrder.customerAddress} onChange={e => setEditingOrder({...editingOrder, customerAddress: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white', minHeight: '80px' }} required />
+                <textarea value={editingOrder.customerAddress} onChange={e => setEditingOrder({...editingOrder, customerAddress: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)', minHeight: '80px' }} required />
               </div>
 
               {(editingOrder.items?.length ?? 0) > 1 && (
@@ -580,27 +580,27 @@ export default function StorefrontPage() {
               <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>จำนวนชิ้นหมู</label>
-                  <input type="text" value={editingOrder.crispyPorkPiece || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkPiece: e.target.value})} disabled={(editingOrder.items?.length ?? 0) > 1} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white', opacity: (editingOrder.items?.length ?? 0) > 1 ? 0.5 : 1 }} />
+                  <input type="text" value={editingOrder.crispyPorkPiece || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkPiece: e.target.value})} disabled={(editingOrder.items?.length ?? 0) > 1} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)', opacity: (editingOrder.items?.length ?? 0) > 1 ? 0.5 : 1 }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>น้ำหนักหมู (กก.)</label>
-                  <input type="text" value={editingOrder.crispyPorkWeight || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkWeight: e.target.value})} disabled={(editingOrder.items?.length ?? 0) > 1} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white', opacity: (editingOrder.items?.length ?? 0) > 1 ? 0.5 : 1 }} />
+                  <input type="text" value={editingOrder.crispyPorkWeight || ''} onChange={e => setEditingOrder({...editingOrder, crispyPorkWeight: e.target.value})} disabled={(editingOrder.items?.length ?? 0) > 1} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)', opacity: (editingOrder.items?.length ?? 0) > 1 ? 0.5 : 1 }} />
                 </div>
               </div>
 
               <div className={styles.mobileStackGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>ยอดเก็บปลายทาง (฿)</label>
-                  <input type="number" value={editingOrder.codAmount || 0} onChange={e => setEditingOrder({...editingOrder, codAmount: Number(e.target.value)})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  <input type="number" value={editingOrder.codAmount || 0} onChange={e => setEditingOrder({...editingOrder, codAmount: Number(e.target.value)})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '12px' }}>หมายเหตุแอดมิน</label>
-                  <input type="text" value={editingOrder.adminNote || ''} onChange={e => setEditingOrder({...editingOrder, adminNote: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#0a0a0a', color: 'white' }} />
+                  <input type="text" value={editingOrder.adminNote || ''} onChange={e => setEditingOrder({...editingOrder, adminNote: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                 </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
-                <button type="button" onClick={() => setEditingOrder(null)} style={{ padding: '12px 24px', borderRadius: '8px', border: '1px solid #333', background: 'transparent', color: 'white', cursor: 'pointer' }}>ยกเลิก</button>
+                <button type="button" onClick={() => setEditingOrder(null)} style={{ padding: '12px 24px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}>ยกเลิก</button>
                 <button type="submit" style={{ padding: '12px 24px', borderRadius: '8px', border: 'none', background: 'var(--accent-green)', color: 'black', fontWeight: 'bold', cursor: 'pointer' }}>บันทึกการเปลี่ยนแปลง</button>
               </div>
             </form>
@@ -611,10 +611,10 @@ export default function StorefrontPage() {
       {/* View Racks Modal */}
       {viewingRacks && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div style={{ background: '#1a1a1a', width: '100%', maxWidth: '400px', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid #333' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--modal-bg)', width: '100%', maxWidth: '400px', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border-color)' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>ถาดที่ใช้</h2>
-              <button onClick={() => setViewingRacks(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+              <button onClick={() => setViewingRacks(null)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
 
             <div style={{ padding: '24px' }}>
@@ -639,7 +639,7 @@ export default function StorefrontPage() {
                   return (
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {finalRacks.map((r: any, idx: number) => (
-                        <li key={idx} style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <li key={idx} style={{ background: 'rgba(var(--surface-rgb),0.05)', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{r.rackNo}</span>
                           <span style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>{r.weight}</span>
                         </li>
@@ -652,14 +652,14 @@ export default function StorefrontPage() {
               })()}
             </div>
 
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button
                 onClick={() => window.open(`${BASE_PATH}/storefront/print?orderId=${viewingRacks.id}`, '_blank')}
                 style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'rgba(63,185,80,0.2)', color: 'var(--accent-green)', cursor: 'pointer', fontWeight: 'bold' }}
               >
                 🖨️ ปริ้นถาด
               </button>
-              <button onClick={() => setViewingRacks(null)} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}>ปิด</button>
+              <button onClick={() => setViewingRacks(null)} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'rgba(var(--surface-rgb),0.1)', color: 'var(--text-primary)', cursor: 'pointer' }}>ปิด</button>
             </div>
           </div>
         </div>

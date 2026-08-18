@@ -153,7 +153,7 @@ export default function PetsPage() {
                 padding: "8px 14px",
                 borderRadius: "8px",
                 border: !pet.stageOverride ? "2px solid #ffac33" : "1px solid var(--border-color)",
-                background: !pet.stageOverride ? "rgba(255,172,51,0.15)" : "rgba(255,255,255,0.05)",
+                background: !pet.stageOverride ? "rgba(255,172,51,0.15)" : "rgba(var(--surface-rgb),0.05)",
                 color: "#fff",
                 cursor: isBusy ? "wait" : "pointer",
                 fontSize: "13px",
@@ -171,7 +171,7 @@ export default function PetsPage() {
                   padding: "8px 14px",
                   borderRadius: "8px",
                   border: pet.stageOverride === s ? "2px solid #ffac33" : "1px solid var(--border-color)",
-                  background: pet.stageOverride === s ? "rgba(255,172,51,0.15)" : "rgba(255,255,255,0.05)",
+                  background: pet.stageOverride === s ? "rgba(255,172,51,0.15)" : "rgba(var(--surface-rgb),0.05)",
                   color: "#fff",
                   cursor: isBusy ? "wait" : "pointer",
                   fontSize: "13px",
@@ -196,7 +196,7 @@ export default function PetsPage() {
                 type="button"
                 disabled={isBusy}
                 onClick={() => chooseSpecies(s.code)}
-                style={{ padding: "16px", borderRadius: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-color)", color: "#fff", cursor: isBusy ? "wait" : "pointer", textAlign: "center" }}
+                style={{ padding: "16px", borderRadius: "12px", background: "rgba(var(--surface-rgb),0.05)", border: "1px solid var(--border-color)", color: "#fff", cursor: isBusy ? "wait" : "pointer", textAlign: "center" }}
               >
                 <Pet3D species={s.code} stage="baby" size={140} />
                 <div style={{ marginTop: "8px", fontSize: "14px" }}>{s.label}</div>
@@ -215,7 +215,7 @@ export default function PetsPage() {
             <button
               type="button"
               onClick={() => setIsPickerOpen(true)}
-              style={{ padding: "10px 20px", borderRadius: "8px", background: "rgba(255,255,255,0.08)", border: "1px solid var(--border-color)", color: "#fff", cursor: "pointer", fontSize: "13px" }}
+              style={{ padding: "10px 20px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.08)", border: "1px solid var(--border-color)", color: "#fff", cursor: "pointer", fontSize: "13px" }}
             >
               🔄 เปลี่ยนสัตว์เลี้ยง
             </button>
@@ -225,7 +225,7 @@ export default function PetsPage() {
 
       {isPickerOpen && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
-          <div style={{ background: "#1a1a1a", width: "100%", maxWidth: "560px", maxHeight: "80vh", borderRadius: "12px", padding: "24px", border: "1px solid var(--border-color)", overflowY: "auto" }}>
+          <div style={{ background: "var(--modal-bg)", width: "100%", maxWidth: "560px", maxHeight: "80vh", borderRadius: "12px", padding: "24px", border: "1px solid var(--border-color)", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
               <h2 style={{ fontSize: "18px", fontWeight: "bold" }}>เปลี่ยนสัตว์เลี้ยง</h2>
               <button onClick={() => setIsPickerOpen(false)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: "20px" }}>✕</button>
@@ -240,7 +240,7 @@ export default function PetsPage() {
                   style={{
                     padding: "12px",
                     borderRadius: "10px",
-                    background: pet?.species === s.code ? "rgba(88,166,255,0.15)" : "rgba(255,255,255,0.05)",
+                    background: pet?.species === s.code ? "rgba(88,166,255,0.15)" : "rgba(var(--surface-rgb),0.05)",
                     border: pet?.species === s.code ? "2px solid var(--accent-blue)" : "1px solid var(--border-color)",
                     color: "#fff",
                     cursor: isBusy ? "wait" : "pointer",

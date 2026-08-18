@@ -88,8 +88,8 @@ export function AssignItemPicker({
                   padding: "8px 12px",
                   borderRadius: "8px",
                   cursor: "pointer",
-                  background: isSelected ? "rgba(88,166,255,0.16)" : "rgba(255,255,255,0.03)",
-                  border: `1px solid ${isSelected ? "var(--accent-blue)" : "rgba(255,255,255,0.08)"}`,
+                  background: isSelected ? "rgba(88,166,255,0.16)" : "rgba(var(--surface-rgb),0.03)",
+                  border: `1px solid ${isSelected ? "var(--accent-blue)" : "rgba(var(--surface-rgb),0.08)"}`,
                   fontSize: "13px",
                 }}
               >

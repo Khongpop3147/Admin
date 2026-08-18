@@ -8,6 +8,8 @@ export interface User {
   name: string;
   nickname?: string | null;
   defaultPlatform?: string | null;
+  themePreference?: string | null;
+  themeMode?: string | null;
   role: string;
   canAccessStorefront?: boolean;
   hasPassword?: boolean;
@@ -28,6 +30,14 @@ interface UserContextType {
   fetchUsers: () => Promise<void>;
   isAuthLoading: boolean;
   logout: () => Promise<void>;
+  // Sets the REAL logged-in user's own accent-color preset (see
+  // PATCH /api/users/me/theme) — self-service, unlike defaultPlatform which
+  // only a Super Admin can set for someone else via /users. `null` clears
+  // back to the default (blue) theme.
+  setTheme: (theme: string | null) => Promise<void>;
+  // Same self-service mechanism, independent axis — light/dark instead of
+  // accent color. `null` clears back to the default (dark) mode.
+  setThemeMode: (mode: string | null) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -103,8 +113,74 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     window.location.href = `${BASE_PATH}/login`;
   };
 
+  // Applied off sessionUser (the real login), not currentUser — unlike
+  // defaultPlatform (a form default that makes sense to preview per
+  // identity), an accent theme/mode is a personal display preference tied
+  // to who is actually authenticated, so a DEV previewing as someone else
+  // still sees their own look rather than the previewed user's.
+  useEffect(() => {
+    const theme = sessionUser?.themePreference;
+    if (theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  }, [sessionUser?.themePreference]);
+
+  useEffect(() => {
+    const mode = sessionUser?.themeMode;
+    if (mode === "light") {
+      document.documentElement.setAttribute("data-mode", "light");
+    } else {
+      document.documentElement.removeAttribute("data-mode");
+    }
+  }, [sessionUser?.themeMode]);
+
+  const setTheme = async (theme: string | null) => {
+    // Optimistic — flips the attribute immediately rather than waiting on
+    // the round trip, then reconciles once fetchUsers picks up the real
+    // saved value (or reverts it if the request ends up failing).
+    if (theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+    try {
+      const res = await fetch(`${BASE_PATH}/api/users/me/theme`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme }),
+      });
+      if (res.ok) {
+        await fetchUsers();
+      }
+    } catch (e) {
+      console.error("Failed to save theme preference", e);
+    }
+  };
+
+  const setThemeMode = async (mode: string | null) => {
+    if (mode === "light") {
+      document.documentElement.setAttribute("data-mode", "light");
+    } else {
+      document.documentElement.removeAttribute("data-mode");
+    }
+    try {
+      const res = await fetch(`${BASE_PATH}/api/users/me/theme`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      if (res.ok) {
+        await fetchUsers();
+      }
+    } catch (e) {
+      console.error("Failed to save theme mode", e);
+    }
+  };
+
   return (
-    <UserContext.Provider value={{ currentUser, sessionUser, setCurrentUser, users, fetchUsers, isAuthLoading, logout }}>
+    <UserContext.Provider value={{ currentUser, sessionUser, setCurrentUser, users, fetchUsers, isAuthLoading, logout, setTheme, setThemeMode }}>
       {children}
     </UserContext.Provider>
   );

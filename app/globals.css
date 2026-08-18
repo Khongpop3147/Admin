@@ -4,11 +4,23 @@
   --bg-color: #0d1117;
   --bg-secondary: #21262d;
   --panel-bg: rgba(22, 27, 34, 0.6);
+  /* Solid (non-translucent) equivalent of --panel-bg — same rgb channel,
+     opacity 1 — for a modal/alert box that needs full opacity rather than
+     the glass-panel blur effect (see .alertBox in page.module.css). */
+  --modal-bg: #161b22;
   --input-bg: rgba(0, 0, 0, 0.2);
   --border-color: rgba(255, 255, 255, 0.1);
   --text-primary: #c9d1d9;
   --text-secondary: #8b949e;
-  
+  --text-heading: #ffffff;
+  /* Base channel for every "subtle overlay on the page background" utility
+     color used throughout the app inline as rgba(var(--surface-rgb), X) —
+     white lightens a dark surface, black darkens a light one, same alpha
+     either way reads as the same relative visual weight. Swapping this one
+     triplet is what makes ~150 scattered hover/fill colors follow light
+     mode without editing each one individually. */
+  --surface-rgb: 255, 255, 255;
+
   --accent-color: #58a6ff;
   --accent-hover: #3182ce;
   --accent-glow: rgba(88, 166, 255, 0.4);
@@ -26,6 +38,131 @@
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* Light mode (see components/UserProvider.tsx's setThemeMode /
+   PATCH /api/users/me/theme, [data-mode="light"] on <html>) — self-service,
+   same as the accent-color presets below. Palette borrowed from GitHub's
+   own light theme (this app's whole dark palette already mirrors GitHub
+   Dark almost exactly), specifically so the accent/danger/success hexes
+   are pre-vetted for real contrast on a white background rather than
+   guessed. Danger/success DO shift here (unlike across accent presets)
+   because those hexes were tuned for a dark canvas and read as low-
+   contrast pastel on white otherwise. */
+[data-mode="light"] {
+  --bg-color: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --panel-bg: rgba(255, 255, 255, 0.75);
+  --modal-bg: #ffffff;
+  --input-bg: rgba(0, 0, 0, 0.03);
+  --border-color: rgba(0, 0, 0, 0.12);
+  --text-primary: #1f2328;
+  --text-secondary: #57606a;
+  --text-heading: #1f2328;
+  --surface-rgb: 0, 0, 0;
+
+  --accent-color: #0969da;
+  --accent-hover: #0550ae;
+  --accent-glow: rgba(9, 105, 218, 0.25);
+  --accent-blue: #0969da;
+  --accent-blue-rgb: 9, 105, 218;
+  --accent-green: #1a7f37;
+
+  --danger-color: #cf222e;
+  --danger-bg: rgba(207, 34, 46, 0.1);
+  --danger-border: rgba(207, 34, 46, 0.35);
+
+  --success-color: #1a7f37;
+  --success-bg: rgba(26, 127, 55, 0.1);
+}
+
+/* Self-service accent-color presets (see components/UserProvider.tsx's
+   setTheme / PATCH /api/users/me/theme) — each admin picks their own via
+   Sidebar, independent of light/dark mode (see [data-mode="light"] above).
+   Swaps the primary accent (buttons, active nav, links, focus rings, the
+   background's own radial-gradient glow) AND gives the background/panel
+   colors a subtle matching tint, so the whole page reads as themed, not
+   just the buttons. Status colors (--danger-*, --success-*, --accent-green)
+   stay fixed regardless of accent theme, since "warning" or "success"
+   shouldn't shift meaning just because someone picked a green or orange
+   theme. No block for the default (blue) theme — that's just :root/
+   [data-mode="light"] above, used whenever data-theme is absent.
+   Each dark block is immediately followed by its light-mode equivalent —
+   a combined [data-mode="light"][data-theme="x"] selector, higher
+   specificity than either alone, so it correctly wins when both are
+   picked together. Accent hexes are re-tuned per mode (not reused as-is)
+   since a hue that contrasts well on near-black can read as washed-out
+   pastel on white and vice versa. */
+[data-theme="purple"] {
+  --accent-color: #a371f7;
+  --accent-hover: #8250df;
+  --accent-glow: rgba(163, 113, 247, 0.4);
+  --accent-blue: #a371f7;
+  --accent-blue-rgb: 163, 113, 247;
+  --bg-color: #100d17;
+  --bg-secondary: #241f2d;
+  --panel-bg: rgba(28, 22, 38, 0.6);
+  --input-bg: rgba(20, 14, 28, 0.3);
+}
+
+[data-mode="light"][data-theme="purple"] {
+  --accent-color: #8250df;
+  --accent-hover: #6639ba;
+  --accent-glow: rgba(130, 80, 223, 0.25);
+  --accent-blue: #8250df;
+  --accent-blue-rgb: 130, 80, 223;
+  --bg-color: #fbfaff;
+  --bg-secondary: #f3f0fc;
+  --panel-bg: rgba(255, 255, 255, 0.75);
+  --input-bg: rgba(130, 80, 223, 0.04);
+}
+
+[data-theme="green"] {
+  --accent-color: #2dd4bf;
+  --accent-hover: #14b8a6;
+  --accent-glow: rgba(45, 212, 191, 0.4);
+  --accent-blue: #2dd4bf;
+  --accent-blue-rgb: 45, 212, 191;
+  --bg-color: #0a1512;
+  --bg-secondary: #1b2620;
+  --panel-bg: rgba(18, 30, 27, 0.6);
+  --input-bg: rgba(8, 20, 17, 0.3);
+}
+
+[data-mode="light"][data-theme="green"] {
+  --accent-color: #0d9488;
+  --accent-hover: #0f766e;
+  --accent-glow: rgba(13, 148, 136, 0.25);
+  --accent-blue: #0d9488;
+  --accent-blue-rgb: 13, 148, 136;
+  --bg-color: #f7fdfc;
+  --bg-secondary: #eafaf6;
+  --panel-bg: rgba(255, 255, 255, 0.75);
+  --input-bg: rgba(13, 148, 136, 0.04);
+}
+
+[data-theme="orange"] {
+  --accent-color: #f0883e;
+  --accent-hover: #db6d28;
+  --accent-glow: rgba(240, 136, 62, 0.4);
+  --accent-blue: #f0883e;
+  --accent-blue-rgb: 240, 136, 62;
+  --bg-color: #17120d;
+  --bg-secondary: #2d2621;
+  --panel-bg: rgba(34, 27, 22, 0.6);
+  --input-bg: rgba(24, 18, 12, 0.3);
+}
+
+[data-mode="light"][data-theme="orange"] {
+  --accent-color: #bc4c00;
+  --accent-hover: #953800;
+  --accent-glow: rgba(188, 76, 0, 0.25);
+  --accent-blue: #bc4c00;
+  --accent-blue-rgb: 188, 76, 0;
+  --bg-color: #fffaf5;
+  --bg-secondary: #fdf1e6;
+  --panel-bg: rgba(255, 255, 255, 0.75);
+  --input-bg: rgba(188, 76, 0, 0.04);
+}
+
 * {
   box-sizing: border-box;
   padding: 0;
@@ -40,7 +177,7 @@ body {
   display: flex;
   flex-direction: row;
   background-image:
-    radial-gradient(circle at 15% 50%, rgba(88, 166, 255, 0.08), transparent 25%),
+    radial-gradient(circle at 15% 50%, rgba(var(--accent-blue-rgb), 0.08), transparent 25%),
     radial-gradient(circle at 85% 30%, rgba(248, 81, 73, 0.05), transparent 25%);
   background-attachment: fixed;
   overflow-x: hidden;
@@ -57,7 +194,7 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-heading);
   letter-spacing: -0.02em;
 }
 

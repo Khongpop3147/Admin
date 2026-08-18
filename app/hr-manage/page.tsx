@@ -227,7 +227,7 @@ export default function HrManagePage() {
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "white", fontSize: "14px" }}
+            style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.1)", border: "1px solid rgba(var(--surface-rgb),0.2)", color: "var(--text-primary)", fontSize: "14px" }}
           />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -237,7 +237,7 @@ export default function HrManagePage() {
             value={customerSearch}
             onChange={(e) => setCustomerSearch(e.target.value)}
             placeholder="พิมพ์ชื่อลูกค้า, เบอร์โทร หรือเลขพัสดุ..."
-            style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "white", fontSize: "14px", width: "220px" }}
+            style={{ padding: "10px 16px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.1)", border: "1px solid rgba(var(--surface-rgb),0.2)", color: "var(--text-primary)", fontSize: "14px", width: "220px" }}
           />
         </div>
         {isSearchMode && (
@@ -297,7 +297,7 @@ export default function HrManagePage() {
                         alignItems: "center",
                         padding: "10px 14px",
                         borderRadius: "8px",
-                        background: missing ? "rgba(255,107,107,0.1)" : "rgba(255,255,255,0.03)",
+                        background: missing ? "rgba(255,107,107,0.1)" : "rgba(var(--surface-rgb),0.03)",
                         border: missing ? "1px solid rgba(255,107,107,0.3)" : "1px solid transparent",
                         fontSize: "13px",
                       }}
@@ -340,10 +340,10 @@ export default function HrManagePage() {
 
       {selectedCustomer && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div style={{ background: '#1a1a1a', width: '100%', maxWidth: '500px', maxHeight: '80vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid #333' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'var(--modal-bg)', width: '100%', maxWidth: '500px', maxHeight: '80vh', borderRadius: '8px', display: 'flex', flexDirection: 'column', border: '1px solid var(--border-color)' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>ประวัติออเดอร์: {selectedCustomer}</h2>
-              <button onClick={() => { setSelectedCustomer(null); setCustomerHistory([]); }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+              <button onClick={() => { setSelectedCustomer(null); setCustomerHistory([]); }} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
 
             <div style={{ padding: '24px', overflowY: 'auto' }}>
@@ -357,7 +357,7 @@ export default function HrManagePage() {
                     <li key={o.id}>
                       <button
                         onClick={() => setViewingOrder(o)}
-                        style={{ width: '100%', textAlign: 'left', background: 'rgba(255,255,255,0.05)', border: 'none', padding: '12px 14px', borderRadius: '8px', cursor: 'pointer', color: 'inherit', font: 'inherit' }}
+                        style={{ width: '100%', textAlign: 'left', background: 'rgba(var(--surface-rgb),0.05)', border: 'none', padding: '12px 14px', borderRadius: '8px', cursor: 'pointer', color: 'inherit', font: 'inherit' }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                           <span style={{ fontWeight: 'bold' }}>ส่ง {nextDayStr(o.entryDate)}</span>
@@ -383,8 +383,8 @@ export default function HrManagePage() {
         const statusInfo = getOrderStatusInfo(viewingOrder.orderStatus || undefined);
         return (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }} onClick={closeViewingOrder}>
-            <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', maxWidth: '760px', width: '92%', maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+            <div style={{ background: 'var(--modal-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', maxWidth: '760px', width: '92%', maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(var(--surface-rgb),0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
                 <div>
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>ออเดอร์ {viewingOrder.orderNo || '-'}</div>
                   <h3 style={{ fontSize: '1.3rem', marginBottom: '10px' }}>{viewingOrder.customerName}</h3>
@@ -462,8 +462,8 @@ export default function HrManagePage() {
                       <input type="text" className={styles.input} value={editViewOrderData.adminNote || ''} onChange={(e) => setEditViewOrderData({ ...editViewOrderData, adminNote: e.target.value })} />
                     </div>
                   </div>
-                  <div style={{ padding: '16px 24px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'flex-end', gap: '12px', flexShrink: 0 }}>
-                    <button onClick={() => { setIsEditingViewOrder(false); setEditViewOrderData(null); }} className={styles.button} style={{ background: 'rgba(255,255,255,0.08)' }}>ยกเลิก</button>
+                  <div style={{ padding: '16px 24px', borderTop: '1px solid rgba(var(--surface-rgb),0.1)', display: 'flex', justifyContent: 'flex-end', gap: '12px', flexShrink: 0 }}>
+                    <button onClick={() => { setIsEditingViewOrder(false); setEditViewOrderData(null); }} className={styles.button} style={{ background: 'rgba(var(--surface-rgb),0.08)' }}>ยกเลิก</button>
                     <button onClick={saveViewOrderEdit} disabled={isSavingViewOrder} className={styles.button}>
                       {isSavingViewOrder ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}
                     </button>
@@ -472,11 +472,11 @@ export default function HrManagePage() {
               ) : (
                 <div style={{ padding: '20px 24px', overflowY: 'auto' }}>
                   <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
-                    <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
+                    <div style={{ flex: 1, background: 'rgba(var(--surface-rgb),0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
                       <div style={{ fontSize: '19px', fontWeight: 'bold', color: '#fff' }}>฿{formatMoney(viewingOrder.price)}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>ราคาสินค้า</div>
                     </div>
-                    <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
+                    <div style={{ flex: 1, background: 'rgba(var(--surface-rgb),0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
                       <div style={{ fontSize: '19px', fontWeight: 'bold', color: '#fff' }}>฿{formatMoney(viewingOrder.codAmount)}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>เก็บปลายทาง</div>
                     </div>

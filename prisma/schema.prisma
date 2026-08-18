@@ -122,6 +122,18 @@ model User {
   name           String
   nickname       String? // shown instead of `name` on the per-admin pork slip sections
   defaultPlatform String? // pre-selects this sales channel in Order Entry for this admin; null = no default
+  // Self-service accent-color preset — "purple" | "green" | "orange" | null
+  // (= default blue). Unlike defaultPlatform (Super-Admin-managed via
+  // /users), this is set by the admin themselves for their own login (see
+  // PATCH /api/users/me/theme) — applied client-side as a `data-theme`
+  // attribute that swaps a handful of CSS variables in globals.css, not a
+  // full re-skin (status colors like danger/success stay fixed).
+  themePreference String?
+  // Self-service light/dark mode — "light" | null (= dark, the app's
+  // original/default look). Independent of themePreference above (an
+  // accent color choice composes with either mode); applied as a
+  // `data-mode="light"` attribute alongside `data-theme`.
+  themeMode       String?
   role           String  @default("ADMIN") // "SUPER_ADMIN" | "ADMIN" | "PACKING" | "CENTRAL_INVENTORY" | "DEV" | "HR" | "STOREFRONT"
   // Grants Storefront page access on top of whatever `role` already allows —
   // for a non-STOREFRONT account (e.g. HR) that also needs to run the

@@ -754,7 +754,7 @@ export default function PendingStockPage() {
                   padding: "8px 16px",
                   borderRadius: "8px",
                   border: customer.platform === opt.value ? "2px solid var(--accent-blue)" : "1px solid var(--border-color)",
-                  background: customer.platform === opt.value ? "var(--accent-blue)" : "rgba(255,255,255,0.05)",
+                  background: customer.platform === opt.value ? "var(--accent-blue)" : "rgba(var(--surface-rgb),0.05)",
                   color: customer.platform === opt.value ? "#fff" : "var(--text-secondary)",
                   cursor: "pointer",
                   fontSize: "14px",
@@ -853,7 +853,7 @@ export default function PendingStockPage() {
             <input type="checkbox" checked={isCod} onChange={(e) => handleIsCodChange(e.target.checked)} />
             <span className={styles.label} style={{ margin: 0 }}>เก็บเงินปลายทาง (COD)</span>
           </label>
-          <input type="number" step="0.01" value={codAmountStr} readOnly className={styles.input} placeholder="ยอดเก็บปลายทาง" style={{ marginTop: "6px", opacity: isCod ? 1 : 0.5, background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)" }} />
+          <input type="number" step="0.01" value={codAmountStr} readOnly className={styles.input} placeholder="ยอดเก็บปลายทาง" style={{ marginTop: "6px", opacity: isCod ? 1 : 0.5, background: "rgba(var(--surface-rgb),0.05)", color: "var(--text-secondary)" }} />
         </div>
 
         <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "12px", marginBottom: "4px" }}>
@@ -888,7 +888,7 @@ export default function PendingStockPage() {
 
         {/* Extra slips — ลูกค้าโอนไม่ครบรอบแรกแล้วโอนเพิ่มรอบหลัง */}
         {!isCod && extraSlips.map((slip, index) => (
-          <div key={index} style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed rgba(255,255,255,0.15)" }}>
+          <div key={index} style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed rgba(var(--surface-rgb),0.15)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
               <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>สลิปเพิ่มเติม #{index + 1}</span>
               <button type="button" onClick={() => removeExtraSlip(index)} style={{ background: "none", border: "none", color: "#ff6b6b", cursor: "pointer", fontSize: "12px" }}>✕ ลบ</button>
@@ -1039,7 +1039,7 @@ export default function PendingStockPage() {
                           type="button"
                           onClick={() => startEditEntry(entry)}
                           title="แก้ไขข้อมูลรายการนี้"
-                          style={{ padding: "8px 16px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-color)", color: "var(--text-secondary)", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
+                          style={{ padding: "8px 16px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.05)", border: "1px solid var(--border-color)", color: "var(--text-secondary)", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}
                         >
                           ✏️ แก้ไข
                         </button>
@@ -1058,7 +1058,7 @@ export default function PendingStockPage() {
                           style={{
                             padding: "8px 16px",
                             borderRadius: "8px",
-                            background: hasAllStockAssigned(entry.items) ? "rgba(46,204,113,0.15)" : "rgba(255,255,255,0.04)",
+                            background: hasAllStockAssigned(entry.items) ? "rgba(46,204,113,0.15)" : "rgba(var(--surface-rgb),0.04)",
                             border: `1px solid ${hasAllStockAssigned(entry.items) ? "var(--accent-green)" : "var(--border-color)"}`,
                             color: hasAllStockAssigned(entry.items) ? "var(--accent-green)" : "var(--text-secondary)",
                             cursor: isBusy ? "wait" : hasAllStockAssigned(entry.items) ? "pointer" : "not-allowed",
@@ -1073,7 +1073,7 @@ export default function PendingStockPage() {
                           disabled={isBusy}
                           onClick={() => setDeleteChoiceEntryId(entry.id)}
                           title="ลบรายการ"
-                          style={{ padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-color)", color: "var(--text-secondary)", cursor: isBusy ? "wait" : "pointer", fontSize: "13px" }}
+                          style={{ padding: "8px 10px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.05)", border: "1px solid var(--border-color)", color: "var(--text-secondary)", cursor: isBusy ? "wait" : "pointer", fontSize: "13px" }}
                         >
                           🗑
                         </button>
@@ -1140,7 +1140,7 @@ export default function PendingStockPage() {
                         disabled={isBusy}
                         onClick={() => { if (confirm("ลบรายการนี้?")) deleteEntry(entry.id); }}
                         title="ลบรายการ (ไม่กระทบ order จริงที่สร้างไปแล้ว)"
-                        style={{ padding: "6px 8px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-color)", color: "var(--text-secondary)", cursor: isBusy ? "wait" : "pointer", fontSize: "12px" }}
+                        style={{ padding: "6px 8px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.05)", border: "1px solid var(--border-color)", color: "var(--text-secondary)", cursor: isBusy ? "wait" : "pointer", fontSize: "12px" }}
                       >
                         🗑
                       </button>
@@ -1224,7 +1224,7 @@ export default function PendingStockPage() {
                 <button
                   onClick={() => confirmChoice("mistake")}
                   disabled={isBusy}
-                  style={{ padding: "10px 18px", borderRadius: "8px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)", color: "var(--text-secondary)", cursor: isBusy ? "wait" : "pointer", fontSize: "13px", fontWeight: "bold" }}
+                  style={{ padding: "10px 18px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.08)", border: "1px solid rgba(var(--surface-rgb),0.2)", color: "var(--text-secondary)", cursor: isBusy ? "wait" : "pointer", fontSize: "13px", fontWeight: "bold" }}
                 >
                   ✏️ กรอกข้อมูลผิด
                 </button>
@@ -1245,8 +1245,8 @@ export default function PendingStockPage() {
         const statusInfo = getOrderStatusInfo(viewingOrder.orderStatus || undefined);
         return (
           <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }} onClick={() => setViewingOrder(null)}>
-            <div style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: "12px", maxWidth: "760px", width: "92%", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexShrink: 0 }}>
+            <div style={{ background: "var(--modal-bg)", border: "1px solid var(--border-color)", borderRadius: "12px", maxWidth: "760px", width: "92%", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(var(--surface-rgb),0.1)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexShrink: 0 }}>
                 <div>
                   <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>ออเดอร์ {viewingOrder.orderNo || "-"}</div>
                   <h3 style={{ fontSize: "1.3rem", marginBottom: "10px" }}>{viewingOrder.customerName}</h3>
@@ -1258,11 +1258,11 @@ export default function PendingStockPage() {
               </div>
               <div style={{ padding: "20px 24px", overflowY: "auto" }}>
                 <div style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
-                  <div style={{ flex: 1, background: "rgba(255,255,255,0.04)", borderRadius: "10px", padding: "12px 8px", textAlign: "center" }}>
+                  <div style={{ flex: 1, background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 8px", textAlign: "center" }}>
                     <div style={{ fontSize: "19px", fontWeight: "bold", color: "#fff" }}>฿{formatMoney(viewingOrder.price)}</div>
                     <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>ราคาสินค้า</div>
                   </div>
-                  <div style={{ flex: 1, background: "rgba(255,255,255,0.04)", borderRadius: "10px", padding: "12px 8px", textAlign: "center" }}>
+                  <div style={{ flex: 1, background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 8px", textAlign: "center" }}>
                     <div style={{ fontSize: "19px", fontWeight: "bold", color: "#fff" }}>฿{formatMoney(viewingOrder.codAmount)}</div>
                     <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>เก็บปลายทาง</div>
                   </div>

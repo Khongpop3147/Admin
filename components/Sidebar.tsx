@@ -17,13 +17,23 @@ const ROLE_LABELS: Record<string, string> = {
   HR: "HR",
 };
 
+// Swatch colors mirror the actual --accent-* values each [data-theme="..."]
+// block defines in globals.css — kept in sync by hand since a swatch has to
+// show its color before that theme is ever applied to pick it.
+const THEME_OPTIONS: { key: string | null; label: string; color: string }[] = [
+  { key: null, label: "ฟ้า (ปกติ)", color: "#58a6ff" },
+  { key: "purple", label: "ม่วง", color: "#a371f7" },
+  { key: "green", label: "เขียว", color: "#2dd4bf" },
+  { key: "orange", label: "ส้ม", color: "#f0883e" },
+];
+
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
 }
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const { currentUser, sessionUser, setCurrentUser, users, logout } = useUser();
+  const { currentUser, sessionUser, setCurrentUser, users, logout, setTheme, setThemeMode } = useUser();
   const pathname = usePathname();
 
   const isDev = sessionUser?.role === "DEV";
@@ -56,7 +66,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         )}
         {currentUser?.role !== "PACKING" && currentUser?.role !== "STOREFRONT" && (
           <Link href="/orders" className={`${styles.navItem} ${pathname === '/orders' ? styles.active : ''}`}>
-            Order Details
+            ออเดอร์
           </Link>
         )}
         {currentUser?.role !== "PACKING" && currentUser?.role !== "STOREFRONT" && (
@@ -66,23 +76,23 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         )}
         {isSuperAdminRole(currentUser?.role) && (
           <Link href="/private-clients" className={`${styles.navItem} ${pathname === '/private-clients' ? styles.active : ''}`}>
-            Private clients
+            ลูกค้าส่วนตัว
           </Link>
         )}
         {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "PACKING") && (
           <Link href="/packing" className={`${styles.navItem} ${pathname === '/packing' ? styles.active : ''}`}>
-            Packing & Export
+            แพ็คของ
           </Link>
         )}
         {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "STOREFRONT" || currentUser?.canAccessStorefront) && (
           <Link href="/storefront" className={`${styles.navItem} ${pathname === '/storefront' ? styles.active : ''}`}>
-            Store Front
+            หน้าร้าน
           </Link>
         )}
         {isSuperAdminRole(currentUser?.role) && (
           <>
             <Link href="/racks" className={`${styles.navItem} ${pathname === '/racks' ? styles.active : ''}`}>
-              Rack Management
+              จัดการชิ้นหมู
             </Link>
             <Link href="/users" className={`${styles.navItem} ${pathname === '/users' ? styles.active : ''}`}>
               Super Admin Setting
@@ -93,7 +103,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             gate, unlike every other link in this file. Kept last so it
             never displaces a real work link above it. */}
         <Link href="/pets" className={`${styles.navItem} ${pathname === '/pets' ? styles.active : ''}`}>
-          Pet 
+          สัตว์เลี้ยง
         </Link>
       </nav>
 
@@ -109,8 +119,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 onChange={handleUserChange}
                 style={{
                   width: "100%",
-                  background: "rgba(255,255,255,0.1)",
-                  color: "white",
+                  background: "rgba(var(--surface-rgb),0.1)",
+                  color: "var(--text-primary)",
                   border: "none",
                   padding: "4px 8px",
                   borderRadius: "4px",
@@ -135,13 +145,65 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div style={{ fontSize: "11px", opacity: 0.7 }}>{ROLE_LABELS[currentUser.role] || currentUser.role}</div>
               </div>
             )}
+
+            {/* Self-service accent-color theme — own login only, applied off
+                sessionUser not currentUser (see UserProvider's own comment
+                on setTheme), so this always reflects/sets the real account's
+                preference even while a DEV is locally previewing someone
+                else. */}
+            <div style={{ display: "flex", gap: "6px", marginTop: "10px", alignItems: "center" }}>
+              {THEME_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key ?? "default"}
+                  type="button"
+                  onClick={() => setTheme(opt.key)}
+                  title={opt.label}
+                  aria-label={`ธีมสี${opt.label}`}
+                  style={{
+                    width: "20px",
+                    height: "20px",
+                    borderRadius: "50%",
+                    background: opt.color,
+                    border: (sessionUser?.themePreference || null) === opt.key ? "2px solid var(--bg-color)" : "2px solid transparent",
+                    boxShadow: (sessionUser?.themePreference || null) === opt.key ? "0 0 0 1px rgba(var(--surface-rgb),0.3)" : "none",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                />
+              ))}
+
+              {/* Independent axis from accent color — same self-service
+                  pattern, own field (themeMode) via setThemeMode. */}
+              <button
+                type="button"
+                onClick={() => setThemeMode(sessionUser?.themeMode === "light" ? null : "light")}
+                title={sessionUser?.themeMode === "light" ? "โหมดสว่าง (กดเพื่อเปลี่ยนเป็นมืด)" : "โหมดมืด (กดเพื่อเปลี่ยนเป็นสว่าง)"}
+                aria-label="สลับโหมดสว่าง/มืด"
+                style={{
+                  width: "20px",
+                  height: "20px",
+                  borderRadius: "50%",
+                  marginLeft: "4px",
+                  background: sessionUser?.themeMode === "light" ? "#f6f8fa" : "#0d1117",
+                  border: "2px solid var(--border-color)",
+                  cursor: "pointer",
+                  padding: 0,
+                  fontSize: "10px",
+                  lineHeight: "16px",
+                  textAlign: "center",
+                }}
+              >
+                {sessionUser?.themeMode === "light" ? "☀" : "☾"}
+              </button>
+            </div>
+
             <button
               onClick={logout}
               style={{
                 width: "100%",
                 marginTop: "8px",
-                background: "rgba(255,255,255,0.08)",
-                color: "white",
+                background: "rgba(var(--surface-rgb),0.08)",
+                color: "var(--text-primary)",
                 border: "none",
                 padding: "6px 8px",
                 borderRadius: "4px",
