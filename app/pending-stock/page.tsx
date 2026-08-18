@@ -691,7 +691,7 @@ export default function PendingStockPage() {
     .sort((a, b) => b.weight - a.weight);
 
   return (
-    <div style={{ padding: "24px", maxWidth: "900px", margin: "0 auto", color: "#fff" }}>
+    <div style={{ padding: "24px", maxWidth: "900px", margin: "0 auto", color: "var(--text-primary)" }}>
       <div className={styles.header} style={{ textAlign: "left", marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "16px" }}>
         <div>
           <h1 className={styles.title} style={{ fontSize: "2rem" }}>ลูกค้ารอหมู</h1>
@@ -1259,11 +1259,11 @@ export default function PendingStockPage() {
               <div style={{ padding: "20px 24px", overflowY: "auto" }}>
                 <div style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
                   <div style={{ flex: 1, background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 8px", textAlign: "center" }}>
-                    <div style={{ fontSize: "19px", fontWeight: "bold", color: "#fff" }}>฿{formatMoney(viewingOrder.price)}</div>
+                    <div style={{ fontSize: "19px", fontWeight: "bold", color: "var(--text-primary)" }}>฿{formatMoney(viewingOrder.price)}</div>
                     <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>ราคาสินค้า</div>
                   </div>
                   <div style={{ flex: 1, background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 8px", textAlign: "center" }}>
-                    <div style={{ fontSize: "19px", fontWeight: "bold", color: "#fff" }}>฿{formatMoney(viewingOrder.codAmount)}</div>
+                    <div style={{ fontSize: "19px", fontWeight: "bold", color: "var(--text-primary)" }}>฿{formatMoney(viewingOrder.codAmount)}</div>
                     <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>เก็บปลายทาง</div>
                   </div>
                   <div style={{ flex: 1, background: "rgba(63,185,80,0.12)", border: "1px solid rgba(63,185,80,0.35)", borderRadius: "10px", padding: "12px 8px", textAlign: "center" }}>

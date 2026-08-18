@@ -1097,7 +1097,7 @@ export default function RacksPage() {
                             <span style={{ position: 'absolute', right: '12px', top: '10px', color: '#666', fontSize: '12px' }}>กก.</span>
                           </div>
                           <div className={styles.rackItemActions} style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => handleInsertGap(rack.originalIdx)} title="แทรกช่องว่างตรงนี้" style={{ background: 'rgba(var(--surface-rgb),0.1)', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>+</button>
+                            <button onClick={() => handleInsertGap(rack.originalIdx)} title="แทรกช่องว่างตรงนี้" style={{ background: 'rgba(var(--surface-rgb),0.1)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>+</button>
                             <button onClick={() => handleRemoveDraft(rack.originalIdx)} title="ลบรายการนี้" style={{ background: 'rgba(255,0,0,0.2)', border: 'none', color: '#ff6b6b', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>✕</button>
                           </div>
                         </div>
@@ -1201,7 +1201,7 @@ export default function RacksPage() {
                           <button
                             onClick={() => handleBulkShift('down')}
                             disabled={isShifting || !bulkShiftTarget}
-                            style={{ background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: '#fff', padding: '10px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                            style={{ background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: 'var(--text-primary)', padding: '10px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
                             title="เลื่อนลง (ใช้เมื่อของหายจริงจากถาด)"
                           >
                             + เลื่อนลง
@@ -1513,7 +1513,7 @@ export default function RacksPage() {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className={styles.rackModal} style={{ background: 'var(--modal-bg)', padding: '32px', borderRadius: '12px', width: '90%', maxWidth: '1000px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ margin: 0, color: '#fff', fontSize: '24px' }}>รายการที่มอบหมายไปแล้ว</h2>
+              <h2 style={{ margin: 0, color: 'var(--text-heading)', fontSize: '24px' }}>รายการที่มอบหมายไปแล้ว</h2>
               <button
                 onClick={() => { setIsAssignmentsModalOpen(false); setSelectedAssignmentRacks(new Set()); setMoveTargetUserId(""); setAutoSelectMoveCount(""); }}
                 style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '24px' }}
@@ -1563,7 +1563,7 @@ export default function RacksPage() {
                 />
                 <button
                   onClick={handleAutoSelectMoveRacks}
-                  style={{ background: 'rgba(var(--surface-rgb),0.1)', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 14px', cursor: 'pointer', fontSize: '13px' }}
+                  style={{ background: 'rgba(var(--surface-rgb),0.1)', color: 'var(--text-primary)', border: 'none', borderRadius: '6px', padding: '8px 14px', cursor: 'pointer', fontSize: '13px' }}
                 >
                   เลือก rack น้อยไปมาก
                 </button>
@@ -1638,7 +1638,7 @@ export default function RacksPage() {
                             </button>
                             <button
                               onClick={() => setEditingRackId(null)}
-                              style={{ background: 'rgba(var(--surface-rgb),0.1)', border: 'none', color: '#fff', padding: '8px', borderRadius: '4px', cursor: 'pointer', flex: 1 }}
+                              style={{ background: 'rgba(var(--surface-rgb),0.1)', border: 'none', color: 'var(--text-primary)', padding: '8px', borderRadius: '4px', cursor: 'pointer', flex: 1 }}
                             >
                               ยกเลิก
                             </button>
@@ -1728,12 +1728,12 @@ export default function RacksPage() {
                     <tbody>
                       {productDeletedLogs.map((log) => (
                         <tr key={log.id} style={{ borderTop: '1px solid var(--border-color)' }}>
-                          <td style={{ padding: '12px 16px', color: '#fff' }}>
+                          <td style={{ padding: '12px 16px', color: 'var(--text-primary)' }}>
                             {new Date(log.deletedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
                           </td>
                           <td style={{ padding: '12px 16px', color: '#ffac33', fontWeight: 'bold' }}>{log.rackNo}</td>
-                          <td style={{ padding: '12px 16px', color: '#fff' }}>{Number(log.weight).toFixed(2)} กก.</td>
-                          <td style={{ padding: '12px 16px', color: '#fff' }}>{log.userName}</td>
+                          <td style={{ padding: '12px 16px', color: 'var(--text-primary)' }}>{Number(log.weight).toFixed(2)} กก.</td>
+                          <td style={{ padding: '12px 16px', color: 'var(--text-primary)' }}>{log.userName}</td>
                         </tr>
                       ))}
                     </tbody>

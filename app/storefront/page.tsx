@@ -223,7 +223,7 @@ export default function StorefrontPage() {
 
   if (!canAccess) {
     return (
-      <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
+      <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "var(--text-primary)" }}>
         <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>ไม่มีสิทธิ์เข้าถึง</h1>
         <p style={{ color: "var(--text-secondary)" }}>เฉพาะ Super Admin และหน้าร้านเท่านั้นที่เข้าหน้านี้ได้</p>
       </div>
@@ -237,7 +237,7 @@ export default function StorefrontPage() {
     : [...productPieces].sort((a, b) => b.remainingWeight - a.remainingWeight).map((p) => ({ ...p, diff: null as number | null }));
 
   return (
-    <div className={styles.container} style={{ color: "#fff" }}>
+    <div className={styles.container} style={{ color: "var(--text-primary)" }}>
       <div className={styles.header} style={{ textAlign: "left", marginBottom: "24px" }}>
         <h1 className={styles.title} style={{ fontSize: "2rem" }}>ขายหน้าร้าน</h1>
         <p className={styles.subtitle}>บันทึกการขายหน้าร้าน และดูประวัติออเดอร์หน้าร้านทั้งหมด</p>

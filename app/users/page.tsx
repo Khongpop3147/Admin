@@ -529,7 +529,7 @@ export default function UsersPage() {
                     </button>
                     <button
                       onClick={cancelEdit}
-                      style={{ background: "rgba(var(--surface-rgb),0.08)", color: "#fff", border: "none", borderRadius: "6px", padding: "8px 14px", cursor: "pointer", fontSize: "13px" }}
+                      style={{ background: "rgba(var(--surface-rgb),0.08)", color: "var(--text-primary)", border: "none", borderRadius: "6px", padding: "8px 14px", cursor: "pointer", fontSize: "13px" }}
                     >
                       ยกเลิก
                     </button>
@@ -558,7 +558,7 @@ export default function UsersPage() {
                   </div>
                   <button
                     onClick={() => startEdit(u)}
-                    style={{ background: "rgba(var(--surface-rgb),0.08)", color: "#fff", border: "none", borderRadius: "6px", padding: "8px 14px", cursor: "pointer", fontSize: "13px" }}
+                    style={{ background: "rgba(var(--surface-rgb),0.08)", color: "var(--text-primary)", border: "none", borderRadius: "6px", padding: "8px 14px", cursor: "pointer", fontSize: "13px" }}
                   >
                     ✏️ แก้ไข
                   </button>
@@ -785,7 +785,7 @@ export default function UsersPage() {
               padding: "8px 16px", borderRadius: "8px", fontSize: "13px", cursor: "pointer",
               border: clearMode === "range" ? "1px solid var(--accent-blue)" : "1px solid var(--border-color)",
               background: clearMode === "range" ? "rgba(88,166,255,0.15)" : "rgba(var(--surface-rgb),0.04)",
-              color: "#fff",
+              color: "var(--text-primary)",
             }}
           >
             ลบตามช่วงวันที่
@@ -796,7 +796,7 @@ export default function UsersPage() {
               padding: "8px 16px", borderRadius: "8px", fontSize: "13px", cursor: "pointer",
               border: clearMode === "all" ? "1px solid #ff6b6b" : "1px solid var(--border-color)",
               background: clearMode === "all" ? "rgba(255,107,107,0.15)" : "rgba(var(--surface-rgb),0.04)",
-              color: "#fff",
+              color: "var(--text-primary)",
             }}
           >
             ลบออเดอร์ทั้งหมด

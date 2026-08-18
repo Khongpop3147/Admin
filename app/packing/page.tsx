@@ -948,7 +948,7 @@ export default function PackingPage() {
   if (currentUser && !isSuperAdminRole(currentUser.role) && currentUser.role !== "PACKING") return null;
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', color: '#fff' }}>
+    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', color: 'var(--text-primary)' }}>
       <div className={styles.header} style={{ textAlign: 'left', marginBottom: '24px' }}>
         <h1 className={styles.title} style={{ fontSize: '2rem' }}>แพ็คของและส่งออกไฟล์</h1>
         <p className={styles.subtitle}>ดูรายการออเดอร์ที่ต้องแพ็ค อัปเดตสถานะ และส่งออกไฟล์สำหรับขนส่ง</p>
@@ -1010,7 +1010,7 @@ export default function PackingPage() {
           <button
             onClick={handlePreview}
             className={styles.toolbarBtn}
-            style={{ background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: '#fff' }}
+            style={{ background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: 'var(--text-primary)' }}
           >
             👀 ดูตัวอย่างไฟล์
           </button>
@@ -1218,7 +1218,7 @@ export default function PackingPage() {
                               );
                             })()}
                             {getExtraBoxes(order).map((indices, i) => (
-                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#fff' }}>
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-primary)' }}>
                                 <span>📦 กล่อง {i + 2}: {indices.length} ชิ้น (≈{getBoxWeight(order, indices)} กก.)</span>
                                 <button
                                   onClick={() => removeBox(order, i)}
@@ -1234,7 +1234,7 @@ export default function PackingPage() {
 
                         <button
                           onClick={() => openBoxPicker(order)}
-                          style={{ marginTop: '6px', background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: '#fff', cursor: 'pointer', padding: '4px 10px', borderRadius: '4px', fontSize: '12px' }}
+                          style={{ marginTop: '6px', background: 'rgba(var(--surface-rgb),0.1)', border: '1px solid rgba(var(--surface-rgb),0.2)', color: 'var(--text-primary)', cursor: 'pointer', padding: '4px 10px', borderRadius: '4px', fontSize: '12px' }}
                         >
                           + เพิ่มกล่อง
                         </button>

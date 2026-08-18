@@ -25,7 +25,7 @@ export function SlipIssueReasonPicker({
       <select
         value={reason}
         onChange={(e) => onReasonChange(e.target.value)}
-        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,107,107,0.4)', background: 'var(--input-bg)', color: '#fff', fontSize: '13px' }}
+        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,107,107,0.4)', background: 'var(--input-bg)', color: 'var(--text-primary)', fontSize: '13px' }}
       >
         <option value="">-- เลือกเหตุผล --</option>
         {SLIP_ISSUE_REASONS.map((r) => (
@@ -39,7 +39,7 @@ export function SlipIssueReasonPicker({
           value={otherText}
           onChange={(e) => onOtherTextChange(e.target.value)}
           placeholder="ระบุว่ามีปัญหาอะไร..."
-          style={{ width: '100%', marginTop: '8px', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,107,107,0.4)', background: 'var(--input-bg)', color: '#fff', fontSize: '13px' }}
+          style={{ width: '100%', marginTop: '8px', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,107,107,0.4)', background: 'var(--input-bg)', color: 'var(--text-primary)', fontSize: '13px' }}
         />
       )}
     </div>

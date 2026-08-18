@@ -193,7 +193,7 @@ export default function HrManagePage() {
 
   if (!canAccess) {
     return (
-      <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
+      <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "var(--text-primary)" }}>
         <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>ไม่มีสิทธิ์เข้าถึง</h1>
         <p style={{ color: "var(--text-secondary)" }}>เฉพาะ Super Admin และ HR เท่านั้นที่เข้าหน้านี้ได้</p>
       </div>
@@ -214,7 +214,7 @@ export default function HrManagePage() {
   const totalTrackDateMismatch = activeOrders.filter(hasTrackDateMismatch).length;
 
   return (
-    <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "#fff" }}>
+    <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "var(--text-primary)" }}>
       <div className={styles.header} style={{ textAlign: "left", marginBottom: "24px" }}>
         <h1 className={styles.title} style={{ fontSize: "2rem" }}>HR Manage</h1>
         <p className={styles.subtitle}>ดูสถานะออเดอร์ของแต่ละแอดมิน และออเดอร์ EMS ที่ยังไม่มีเลข Tracking</p>
@@ -473,11 +473,11 @@ export default function HrManagePage() {
                 <div style={{ padding: '20px 24px', overflowY: 'auto' }}>
                   <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
                     <div style={{ flex: 1, background: 'rgba(var(--surface-rgb),0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '19px', fontWeight: 'bold', color: '#fff' }}>฿{formatMoney(viewingOrder.price)}</div>
+                      <div style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--text-primary)' }}>฿{formatMoney(viewingOrder.price)}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>ราคาสินค้า</div>
                     </div>
                     <div style={{ flex: 1, background: 'rgba(var(--surface-rgb),0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '19px', fontWeight: 'bold', color: '#fff' }}>฿{formatMoney(viewingOrder.codAmount)}</div>
+                      <div style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--text-primary)' }}>฿{formatMoney(viewingOrder.codAmount)}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>เก็บปลายทาง</div>
                     </div>
                     <div style={{ flex: 1, background: 'rgba(63,185,80,0.12)', border: '1px solid rgba(63,185,80,0.35)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>

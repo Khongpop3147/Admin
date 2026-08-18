@@ -2485,11 +2485,11 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                     ) : (
                       <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
                         <div style={{ flex: 1, background: 'rgba(var(--surface-rgb),0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
-                          <div style={{ fontSize: '19px', fontWeight: 'bold', color: '#fff' }}>฿{formatMoney(selectedOrder.price)}</div>
+                          <div style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--text-primary)' }}>฿{formatMoney(selectedOrder.price)}</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>ราคาสินค้า</div>
                         </div>
                         <div style={{ flex: 1, background: 'rgba(var(--surface-rgb),0.04)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>
-                          <div style={{ fontSize: '19px', fontWeight: 'bold', color: '#fff' }}>฿{formatMoney(selectedOrder.codAmount)}</div>
+                          <div style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--text-primary)' }}>฿{formatMoney(selectedOrder.codAmount)}</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>เก็บปลายทาง</div>
                         </div>
                         <div style={{ flex: 1, background: 'rgba(63,185,80,0.12)', border: '1px solid rgba(63,185,80,0.35)', borderRadius: '10px', padding: '12px 8px', textAlign: 'center' }}>

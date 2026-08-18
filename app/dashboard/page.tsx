@@ -216,7 +216,7 @@ function TrendBarChart({
             zIndex: 10,
           }}
         >
-          <div style={{ color: "#fff", fontWeight: "bold" }}>{formatValue((data[hoverIdx] as any).__value)}</div>
+          <div style={{ color: "var(--text-primary)", fontWeight: "bold" }}>{formatValue((data[hoverIdx] as any).__value)}</div>
           <div style={{ color: "var(--text-secondary)" }}>{labelFn(data[hoverIdx].date)}</div>
         </div>
       )}

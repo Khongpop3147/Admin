@@ -111,7 +111,7 @@ export default function PetsPage() {
   const nextGrowthThreshold = getNextGrowthThreshold(orderCount);
 
   return (
-    <div style={{ padding: "24px", maxWidth: "900px", margin: "0 auto", color: "#fff" }}>
+    <div style={{ padding: "24px", maxWidth: "900px", margin: "0 auto", color: "var(--text-primary)" }}>
       <div className={styles.header} style={{ textAlign: "left", marginBottom: "24px" }}>
         <h1 className={styles.title} style={{ fontSize: "2rem" }}>สัตว์เลี้ยง 🐷</h1>
         <p className={styles.subtitle}>เลี้ยงสัตว์เสมือน 3 มิติที่โตตามยอดขายของคุณ</p>
@@ -154,7 +154,7 @@ export default function PetsPage() {
                 borderRadius: "8px",
                 border: !pet.stageOverride ? "2px solid #ffac33" : "1px solid var(--border-color)",
                 background: !pet.stageOverride ? "rgba(255,172,51,0.15)" : "rgba(var(--surface-rgb),0.05)",
-                color: "#fff",
+                color: "var(--text-primary)",
                 cursor: isBusy ? "wait" : "pointer",
                 fontSize: "13px",
               }}
@@ -172,7 +172,7 @@ export default function PetsPage() {
                   borderRadius: "8px",
                   border: pet.stageOverride === s ? "2px solid #ffac33" : "1px solid var(--border-color)",
                   background: pet.stageOverride === s ? "rgba(255,172,51,0.15)" : "rgba(var(--surface-rgb),0.05)",
-                  color: "#fff",
+                  color: "var(--text-primary)",
                   cursor: isBusy ? "wait" : "pointer",
                   fontSize: "13px",
                 }}
@@ -196,7 +196,7 @@ export default function PetsPage() {
                 type="button"
                 disabled={isBusy}
                 onClick={() => chooseSpecies(s.code)}
-                style={{ padding: "16px", borderRadius: "12px", background: "rgba(var(--surface-rgb),0.05)", border: "1px solid var(--border-color)", color: "#fff", cursor: isBusy ? "wait" : "pointer", textAlign: "center" }}
+                style={{ padding: "16px", borderRadius: "12px", background: "rgba(var(--surface-rgb),0.05)", border: "1px solid var(--border-color)", color: "var(--text-primary)", cursor: isBusy ? "wait" : "pointer", textAlign: "center" }}
               >
                 <Pet3D species={s.code} stage="baby" size={140} />
                 <div style={{ marginTop: "8px", fontSize: "14px" }}>{s.label}</div>
@@ -215,7 +215,7 @@ export default function PetsPage() {
             <button
               type="button"
               onClick={() => setIsPickerOpen(true)}
-              style={{ padding: "10px 20px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.08)", border: "1px solid var(--border-color)", color: "#fff", cursor: "pointer", fontSize: "13px" }}
+              style={{ padding: "10px 20px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.08)", border: "1px solid var(--border-color)", color: "var(--text-primary)", cursor: "pointer", fontSize: "13px" }}
             >
               🔄 เปลี่ยนสัตว์เลี้ยง
             </button>
@@ -228,7 +228,7 @@ export default function PetsPage() {
           <div style={{ background: "var(--modal-bg)", width: "100%", maxWidth: "560px", maxHeight: "80vh", borderRadius: "12px", padding: "24px", border: "1px solid var(--border-color)", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
               <h2 style={{ fontSize: "18px", fontWeight: "bold" }}>เปลี่ยนสัตว์เลี้ยง</h2>
-              <button onClick={() => setIsPickerOpen(false)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: "20px" }}>✕</button>
+              <button onClick={() => setIsPickerOpen(false)} style={{ background: "none", border: "none", color: "var(--text-primary)", cursor: "pointer", fontSize: "20px" }}>✕</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "12px" }}>
               {Object.values(SPECIES).map((s) => (
@@ -242,7 +242,7 @@ export default function PetsPage() {
                     borderRadius: "10px",
                     background: pet?.species === s.code ? "rgba(88,166,255,0.15)" : "rgba(var(--surface-rgb),0.05)",
                     border: pet?.species === s.code ? "2px solid var(--accent-blue)" : "1px solid var(--border-color)",
-                    color: "#fff",
+                    color: "var(--text-primary)",
                     cursor: isBusy ? "wait" : "pointer",
                     textAlign: "center",
                   }}
