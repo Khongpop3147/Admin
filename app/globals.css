@@ -195,6 +195,16 @@
   margin: 0;
 }
 
+/* A native <select> popup renders with the OS/browser's own light popup
+   background in most browsers, ignoring the page's dark mode — an <option>
+   left to inherit `color: var(--text-primary)` (light gray in dark mode)
+   goes invisible against that native white list. Force option text dark
+   app-wide here instead of hand-adding a per-option override at every call
+   site (a few already do inline, which just wins redundantly over this). */
+option {
+  color: #000;
+}
+
 body {
   background-color: var(--bg-color);
   color: var(--text-primary);
