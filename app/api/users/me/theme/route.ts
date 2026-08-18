@@ -15,7 +15,7 @@ if (globalForPrisma.prisma) {
 }
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-const VALID_THEMES = new Set(["purple", "green", "orange"]);
+const VALID_THEMES = new Set(["purple", "green", "orange", "blood"]);
 const VALID_MODES = new Set(["light"]);
 
 // Self-service, unlike every other User field an admin doesn't manage

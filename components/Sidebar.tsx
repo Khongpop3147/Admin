@@ -25,6 +25,7 @@ const THEME_OPTIONS: { key: string | null; label: string; color: string }[] = [
   { key: "purple", label: "ม่วง", color: "#a371f7" },
   { key: "green", label: "เขียว", color: "#2dd4bf" },
   { key: "orange", label: "ส้ม", color: "#f0883e" },
+  { key: "blood", label: "เลือดหมู", color: "#d9636c" },
 ];
 
 interface SidebarProps {

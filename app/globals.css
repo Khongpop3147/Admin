@@ -163,6 +163,32 @@
   --input-bg: rgba(188, 76, 0, 0.04);
 }
 
+/* Deliberately dustier/browner than --danger-color (bright red) so an
+   active nav item or button in this theme never reads as an error state. */
+[data-theme="blood"] {
+  --accent-color: #d9636c;
+  --accent-hover: #c14a53;
+  --accent-glow: rgba(217, 99, 108, 0.4);
+  --accent-blue: #d9636c;
+  --accent-blue-rgb: 217, 99, 108;
+  --bg-color: #150c0d;
+  --bg-secondary: #2b1a1c;
+  --panel-bg: rgba(35, 20, 22, 0.6);
+  --input-bg: rgba(21, 12, 13, 0.3);
+}
+
+[data-mode="light"][data-theme="blood"] {
+  --accent-color: #9a2a33;
+  --accent-hover: #7a1f27;
+  --accent-glow: rgba(154, 42, 51, 0.25);
+  --accent-blue: #9a2a33;
+  --accent-blue-rgb: 154, 42, 51;
+  --bg-color: #fff8f7;
+  --bg-secondary: #fceeed;
+  --panel-bg: rgba(255, 255, 255, 0.75);
+  --input-bg: rgba(154, 42, 51, 0.04);
+}
+
 * {
   box-sizing: border-box;
   padding: 0;
