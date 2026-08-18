@@ -205,6 +205,19 @@ option {
   color: #000;
 }
 
+/* Native <input type="date">'s calendar-icon glyph defaults to a dark
+   graphic in Chromium/WebKit browsers — invisible against this app's
+   near-black input backgrounds in dark mode. Invert it there; light mode's
+   input background is light enough that the default dark icon already
+   reads fine, so it's left alone. */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+[data-mode="light"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
 body {
   background-color: var(--bg-color);
   color: var(--text-primary);
