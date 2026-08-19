@@ -541,6 +541,24 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     });
   };
 
+  // Switches "คลังหมูของฉัน" to browse a specific product's stock — reuses
+  // an existing line already on that product if there is one, otherwise
+  // adds one (an empty, weightless line gets dropped from the order
+  // automatically at submit time — see itemsToSubmit's own filter — so
+  // just browsing a product with no intent to actually add it never
+  // pollutes the order). Lets an admin check every product's stock levels
+  // without first needing to commit an "เพิ่มสินค้าอีกชนิด" line for it.
+  const selectPanelProductType = (productType: string) => {
+    const existingIndex = items.findIndex(it => it.productType === productType);
+    if (existingIndex !== -1) {
+      setSidePanelTargetIndex(existingIndex);
+      return;
+    }
+    const newIndex = items.length;
+    setItems(prev => [...prev, makeDefaultLineItem(productType)]);
+    setSidePanelTargetIndex(newIndex);
+  };
+
   const removeLineItem = (index: number) => {
     setItems(prev => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
     setSidePanelTargetIndex(prev => Math.max(0, prev >= index ? prev - 1 : prev));
@@ -1838,28 +1856,31 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
               {mode === "normal" && <PetCorner />}
               <h2 className={styles.cardTitle} style={{ marginBottom: '16px', fontSize: '1.2rem' }}>📦 คลังหมูของฉัน</h2>
 
-              {!useSimplifiedPicker && items.length > 1 && (
+              {!useSimplifiedPicker && (
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                  {items.map((it, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setSidePanelTargetIndex(i)}
-                      style={{
-                        flex: 1,
-                        background: targetIndex === i ? 'var(--accent-blue)' : 'rgba(var(--surface-rgb),0.06)',
-                        color: targetIndex === i ? '#fff' : 'var(--text-secondary)',
-                        border: targetIndex === i ? 'none' : '1px solid var(--border-color)',
-                        borderRadius: '8px',
-                        padding: '8px 10px',
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: 'bold',
-                      }}
-                    >
-                      {PRODUCT_TYPES[it.productType]?.label || it.productType}
-                    </button>
-                  ))}
+                  {Object.keys(PRODUCT_TYPES).map((productType) => {
+                    const isTarget = targetProductType === productType;
+                    return (
+                      <button
+                        key={productType}
+                        type="button"
+                        onClick={() => selectPanelProductType(productType)}
+                        style={{
+                          flex: 1,
+                          background: isTarget ? 'var(--accent-blue)' : 'rgba(var(--surface-rgb),0.06)',
+                          color: isTarget ? '#fff' : 'var(--text-secondary)',
+                          border: isTarget ? 'none' : '1px solid var(--border-color)',
+                          borderRadius: '8px',
+                          padding: '8px 10px',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        {PRODUCT_TYPES[productType]?.label || productType}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
