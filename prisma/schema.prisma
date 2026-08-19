@@ -57,6 +57,12 @@ model Order {
   rackDetails           String?
   sellerName            String?
   trackingNumber        String?
+  // When trackingNumber last actually changed value (set/replaced) — not
+  // bumped on every edit, only when this specific field's value differs
+  // from what it was. Null until the first tracking number is ever set.
+  // Lets "ships today but tracking got entered on a different day" become
+  // a real query instead of eyeballing an unrelated note field.
+  trackingSetAt         DateTime?
   adminNote             String?
   // Piece count per physical box (box 2, 3, ...), each an array of indices
   // into rackDetails identifying which specific pork pieces go in that box.

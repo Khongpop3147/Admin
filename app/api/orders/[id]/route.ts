@@ -82,7 +82,10 @@ export async function PATCH(
     // Allow updating orderStatus, trackingNumber, or adminNote
     const updateData: any = {};
     if (body.orderStatus !== undefined) updateData.orderStatus = body.orderStatus;
-    if (body.trackingNumber !== undefined) updateData.trackingNumber = body.trackingNumber;
+    if (body.trackingNumber !== undefined && body.trackingNumber !== existingOrder.trackingNumber) {
+      updateData.trackingNumber = body.trackingNumber;
+      updateData.trackingSetAt = new Date();
+    }
     if (body.adminNote !== undefined) updateData.adminNote = body.adminNote;
     if (body.customerName !== undefined) updateData.customerName = body.customerName;
     if (body.customerAddress !== undefined) updateData.customerAddress = body.customerAddress;

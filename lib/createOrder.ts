@@ -103,6 +103,7 @@ export async function createOrderRecord(tx: any, input: CreateOrderInput) {
       rackDetails: input.rackDetails,
       sellerName: input.sellerName,
       trackingNumber: input.trackingNumber,
+      trackingSetAt: input.trackingNumber ? new Date() : null,
       adminNote: input.adminNote,
       isClaim: !!input.isClaim,
       entryDate: dateKey,

@@ -205,6 +205,7 @@ export async function PATCH(request: Request) {
         where: { id: orderId },
         data: {
           trackingNumber: entry.trackingNumbers.join(','),
+          trackingSetAt: new Date(),
           orderStatus: 'Shipped', // Automatically change status to Shipped
           ...(adminNote !== undefined ? { adminNote } : {}),
         }
