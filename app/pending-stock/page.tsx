@@ -1024,7 +1024,6 @@ export default function PendingStockPage() {
                         </div>
                         <div style={{ fontSize: "12px", color: "var(--accent-blue)", fontWeight: "bold", marginTop: "2px" }}>
                           📅 วันที่ลง order: {formatDateOnly(entry.createdAt)}
-                          {entry.expectedShipDate && ` · คาดว่าจะส่ง: ${formatShipDateOnly(entry.expectedShipDate)}`}
                         </div>
                         <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "6px" }}>
                           {entry.items.map((it, i) => (
@@ -1061,6 +1060,11 @@ export default function PendingStockPage() {
                             </span>
                           ))}
                         </div>
+                        {entry.expectedShipDate && (
+                          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                            🚚 คาดว่าจะส่ง: {formatShipDateOnly(entry.expectedShipDate)}
+                          </div>
+                        )}
                       </div>
                       <div style={{ display: "flex", gap: "8px" }}>
                         <button
