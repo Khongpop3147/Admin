@@ -36,30 +36,43 @@ export async function PATCH(request: Request) {
 
     // We fetch all orders that are either Pending or Packed (orderStatus is
     // normally '' rather than null for a fresh order, but treat null the same
-    // way so this doesn't silently skip a record either way). Scoped to the
-    // given entryDate when provided — the Packing date currently being
-    // worked on — so a same-named customer from a different still-open day
-    // can't get matched by mistake; without it, falls back to searching
-    // every open order regardless of date (old behavior).
+    // way so this doesn't silently skip a record either way).
+    const baseWhere = {
+      OR: [
+        { orderStatus: { in: ['Pending', 'Packed', ''] } },
+        { orderStatus: null },
+      ],
+    };
+    const platformWhere = {
+      OR: [
+        { platform: { not: 'Storefront' } },
+        { platform: null },
+      ],
+    };
+
+    // Preferred pool: scoped to the given entryDate — the Packing date
+    // currently being worked on — so a same-named customer from a different
+    // still-open day is tried first and normally matches without any note.
     const activeOrders = await prisma.order.findMany({
-      where: {
-        AND: [
-          {
-            OR: [
-              { orderStatus: { in: ['Pending', 'Packed', ''] } },
-              { orderStatus: null },
-            ],
-          },
-          {
-            OR: [
-              { platform: { not: 'Storefront' } },
-              { platform: null },
-            ],
-          },
-          ...(entryDate ? [{ entryDate }] : []),
-        ],
-      }
+      where: { AND: [baseWhere, platformWhere, ...(entryDate ? [{ entryDate }] : [])] },
     });
+
+    // Fallback pool: every other still-open order, any date — only queried
+    // when entryDate was actually given (otherwise activeOrders above is
+    // already the unscoped set). Lets a row for an order genuinely entered
+    // under a different day (e.g. packed ahead of schedule, or held back a
+    // day) still get its tracking number without forcing the admin to
+    // change the order's own date first. Same findNameMatch ambiguity guard
+    // applies here too, so a short/generic name still refuses to guess —
+    // this only widens WHICH orders are considered, not how strictly a name
+    // has to match one of them. A successful fallback match gets a
+    // reviewable note stamped on (see below) instead of silently landing
+    // with no trace of the mismatch.
+    const fallbackOrders = entryDate
+      ? await prisma.order.findMany({
+          where: { AND: [baseWhere, platformWhere, { entryDate: { not: entryDate } }] },
+        })
+      : [];
 
     let successCount = 0;
     let notFoundCount = 0;
@@ -119,17 +132,38 @@ export async function PATCH(request: Request) {
         continue;
       }
 
-      // Find matching order in active orders
+      // Find matching order in active orders (today's date first)
       const activeCandidates = activeOrders.map((o) => ({ id: o.id, name: o.customerName }));
       const result = findNameMatch(update.customerName, activeCandidates);
 
-      if (result.status === "matched") {
-        const matchedOrder = activeOrders.find((o) => o.id === result.id)!;
+      // Not matched today — before giving up, try every other still-open
+      // order regardless of date (see fallbackOrders above). An ambiguous
+      // result on the FIRST pass stays ambiguous rather than escalating to
+      // the wider pool, since that would only make the ambiguity worse.
+      const fallbackCandidates = result.status === "not_found"
+        ? fallbackOrders.map((o) => ({ id: o.id, name: o.customerName }))
+        : [];
+      const fallbackResult = fallbackCandidates.length > 0
+        ? findNameMatch(update.customerName, fallbackCandidates)
+        : null;
+
+      const finalResult = result.status === "matched" ? result : fallbackResult ?? result;
+      const matchedFromFallback = finalResult !== result;
+
+      if (finalResult.status === "matched") {
+        const pool = matchedFromFallback ? fallbackOrders : activeOrders;
+        const matchedOrder = pool.find((o) => o.id === finalResult.id)!;
         const existing = (matchedOrder.trackingNumber || '').trim();
         const seed = existing ? existing.split(',').map((s) => s.trim()).filter(Boolean) : [];
         const mismatchDates = new Set<string>();
         if (update.rowDate && shipDate && update.rowDate !== shipDate) {
           mismatchDates.add(update.rowDate);
+        }
+        // The order itself came from a different day than the one being
+        // imported for right now — flag that too, same note family as the
+        // file-row mismatch above, so it surfaces on HR Manage either way.
+        if (matchedFromFallback && shipDate && matchedOrder.entryDate !== entryDate) {
+          mismatchDates.add(matchedOrder.entryDate);
         }
         matchedByOrderId.set(matchedOrder.id, {
           customerName: matchedOrder.customerName,
@@ -138,14 +172,15 @@ export async function PATCH(request: Request) {
           originalAdminNote: matchedOrder.adminNote,
         });
 
-        // Remove from activeOrders so we don't match it again if there are duplicates
-        const index = activeOrders.findIndex(o => o.id === matchedOrder.id);
+        // Remove from whichever pool it came from so a duplicate row for
+        // the same customer later in this file doesn't match it again.
+        const index = pool.findIndex(o => o.id === matchedOrder.id);
         if (index > -1) {
-          activeOrders.splice(index, 1);
+          pool.splice(index, 1);
         }
 
         successCount++;
-      } else if (result.status === "ambiguous") {
+      } else if (finalResult.status === "ambiguous") {
         ambiguousCount++;
         ambiguousNames.push(update.customerName);
       } else {
