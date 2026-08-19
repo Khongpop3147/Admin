@@ -122,7 +122,7 @@ function urgencyBorderColor(entry: PendingEntry): string | undefined {
 }
 
 export default function PendingStockPage() {
-  const { currentUser, users } = useUser();
+  const { currentUser, users, fetchUsers } = useUser();
   const { settings } = useSettings();
   const [entries, setEntries] = useState<PendingEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -665,6 +665,7 @@ export default function PendingStockPage() {
         return;
       }
       await fetchEntries();
+      await fetchUsers(); // Refresh currentUser.racks so the picker reflects the new remaining weights
     } catch (e) {
       alert("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
     } finally {
