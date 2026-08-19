@@ -7,6 +7,7 @@ import { useSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { isPendingStorefrontMoney, isCodPending, isExcludedFromRevenue, commissionForOrder } from "../../lib/money";
+import { normalizeCustomerName } from "../../lib/nameMatch";
 import styles from "../page.module.css";
 
 interface Order {
@@ -559,6 +560,34 @@ export default function DashboardPage() {
     };
   }, [orders, pendingStockEntries]);
 
+  // Ranks customers within the currently-selected range/admin filter (same
+  // `orders` stats above reads) by order count and by total kg. Grouped by
+  // normalizeCustomerName (strips "คุณ " prefix + whitespace + casing) only
+  // — deliberately NOT the fuzzy substring matching findNameMatch also does
+  // for tracking-import, since that would wrongly merge distinct customers
+  // whose names happen to overlap (e.g. "ชาย" and "สมชาย" are different
+  // people, not the same one typed two ways). A returned/claimed order is
+  // excluded, same rule the revenue stats above already apply — it isn't
+  // really this customer buying more.
+  const topCustomers = useMemo(() => {
+    const byKey = new Map<string, { displayName: string; orderCount: number; totalWeight: number }>();
+    for (const o of orders) {
+      if (!o.customerName || isExcludedFromRevenue(o)) continue;
+      const key = normalizeCustomerName(o.customerName);
+      if (!key) continue;
+      const entry = byKey.get(key) || { displayName: o.customerName.trim(), orderCount: 0, totalWeight: 0 };
+      entry.orderCount += 1;
+      entry.totalWeight += parseFloat(o.crispyPorkWeight || "0") || 0;
+      byKey.set(key, entry);
+    }
+    const all = Array.from(byKey.values());
+    const TOP_N = 5;
+    return {
+      byOrderCount: [...all].sort((a, b) => b.orderCount - a.orderCount).slice(0, TOP_N),
+      byWeight: [...all].sort((a, b) => b.totalWeight - a.totalWeight).slice(0, TOP_N),
+    };
+  }, [orders]);
+
   // How many sales already counted above got reversed within this window —
   // either a still-waiting "ลูกค้ารอหมู" entry deleted before it ever shipped
   // (DELETE /api/pending-stock/[id]) or a real Order deleted from Packing
@@ -927,6 +956,36 @@ export default function DashboardPage() {
               <StatusPill label="เสร็จสิ้น" count={stats.statusCounts.Completed} color="#3fb950" />
             </div>
           </div>
+
+          {(topCustomers.byOrderCount.length > 0 || topCustomers.byWeight.length > 0) && (
+            <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "24px" }}>
+              <h3 style={{ fontSize: "15px", marginBottom: "16px", color: "var(--text-secondary)" }}>ลูกค้าประจำ (ตามช่วงเวลาที่เลือกด้านบน)</h3>
+              <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 260px", minWidth: "220px" }}>
+                  <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>🔁 สั่งบ่อยที่สุด</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {topCustomers.byOrderCount.map((c, i) => (
+                      <div key={c.displayName + i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.04)" }}>
+                        <span style={{ fontSize: "13px" }}>{i + 1}. {c.displayName}</span>
+                        <span style={{ fontSize: "13px", fontWeight: "bold", color: "var(--accent-blue)" }}>{c.orderCount} ครั้ง</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ flex: "1 1 260px", minWidth: "220px" }}>
+                  <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>🐷 สั่งเยอะที่สุด (กก.)</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {topCustomers.byWeight.map((c, i) => (
+                      <div key={c.displayName + i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.04)" }}>
+                        <span style={{ fontSize: "13px" }}>{i + 1}. {c.displayName}</span>
+                        <span style={{ fontSize: "13px", fontWeight: "bold", color: "var(--accent-green)" }}>{c.totalWeight.toFixed(2)} กก.</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "24px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
