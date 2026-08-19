@@ -768,15 +768,6 @@ export default function PendingStockPage() {
           <p style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" }}>ไม่ใส่ = วันนี้ — แก้ได้ถ้าลงย้อนหลัง</p>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>วันที่คาดว่าจะส่ง (ถ้ามี)</label>
-          <input
-            type="date"
-            value={customer.expectedShipDate}
-            onChange={(e) => setCustomer((p) => ({ ...p, expectedShipDate: e.target.value }))}
-            className={styles.input}
-          />
-        </div>
-        <div className={styles.formGroup}>
           <label className={styles.label}>ช่องทางการขาย <span style={{ color: "#ff6b6b" }}>*</span></label>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {PLATFORM_OPTIONS.map((opt) => (
@@ -964,6 +955,15 @@ export default function PendingStockPage() {
         )}
 
         <div className={styles.formGroup} style={{ marginTop: "20px" }}>
+          <label className={styles.label}>วันที่คาดว่าจะส่ง (ถ้ามี)</label>
+          <input
+            type="date"
+            value={customer.expectedShipDate}
+            onChange={(e) => setCustomer((p) => ({ ...p, expectedShipDate: e.target.value }))}
+            className={styles.input}
+          />
+        </div>
+        <div className={styles.formGroup}>
           <label className={styles.label}>หมายเหตุ (ถ้ามี)</label>
           <input type="text" value={customer.note} onChange={(e) => setCustomer((p) => ({ ...p, note: e.target.value }))} className={styles.input} placeholder="เช่น นัดรับ, เงื่อนไขพิเศษ" />
         </div>
@@ -1084,7 +1084,7 @@ export default function PendingStockPage() {
                           ))}
                         </div>
                         {entry.expectedShipDate && (
-                          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                          <div style={{ fontSize: "12px", color: "var(--accent-blue)", fontWeight: "bold" }}>
                             🚚 คาดว่าจะส่ง: {formatShipDateOnly(entry.expectedShipDate)}
                           </div>
                         )}

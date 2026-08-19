@@ -26,6 +26,16 @@ interface DraftRack {
   selected?: boolean;
 }
 
+// A plain "YYYY-MM-DD" (no time component) — format directly from the
+// string parts (Buddhist year, DD/MM/YY) rather than going through
+// Date/toLocaleDateString, which would risk an off-by-one from timezone
+// conversion. Same helper app/pending-stock/page.tsx's own
+// formatShipDateOnly is, kept local since neither page exports it.
+function formatShipDateOnly(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${String((y + 543) % 100).padStart(2, "0")}`;
+}
+
 function ActionCard({ icon, title, subtitle, accent, badge, onClick }: { icon: string; title: string; subtitle: string; accent: string; badge?: string; onClick: () => void }) {
   return (
     <button
@@ -411,6 +421,38 @@ export default function RacksPage() {
       })
       .sort((a, b) => b.weight - a.weight);
   }, [shortageByAdmin, users]);
+
+  // Every still-waiting "ลูกค้ารอหมู" entry (any admin) that has an expected
+  // ship date set — grouped by admin + date, summed to kg of the currently-
+  // selected product, same scoping shortageByAdmin above already uses.
+  // Surfaced so a Super Admin can see at a glance who's on the hook to ship
+  // how much on which day, without opening each admin's own waiting list.
+  const expectedShipByAdminDate = useMemo(() => {
+    // Nested by admin then date (rather than a joined string key) so a real
+    // name/username containing a space can't corrupt the grouping.
+    const map = new Map<string, Map<string, number>>();
+    for (const entry of pendingStockEntries) {
+      if (entry.fulfilledAt || !entry.createdBy || !entry.expectedShipDate) continue;
+      const items = Array.isArray(entry.items) ? entry.items : [];
+      let weight = 0;
+      for (const item of items) {
+        if (item?.productType !== selectedProduct) continue;
+        weight += Number(item?.weightKg) || 0;
+      }
+      if (weight <= 0) continue;
+      const byDate = map.get(entry.createdBy) || new Map<string, number>();
+      byDate.set(entry.expectedShipDate, (byDate.get(entry.expectedShipDate) || 0) + weight);
+      map.set(entry.createdBy, byDate);
+    }
+    const rows: { name: string; date: string; weight: number }[] = [];
+    for (const [realName, byDate] of map.entries()) {
+      const u = users.find((usr) => usr.name === realName);
+      for (const [date, weight] of byDate.entries()) {
+        rows.push({ name: u?.nickname || realName, date, weight });
+      }
+    }
+    return rows.sort((a, b) => a.date.localeCompare(b.date) || b.weight - a.weight);
+  }, [pendingStockEntries, selectedProduct, users]);
 
   const handleSelectDistributeRange = () => {
     if (!productCentralRacks.length || !distributeStartRack || !distributeEndRack) return;
@@ -983,6 +1025,24 @@ export default function RacksPage() {
           onClick={() => setIsDeletedLogModalOpen(true)}
         />
       </div>
+
+      {expectedShipByAdminDate.length > 0 && (
+        <div className="glass-panel" style={{ padding: '20px 24px', borderRadius: '16px', marginTop: '16px' }}>
+          <h3 style={{ fontSize: '15px', marginBottom: '4px', color: 'var(--text-secondary)' }}>🚚 คาดว่าจะส่ง (จากลูกค้ารอหมู)</h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '16px' }}>แต่ละแอดมินมีหมูกรอบที่ลูกค้าคาดว่าจะได้รับวันไหน กี่โล</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {expectedShipByAdminDate.map((row, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: '8px', background: 'rgba(var(--surface-rgb),0.04)' }}>
+                <span style={{ fontSize: '13px' }}>
+                  <span style={{ color: 'var(--accent-blue)', fontWeight: 'bold' }}>{formatShipDateOnly(row.date)}</span>
+                  {' · '}👤 {row.name}
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--accent-green)' }}>{row.weight.toFixed(2)} กก.</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Batch Assign Modal */}
       {isBatchModalOpen && (
