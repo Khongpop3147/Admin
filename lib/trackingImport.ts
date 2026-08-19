@@ -100,3 +100,21 @@ const TRACK_DATE_MISMATCH_RE = /\[Track วันที่ [\d-]+ ไม่ต�
 export function hasTrackDateMismatchNote(adminNote: string | null | undefined): boolean {
   return !!adminNote && TRACK_DATE_MISMATCH_RE.test(adminNote);
 }
+
+// findNameMatch's substring mode is deliberately forgiving (a courier
+// export missing a surname, using a nickname) — but a lone substring match
+// is still a real risk of attaching a tracking number to the wrong
+// customer (e.g. a courier row just says "ชาย" and the only open order
+// happens to be "สมชาย ใจดี" — genuinely two different people, but nothing
+// else to disambiguate against). Rather than blocking the import (which
+// would break the legitimate cases this tolerance exists for), stamp a
+// reviewable note so it surfaces on HR Manage instead of matching silently.
+export function buildFuzzyNameMatchNote(courierName: string, matchedName: string): string {
+  return `[Track จับคู่ชื่อไม่เป๊ะ: "${courierName}" → "${matchedName}" กรุณาตรวจสอบ]`;
+}
+
+const FUZZY_NAME_MATCH_RE = /\[Track จับคู่ชื่อไม่เป๊ะ: .+? กรุณาตรวจสอบ\]/;
+
+export function hasFuzzyNameMatchNote(adminNote: string | null | undefined): boolean {
+  return !!adminNote && FUZZY_NAME_MATCH_RE.test(adminNote);
+}

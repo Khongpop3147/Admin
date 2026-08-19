@@ -8,7 +8,12 @@ export interface NameCandidate {
 }
 
 export type NameMatchResult =
-  | { status: "matched"; id: string }
+  // matchType lets a caller treat a substring match with extra caution (e.g.
+  // stamp a reviewable note) without re-deriving whether it was exact —
+  // "ชาย" matching "สมชาย ใจดี" as the sole open candidate is a confident,
+  // silent "matched" today even though it's a real risk of attaching a
+  // tracking number to the wrong customer; exact still needs no caveat.
+  | { status: "matched"; id: string; matchType: "exact" | "substring" }
   | { status: "not_found" }
   // More than one candidate matched — refuse to guess. Silently picking
   // "whichever came first" is exactly the bug this type exists to prevent:
@@ -37,7 +42,7 @@ export function findNameMatch(rawExcelName: string, candidates: NameCandidate[])
   // checked before any substring logic, so a real short name (if it exactly
   // matches) still works.
   const exact = candidates.filter((c) => normalizeCustomerName(c.name) === excelName);
-  if (exact.length === 1) return { status: "matched", id: exact[0].id };
+  if (exact.length === 1) return { status: "matched", id: exact[0].id, matchType: "exact" };
   if (exact.length > 1) return { status: "ambiguous", candidateIds: exact.map((c) => c.id) };
 
   if (excelName.length < MIN_SUBSTRING_MATCH_LENGTH) return { status: "not_found" };
@@ -50,7 +55,7 @@ export function findNameMatch(rawExcelName: string, candidates: NameCandidate[])
     if (name.length < MIN_SUBSTRING_MATCH_LENGTH) return false;
     return name.includes(excelName) || excelName.includes(name);
   });
-  if (substring.length === 1) return { status: "matched", id: substring[0].id };
+  if (substring.length === 1) return { status: "matched", id: substring[0].id, matchType: "substring" };
   if (substring.length > 1) return { status: "ambiguous", candidateIds: substring.map((c) => c.id) };
 
   return { status: "not_found" };
