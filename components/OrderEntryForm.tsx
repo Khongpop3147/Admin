@@ -1954,7 +1954,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                               }}
                               title={isAdded ? "กดอีกครั้งเพื่อเอาออกจากออเดอร์" : "กดเพื่อเพิ่มชิ้นนี้เข้าออเดอร์"}
                             >
-                              <span style={{ fontSize: '14px', color: '#ddd' }}>
+                              <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
                                 {useSimplifiedPicker ? '🐷 หมู 1 ชิ้น' : `ถาด ${getBaseRackKeyAuto(p.rackNo || '')}${p.rackNo?.includes('-') ? ` • ${p.rackNo}` : ''}`}
                                 {isAdded && <span style={{ marginLeft: '8px', color: 'var(--accent-blue)' }}>✓ เลือกแล้ว</span>}
                                 {!isAdded && isClose && <span style={{ marginLeft: '8px', color: 'var(--accent-green)' }}>✓ ใกล้เคียงมาก</span>}
@@ -1994,7 +1994,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                             <div>
                               {sortedPieces.map((p: any, idx: number) => (
                                 <div key={p.rackNo || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: idx === 0 ? 'none' : '1px solid rgba(var(--surface-rgb),0.05)' }}>
-                                  <span style={{ fontSize: '14px', color: '#ddd' }}>{p.rackNo || 'ไม่ทราบ'}</span>
+                                  <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{p.rackNo || 'ไม่ทราบ'}</span>
                                   <span style={{ fontSize: '14px', color: 'var(--accent-green)', fontWeight: 'bold' }}>{p.remainingWeight} กก.</span>
                                 </div>
                               ))}

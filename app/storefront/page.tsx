@@ -367,7 +367,7 @@ export default function StorefrontPage() {
                         border: `1px solid ${isAdded ? "var(--accent-blue)" : isClose ? "rgba(63,185,80,0.5)" : "rgba(var(--surface-rgb),0.08)"}`,
                       }}
                     >
-                      <span style={{ fontSize: "14px", color: "#ddd" }}>
+                      <span style={{ fontSize: "14px", color: "var(--text-primary)" }}>
                         🐷 หมู 1 ชิ้น
                         {isAdded && <span style={{ marginLeft: "8px", color: "var(--accent-blue)" }}>✓ เลือกแล้ว</span>}
                         {!isAdded && isClose && <span style={{ marginLeft: "8px", color: "var(--accent-green)" }}>✓ ใกล้เคียงมาก</span>}
