@@ -21,6 +21,13 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export const dynamic = "force-dynamic";
 
+const ENTRY_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function todayBangkokDateKey(): string {
+  const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // Newest first — the client splits this single list into an "unfulfilled"
 // section (customers still owed pork) and a "fulfilled" history section
 // underneath, both already in the right order for their own display.
@@ -40,11 +47,11 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const adminParam = searchParams.get("admin");
-    // dateFrom/dateTo (YYYY-MM-DD) scope by createdAt's Bangkok calendar
-    // day — used by Dashboard to total up a date range's worth of
-    // still-waiting entries. PendingStock has no separate entryDate/
-    // backdating field the way Order does, so createdAt's own calendar day
-    // IS "the day this was logged," no conversion needed.
+    // dateFrom/dateTo (YYYY-MM-DD) scope by entryDate — used by Dashboard to
+    // total up a date range's worth of still-waiting entries, same
+    // "entryDate is the day this counts as" rule Order already follows. A
+    // row from before entryDate existed (null) falls back to createdAt's
+    // own Bangkok calendar day instead.
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
 
@@ -55,10 +62,18 @@ export async function GET(req: Request) {
       whereClause.createdBy = session.name;
     }
     if (dateFrom || dateTo) {
-      whereClause.createdAt = {
+      const entryDateRange = {
+        ...(dateFrom ? { gte: dateFrom } : {}),
+        ...(dateTo ? { lte: dateTo } : {}),
+      };
+      const createdAtRange = {
         ...(dateFrom ? { gte: new Date(`${dateFrom}T00:00:00+07:00`) } : {}),
         ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999+07:00`) } : {}),
       };
+      whereClause.OR = [
+        { entryDate: entryDateRange },
+        { entryDate: null, createdAt: createdAtRange },
+      ];
     }
 
     const entries = await prisma.pendingStock.findMany({ where: whereClause, orderBy: { createdAt: "desc" } });
@@ -92,6 +107,7 @@ export async function POST(req: Request) {
       transferSlip,
       extraSlipUrls,
       expectedShipDate,
+      entryDate,
       note,
       bypassDuplicateCheck,
     } = await req.json();
@@ -194,6 +210,7 @@ export async function POST(req: Request) {
         transferSlip: typeof transferSlip === "string" && transferSlip ? transferSlip : null,
         extraSlipUrls: Array.isArray(extraSlipUrls) ? extraSlipUrls.filter((u: any) => typeof u === "string" && u.trim()) : [],
         expectedShipDate: typeof expectedShipDate === "string" && expectedShipDate ? expectedShipDate : null,
+        entryDate: typeof entryDate === "string" && ENTRY_DATE_RE.test(entryDate) ? entryDate : todayBangkokDateKey(),
         note: typeof note === "string" && note.trim() ? note.trim() : null,
         createdBy: session.name,
       },

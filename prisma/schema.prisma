@@ -332,4 +332,12 @@ model PendingStock {
   // belongs to a real order, so it's left alone.
   orderId      String?
   createdAt    DateTime  @default(now())
+  // The Bangkok-local "YYYY-MM-DD" this entry counts as logged on — same
+  // "entryDate vs createdAt" split Order already has, so an admin can
+  // backdate an entry they're only getting around to logging late. Set at
+  // creation (defaults to today when not given) and editable afterward.
+  // Nullable only because it didn't exist before this field was added —
+  // every row from here on always gets a value; a null one falls back to
+  // createdAt's own calendar day wherever this is read.
+  entryDate    String?
 }

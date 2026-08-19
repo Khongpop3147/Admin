@@ -17,6 +17,8 @@ if (globalForPrisma.prisma) {
 }
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
+const ENTRY_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 // Edits a still-waiting entry (customer info, items, shipping/COD, slip,
 // note, expected ship date) — only while it hasn't been sent to packing
 // yet; once fulfilled, the real Order (viewable via "ดูข้อมูล order") is
@@ -57,6 +59,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       transferSlip,
       extraSlipUrls,
       expectedShipDate,
+      entryDate,
       note,
     } = await req.json();
 
@@ -134,6 +137,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           transferSlip: typeof transferSlip === "string" && transferSlip ? transferSlip : null,
           extraSlipUrls: Array.isArray(extraSlipUrls) ? extraSlipUrls.filter((u: any) => typeof u === "string" && u.trim()) : [],
           expectedShipDate: typeof expectedShipDate === "string" && expectedShipDate ? expectedShipDate : null,
+          entryDate: typeof entryDate === "string" && ENTRY_DATE_RE.test(entryDate) ? entryDate : entry.entryDate,
           note: typeof note === "string" && note.trim() ? note.trim() : null,
         },
       });

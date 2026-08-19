@@ -27,12 +27,14 @@ function bangkokDateKey(date: Date): string {
 // Converts a WHOLE "ลูกค้ารอหมู" waiting entry into one real Order in a
 // single click — every line item needs its own stock already assigned (see
 // assign-stock/route.ts) before this is allowed; there is no per-line
-// sending. entryDate is deliberately backdated to the day the customer
-// originally paid (so Order Details/Dashboard show the real sale date), but
-// packingEntryDate overrides which day Packing sees it on — the day stock
-// actually got assigned, which can be many days later. Shipping cost/total
-// carry over from the entry as-is, since this is still one shipment, one
-// order.
+// sending. entryDate carries over from the entry's own entryDate (the day
+// the customer originally paid, possibly backdated by an admin logging it
+// late — falls back to createdAt's calendar day for an entry from before
+// that field existed), so Order Details/Dashboard show the real sale date,
+// but packingEntryDate overrides which day Packing sees it on — the day
+// stock actually got assigned, which can be many days later. Shipping
+// cost/total carry over from the entry as-is, since this is still one
+// shipment, one order.
 //
 // shipToday (optional, default false) picks WHICH day it shows up in
 // Packing — the app-wide convention is "logged today, packed tomorrow"
@@ -101,7 +103,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         rackDetails: JSON.stringify(allPieces),
         sellerName: entry.createdBy,
         adminNote: combinedNote,
-        entryDate: bangkokDateKey(entry.createdAt),
+        entryDate: entry.entryDate || bangkokDateKey(entry.createdAt),
         packingEntryDate: shipToday ? previousDayStr(bangkokDateKey(new Date())) : bangkokDateKey(new Date()),
         items: items.map((it) => ({
           productType: it.productType,

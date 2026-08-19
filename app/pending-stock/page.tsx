@@ -45,6 +45,7 @@ interface PendingEntry {
   transferSlip: string | null;
   extraSlipUrls: string[];
   expectedShipDate: string | null;
+  entryDate: string | null;
   note: string | null;
   createdBy: string | null;
   fulfilledAt: string | null;
@@ -66,8 +67,15 @@ const EMPTY_CUSTOMER = {
   customerZip: "",
   needsTaxInvoice: false,
   expectedShipDate: "",
+  entryDate: "",
   note: "",
 };
+
+// Today's Bangkok-local date — the default the "วันที่ลง order" field
+// starts on (an admin only needs to touch it when backdating).
+function todayEntryDate(): string {
+  return bangkokDateKey(new Date().toISOString());
+}
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("th-TH", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -114,7 +122,11 @@ function hasAllStockAssigned(items: PendingItem[]): boolean {
 // separate "ส่งไป packing" click.
 function urgencyBorderColor(entry: PendingEntry): string | undefined {
   if (hasAnyStockAssigned(entry.items)) return undefined;
-  const daysWaiting = (Date.now() - new Date(entry.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+  // Measured from entryDate (backdatable) when set, not createdAt — a
+  // customer logged today but backdated to 5 days ago should read as
+  // urgent immediately, not restart the clock from today.
+  const since = entry.entryDate ? new Date(`${entry.entryDate}T00:00:00+07:00`).getTime() : new Date(entry.createdAt).getTime();
+  const daysWaiting = (Date.now() - since) / (1000 * 60 * 60 * 24);
   if (daysWaiting >= 7) return "#ff6b6b";
   if (daysWaiting >= 4) return "#ff9f43";
   if (daysWaiting >= 3) return "#ffd23f";
@@ -155,7 +167,7 @@ export default function PendingStockPage() {
   // one's data is history now, not editable (see PATCH /api/pending-stock/[id]).
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
-  const [customer, setCustomer] = useState(EMPTY_CUSTOMER);
+  const [customer, setCustomer] = useState(() => ({ ...EMPTY_CUSTOMER, entryDate: todayEntryDate() }));
   const [items, setItems] = useState<ItemDraft[]>([{ productType: DEFAULT_PRODUCT_TYPE, weightKgStr: "" }]);
   const [shippingMethod, setShippingMethod] = useState("");
   const [additionalShippingCostStr, setAdditionalShippingCostStr] = useState("");
@@ -416,7 +428,7 @@ export default function PendingStockPage() {
     // Re-fills the admin's own default sales channel immediately (rather
     // than waiting on the currentUser-refresh effect above to refire),
     // since nothing here otherwise refetches currentUser after a save.
-    setCustomer({ ...EMPTY_CUSTOMER, platform: currentUser?.defaultPlatform || "" });
+    setCustomer({ ...EMPTY_CUSTOMER, platform: currentUser?.defaultPlatform || "", entryDate: todayEntryDate() });
     setItems([{ productType: DEFAULT_PRODUCT_TYPE, weightKgStr: "" }]);
     setShippingMethod("");
     setAdditionalShippingCostStr("");
@@ -445,6 +457,7 @@ export default function PendingStockPage() {
       customerZip: entry.customerZip || "",
       needsTaxInvoice: entry.needsTaxInvoice,
       expectedShipDate: entry.expectedShipDate || "",
+      entryDate: entry.entryDate || bangkokDateKey(entry.createdAt),
       note: entry.note || "",
     });
     setItems(entry.items.map((it) => ({ productType: it.productType, weightKgStr: it.weightKg > 0 ? String(it.weightKg) : "" })));
@@ -676,7 +689,7 @@ export default function PendingStockPage() {
   const normalizedSearch = customerSearch.trim().toLowerCase();
   const pending = entries.filter((e) => {
     if (e.fulfilledAt) return false;
-    if (filterDate && bangkokDateKey(e.createdAt) !== filterDate) return false;
+    if (filterDate && (e.entryDate || bangkokDateKey(e.createdAt)) !== filterDate) return false;
     if (normalizedSearch) {
       const haystack = `${e.customerName} ${e.socialMediaName || ""} ${e.customerPhone || ""}`.toLowerCase();
       if (!haystack.includes(normalizedSearch)) return false;
@@ -743,6 +756,16 @@ export default function PendingStockPage() {
         <div className={styles.formGroup}>
           <label className={styles.label}>ชื่อลูกค้า <span style={{ color: "#ff6b6b" }}>*</span></label>
           <input type="text" value={customer.customerName} onChange={(e) => setCustomer((p) => ({ ...p, customerName: e.target.value }))} className={styles.input} placeholder="ชื่อลูกค้า" />
+        </div>
+        <div className={styles.formGroup}>
+          <label className={styles.label}>วันที่ลง order</label>
+          <input
+            type="date"
+            value={customer.entryDate}
+            onChange={(e) => setCustomer((p) => ({ ...p, entryDate: e.target.value }))}
+            className={styles.input}
+          />
+          <p style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" }}>ไม่ใส่ = วันนี้ — แก้ได้ถ้าลงย้อนหลัง</p>
         </div>
         <div className={styles.formGroup}>
           <label className={styles.label}>วันที่คาดว่าจะส่ง (ถ้ามี)</label>
@@ -1023,7 +1046,7 @@ export default function PendingStockPage() {
                           {(entry.codAmount ?? 0) > 0 && <span style={{ marginLeft: "8px", fontSize: "12px", color: "#ffac33" }}>🔒 COD ฿{formatMoney(entry.codAmount)}</span>}
                         </div>
                         <div style={{ fontSize: "12px", color: "var(--accent-blue)", fontWeight: "bold", marginTop: "2px" }}>
-                          📅 วันที่ลง order: {formatDateOnly(entry.createdAt)}
+                          📅 วันที่ลง order: {entry.entryDate ? formatShipDateOnly(entry.entryDate) : formatDateOnly(entry.createdAt)}
                         </div>
                         <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "6px" }}>
                           {entry.items.map((it, i) => (
@@ -1151,7 +1174,7 @@ export default function PendingStockPage() {
                         {entry.note && ` · ${entry.note}`}
                       </div>
                       <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                        วันที่ลง order: {formatDateOnly(entry.createdAt)} · ส่งไป packing เมื่อ {formatDateTime(entry.fulfilledAt!)}
+                        วันที่ลง order: {entry.entryDate ? formatShipDateOnly(entry.entryDate) : formatDateOnly(entry.createdAt)} · ส่งไป packing เมื่อ {formatDateTime(entry.fulfilledAt!)}
                         {entry.orderId && <span style={{ color: "var(--accent-green)" }}> · กลายเป็น order แล้ว</span>}
                       </div>
                     </div>
