@@ -5,7 +5,7 @@ import { Pool } from "pg";
 import { getSessionUser } from "../../../../lib/session";
 import { isSuperAdminRole } from "../../../../lib/roles";
 import { findNameMatch } from "../../../../lib/nameMatch";
-import { buildTrackDateMismatchNote, buildFuzzyNameMatchNote } from "../../../../lib/trackingImport";
+import { buildTrackDateMismatchNote } from "../../../../lib/trackingImport";
 
 const globalForPrisma = global as unknown as { prisma2: PrismaClient };
 
@@ -77,11 +77,10 @@ export async function PATCH(request: Request) {
     let successCount = 0;
     let notFoundCount = 0;
     const notFoundNames: string[] = [];
-    // A short/generic name (e.g. "มล") can textually match several
-    // unrelated orders ("กมล", "มลคร", ...) — findNameMatch refuses to
-    // guess in that case rather than silently attaching the tracking
-    // number to whichever one happened to come first, so these need a
-    // human to resolve by typing the tracking number in manually.
+    // findNameMatch requires an exact name match (see its own comment) — a
+    // customer name shared by two different open orders is ambiguous
+    // (which one does the courier row belong to?), and needs a human to
+    // resolve by typing the tracking number in manually instead of guessing.
     let ambiguousCount = 0;
     const ambiguousNames: string[] = [];
 
@@ -103,7 +102,7 @@ export async function PATCH(request: Request) {
     // Manage.
     const matchedByOrderId = new Map<
       string,
-      { customerName: string; trackingNumbers: string[]; mismatchDates: Set<string>; fuzzyNotes: Set<string>; originalAdminNote: string | null }
+      { customerName: string; trackingNumbers: string[]; mismatchDates: Set<string>; originalAdminNote: string | null }
     >();
 
     for (const update of updates) {
@@ -122,9 +121,6 @@ export async function PATCH(request: Request) {
         entry.trackingNumbers.push(update.trackingNumber);
         if (update.rowDate && shipDate && update.rowDate !== shipDate) {
           entry.mismatchDates.add(update.rowDate);
-        }
-        if (alreadyMatchedResult.matchType === "substring") {
-          entry.fuzzyNotes.add(buildFuzzyNameMatchNote(update.customerName, entry.customerName));
         }
         successCount++;
         continue;
@@ -168,19 +164,10 @@ export async function PATCH(request: Request) {
         if (matchedFromFallback && shipDate && matchedOrder.entryDate !== entryDate) {
           mismatchDates.add(matchedOrder.entryDate);
         }
-        // A lone substring match (no exact name on file) is a real risk of
-        // attaching this tracking number to the wrong customer — see
-        // buildFuzzyNameMatchNote's own comment for why this isn't just
-        // blocked outright.
-        const fuzzyNotes = new Set<string>();
-        if (finalResult.matchType === "substring") {
-          fuzzyNotes.add(buildFuzzyNameMatchNote(update.customerName, matchedOrder.customerName));
-        }
         matchedByOrderId.set(matchedOrder.id, {
           customerName: matchedOrder.customerName,
           trackingNumbers: [...seed, update.trackingNumber],
           mismatchDates,
-          fuzzyNotes,
           originalAdminNote: matchedOrder.adminNote,
         });
 
@@ -206,10 +193,9 @@ export async function PATCH(request: Request) {
       // rowDate/shipDate pair is already there (e.g. the same file gets
       // re-imported), skip re-appending it, but leave anything already
       // present alone.
-      const newNotes = [
-        ...Array.from(entry.mismatchDates).map((rowDate) => buildTrackDateMismatchNote(rowDate, shipDate)),
-        ...Array.from(entry.fuzzyNotes),
-      ].filter((note) => !(entry.originalAdminNote || "").includes(note));
+      const newNotes = Array.from(entry.mismatchDates)
+        .map((rowDate) => buildTrackDateMismatchNote(rowDate, shipDate))
+        .filter((note) => !(entry.originalAdminNote || "").includes(note));
       const adminNote = newNotes.length > 0
         ? [entry.originalAdminNote, ...newNotes].filter(Boolean).join(" ")
         : undefined;
