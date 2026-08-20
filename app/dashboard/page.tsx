@@ -686,14 +686,10 @@ export default function DashboardPage() {
       return byProduct.get(productType)!;
     };
 
-    let adminPieces = 0;
-    let adminWeight = 0;
     users.forEach((u) => {
       if (u.role === "CENTRAL_INVENTORY") return;
       (u.racks || []).forEach((r) => {
         if (!r.isUsedUp) {
-          adminPieces++;
-          adminWeight += r.remainingWeight || 0;
           const p = ensureProduct(r.productType || DEFAULT_PRODUCT_TYPE);
           p.adminPieces++;
           p.adminWeight += r.remainingWeight || 0;
@@ -701,13 +697,9 @@ export default function DashboardPage() {
       });
     });
 
-    let centralPieces = 0;
-    let centralWeight = 0;
     const centralUser = users.find((u) => u.role === "CENTRAL_INVENTORY");
     (centralUser?.racks || []).forEach((r) => {
       if (!r.isUsedUp) {
-        centralPieces++;
-        centralWeight += r.remainingWeight || 0;
         const p = ensureProduct(r.productType || DEFAULT_PRODUCT_TYPE);
         p.centralPieces++;
         p.centralWeight += r.remainingWeight || 0;
@@ -727,15 +719,7 @@ export default function DashboardPage() {
       }))
       .sort((a, b) => b.weight - a.weight);
 
-    return {
-      adminPieces,
-      adminWeight,
-      centralPieces,
-      centralWeight,
-      totalPieces: adminPieces + centralPieces,
-      totalWeight: adminWeight + centralWeight,
-      byProduct: byProductList,
-    };
+    return { byProduct: byProductList };
   }, [isSuperAdmin, viewTarget, users]);
 
   if (!currentUser || currentUser.role === "PACKING" || currentUser.role === "STOREFRONT") return null;
@@ -1140,35 +1124,29 @@ export default function DashboardPage() {
           {companyInventoryTotals && (
             <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px" }}>
               <h3 style={{ fontSize: "15px", marginBottom: "16px", color: "var(--text-secondary)" }}>📦 คลังหมูคงเหลือรวมทั้งบริษัท (รวมคลังกลาง)</h3>
-              <div style={{ display: "flex", gap: "16px", justifyContent: "space-around", textAlign: "center", marginBottom: "20px" }}>
-                <div>
-                  <div style={{ fontSize: "28px", fontWeight: "bold", color: "var(--accent-blue)" }}>{companyInventoryTotals.totalPieces}</div>
-                  <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ชิ้นคงเหลือ</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: "28px", fontWeight: "bold", color: "var(--accent-green)" }}>{companyInventoryTotals.totalWeight.toFixed(2)}</div>
-                  <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>กก. คงเหลือ</div>
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", borderTop: "1px solid var(--border-color)", paddingTop: "16px" }}>
-                <div style={{ flex: "1 1 160px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 16px" }}>
-                  <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "4px" }}>👤 ในมือแอดมิน</div>
-                  <div style={{ fontSize: "16px", fontWeight: "bold" }}>{companyInventoryTotals.adminPieces} ชิ้น · {companyInventoryTotals.adminWeight.toFixed(2)} กก.</div>
-                </div>
-                <div style={{ flex: "1 1 160px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 16px" }}>
-                  <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "4px" }}>🏭 คลังกลาง</div>
-                  <div style={{ fontSize: "16px", fontWeight: "bold" }}>{companyInventoryTotals.centralPieces} ชิ้น · {companyInventoryTotals.centralWeight.toFixed(2)} กก.</div>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px", borderTop: "1px solid var(--border-color)", paddingTop: "16px", marginTop: "16px" }}>
-                {companyInventoryTotals.byProduct.map((p) => (
-                  <div key={p.productType} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 16px" }}>
-                    <div style={{ fontSize: "14px", fontWeight: "bold" }}>{p.label}</div>
-                    <div style={{ display: "flex", gap: "16px", alignItems: "baseline", fontSize: "13px", color: "var(--text-secondary)" }}>
-                      <span>👤 {p.adminPieces} ชิ้น · {p.adminWeight.toFixed(2)} กก.</span>
-                      <span>🏭 {p.centralPieces} ชิ้น · {p.centralWeight.toFixed(2)} กก.</span>
-                      <span style={{ fontWeight: "bold", color: "var(--text-primary)" }}>รวม {p.pieces} ชิ้น · {p.weight.toFixed(2)} กก.</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                {companyInventoryTotals.byProduct.map((p, i) => (
+                  <div key={p.productType} style={i > 0 ? { borderTop: "1px solid var(--border-color)", paddingTop: "20px" } : undefined}>
+                    <div style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "12px" }}>{p.label}</div>
+                    <div style={{ display: "flex", gap: "16px", justifyContent: "space-around", textAlign: "center", marginBottom: "16px" }}>
+                      <div>
+                        <div style={{ fontSize: "28px", fontWeight: "bold", color: "var(--accent-blue)" }}>{p.pieces}</div>
+                        <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>ชิ้นคงเหลือ</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "28px", fontWeight: "bold", color: "var(--accent-green)" }}>{p.weight.toFixed(2)}</div>
+                        <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>กก. คงเหลือ</div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                      <div style={{ flex: "1 1 160px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 16px" }}>
+                        <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "4px" }}>👤 ในมือแอดมิน</div>
+                        <div style={{ fontSize: "16px", fontWeight: "bold" }}>{p.adminPieces} ชิ้น · {p.adminWeight.toFixed(2)} กก.</div>
+                      </div>
+                      <div style={{ flex: "1 1 160px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 16px" }}>
+                        <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "4px" }}>🏭 คลังกลาง</div>
+                        <div style={{ fontSize: "16px", fontWeight: "bold" }}>{p.centralPieces} ชิ้น · {p.centralWeight.toFixed(2)} กก.</div>
+                      </div>
                     </div>
                   </div>
                 ))}
