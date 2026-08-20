@@ -517,16 +517,18 @@ export default function DashboardPage() {
     const totalCodHeld = orders.reduce((sum, o) => sum + (isCodHeld(o) ? Number(o.actualReceivedAmount) || 0 : 0), 0);
     const codHeldCount = orders.filter(isCodHeld).length;
 
-    // Still-waiting "ลูกค้ารอหมู" entries count as sales the instant
-    // they're logged, not once they convert to a real Order — folded
-    // straight into the same totals above using the same COD rule a real
-    // order follows: COD money isn't actually in hand yet either way, so
-    // it goes to totalCodHeld instead of totalReceived. A fulfilled entry
-    // is skipped — its money is now a real Order's job to count via
-    // `orders` above, and counting both would double it. Same reasoning
-    // applies to orderCount itself: a fulfilled entry already has a real
-    // Order counted in `orders.length`, so only unfulfilled ones add here.
+    // Still-waiting "ลูกค้ารอหมู" entries count as sales (and weight) the
+    // instant they're logged, not once they convert to a real Order —
+    // folded straight into the same totals above using the same COD rule a
+    // real order follows: COD money isn't actually in hand yet either way,
+    // so it goes to totalCodHeld instead of totalReceived. A fulfilled
+    // entry is skipped — its money/weight is now a real Order's job to
+    // count via `orders` above, and counting both would double it. Same
+    // reasoning applies to orderCount itself: a fulfilled entry already has
+    // a real Order counted in `orders.length`, so only unfulfilled ones add
+    // here.
     let pendingSales = 0;
+    let pendingWeight = 0;
     let pendingReceived = 0;
     let pendingCodHeld = 0;
     let pendingCodHeldCount = 0;
@@ -535,6 +537,7 @@ export default function DashboardPage() {
       if (e.fulfilledAt) continue;
       pendingOrderCount++;
       pendingSales += (e.items || []).reduce((s, it) => s + (Number(it.price) || 0), 0);
+      pendingWeight += (e.items || []).reduce((s, it) => s + (Number(it.weightKg) || 0), 0);
       if ((Number(e.codAmount) || 0) > 0) {
         pendingCodHeld += Number(e.actualReceivedAmount) || 0;
         pendingCodHeldCount++;
@@ -552,7 +555,7 @@ export default function DashboardPage() {
 
     return {
       orderCount,
-      totalWeight,
+      totalWeight: totalWeight + pendingWeight,
       totalSales: totalSales + pendingSales,
       totalReceived: totalReceived + pendingReceived,
       totalCodHeld: totalCodHeld + pendingCodHeld,
