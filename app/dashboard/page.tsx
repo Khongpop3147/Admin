@@ -8,6 +8,7 @@ import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { isPendingStorefrontMoney, isCodPending, isExcludedFromRevenue, commissionForOrder } from "../../lib/money";
 import { normalizeCustomerName } from "../../lib/nameMatch";
+import { PRODUCT_TYPES, DEFAULT_PRODUCT_TYPE } from "../../lib/rackCode";
 import styles from "../page.module.css";
 
 interface Order {
@@ -679,6 +680,12 @@ export default function DashboardPage() {
 
   const companyInventoryTotals = useMemo(() => {
     if (!isSuperAdmin || viewTarget !== "") return null;
+    const byProduct = new Map<string, { adminPieces: number; adminWeight: number; centralPieces: number; centralWeight: number }>();
+    const ensureProduct = (productType: string) => {
+      if (!byProduct.has(productType)) byProduct.set(productType, { adminPieces: 0, adminWeight: 0, centralPieces: 0, centralWeight: 0 });
+      return byProduct.get(productType)!;
+    };
+
     let adminPieces = 0;
     let adminWeight = 0;
     users.forEach((u) => {
@@ -687,6 +694,9 @@ export default function DashboardPage() {
         if (!r.isUsedUp) {
           adminPieces++;
           adminWeight += r.remainingWeight || 0;
+          const p = ensureProduct(r.productType || DEFAULT_PRODUCT_TYPE);
+          p.adminPieces++;
+          p.adminWeight += r.remainingWeight || 0;
         }
       });
     });
@@ -698,8 +708,24 @@ export default function DashboardPage() {
       if (!r.isUsedUp) {
         centralPieces++;
         centralWeight += r.remainingWeight || 0;
+        const p = ensureProduct(r.productType || DEFAULT_PRODUCT_TYPE);
+        p.centralPieces++;
+        p.centralWeight += r.remainingWeight || 0;
       }
     });
+
+    const byProductList = Array.from(byProduct.entries())
+      .map(([productType, v]) => ({
+        productType,
+        label: PRODUCT_TYPES[productType]?.label || productType,
+        pieces: v.adminPieces + v.centralPieces,
+        weight: v.adminWeight + v.centralWeight,
+        adminPieces: v.adminPieces,
+        adminWeight: v.adminWeight,
+        centralPieces: v.centralPieces,
+        centralWeight: v.centralWeight,
+      }))
+      .sort((a, b) => b.weight - a.weight);
 
     return {
       adminPieces,
@@ -708,6 +734,7 @@ export default function DashboardPage() {
       centralWeight,
       totalPieces: adminPieces + centralPieces,
       totalWeight: adminWeight + centralWeight,
+      byProduct: byProductList,
     };
   }, [isSuperAdmin, viewTarget, users]);
 
@@ -1132,6 +1159,19 @@ export default function DashboardPage() {
                   <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "4px" }}>🏭 คลังกลาง</div>
                   <div style={{ fontSize: "16px", fontWeight: "bold" }}>{companyInventoryTotals.centralPieces} ชิ้น · {companyInventoryTotals.centralWeight.toFixed(2)} กก.</div>
                 </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px", borderTop: "1px solid var(--border-color)", paddingTop: "16px", marginTop: "16px" }}>
+                {companyInventoryTotals.byProduct.map((p) => (
+                  <div key={p.productType} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 16px" }}>
+                    <div style={{ fontSize: "14px", fontWeight: "bold" }}>{p.label}</div>
+                    <div style={{ display: "flex", gap: "16px", alignItems: "baseline", fontSize: "13px", color: "var(--text-secondary)" }}>
+                      <span>👤 {p.adminPieces} ชิ้น · {p.adminWeight.toFixed(2)} กก.</span>
+                      <span>🏭 {p.centralPieces} ชิ้น · {p.centralWeight.toFixed(2)} กก.</span>
+                      <span style={{ fontWeight: "bold", color: "var(--text-primary)" }}>รวม {p.pieces} ชิ้น · {p.weight.toFixed(2)} กก.</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
