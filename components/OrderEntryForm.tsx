@@ -2601,6 +2601,10 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                         value={selectedOrder.trackingNumber ? <span style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>{selectedOrder.trackingNumber}</span> : '-'}
                       />
                       <DetailRow
+                        label="วันที่ส่งจริง"
+                        value={selectedOrder.trackingSetAt ? new Date(selectedOrder.trackingSetAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : '-'}
+                      />
+                      <DetailRow
                         label="สลิปโอนเงิน"
                         value={selectedOrder.transferSlip ? <a href={selectedOrder.transferSlip} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิป</a> : '-'}
                       />

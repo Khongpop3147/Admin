@@ -18,6 +18,10 @@ interface Order extends PrintableOrder {
   orderStatus: string | null;
   paymentStatus: string | null;
   trackingNumber: string | null;
+  // When trackingNumber was actually set — the real day this order got
+  // shipped, as opposed to entryDate+1's scheduled/theoretical ship date.
+  // Null for an order whose tracking predates this field.
+  trackingSetAt: string | null;
   transferSlip: string | null;
   adminNote: string | null;
   price: number | null;
@@ -459,7 +463,10 @@ export default function HrManagePage() {
                       {missing ? (
                         <span style={{ color: "#ff6b6b", fontWeight: "bold" }}>⚠️ ยังไม่มีเลข track</span>
                       ) : order.trackingNumber ? (
-                        <span style={{ color: "var(--accent-green)" }}>track: {order.trackingNumber}</span>
+                        <span style={{ color: "var(--accent-green)" }}>
+                          track: {order.trackingNumber}
+                          {order.trackingSetAt && ` (ส่งจริง ${new Date(order.trackingSetAt).toLocaleDateString("th-TH", { timeZone: "Asia/Bangkok", day: "2-digit", month: "2-digit", year: "2-digit" })})`}
+                        </span>
                       ) : null}
                       {order.needsTaxInvoice && (
                         <span style={{ color: "#ffac33", fontWeight: "bold", background: "rgba(255,172,51,0.12)", border: "1px solid rgba(255,172,51,0.4)", borderRadius: "999px", padding: "2px 10px", fontSize: "12px" }}>
@@ -654,6 +661,10 @@ export default function HrManagePage() {
                     <DetailRow
                       label="เลขพัสดุ"
                       value={viewingOrder.trackingNumber ? <span style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>{viewingOrder.trackingNumber}</span> : '-'}
+                    />
+                    <DetailRow
+                      label="วันที่ส่งจริง"
+                      value={viewingOrder.trackingSetAt ? new Date(viewingOrder.trackingSetAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : '-'}
                     />
                     <DetailRow
                       label="สลิปโอนเงิน"
