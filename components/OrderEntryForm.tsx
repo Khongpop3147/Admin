@@ -159,10 +159,16 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
   // consumer of those 3 fields (VAT/total effect, box-count check, submit
   // body) keeps working unchanged.
   const [items, setItems] = useState<OrderLineItem[]>([makeDefaultLineItem(DEFAULT_PRODUCT_TYPE)]);
-  // Which line item the "คลังหมูของฉัน" side panel is currently browsing/
-  // adding pieces into — clamped to a valid index at render time so removing
-  // a line never leaves this pointing past the end of the array.
-  const [sidePanelTargetIndex, setSidePanelTargetIndex] = useState(0);
+  // Which product "คลังหมูของฉัน" is currently browsing — deliberately NOT
+  // tied to a line-item index. Looking at a product with no line yet just
+  // shows its stock (see the panel's own hasRealItem check below); a real
+  // line only gets created the moment a piece is actually picked, not on
+  // every tab click, so browsing never adds an unwanted empty line.
+  const [viewProductType, setViewProductType] = useState(DEFAULT_PRODUCT_TYPE);
+  // "หาชิ้นใกล้เคียงน้ำหนัก" input's value while browsing a product with no
+  // real line yet — once a real line exists, its own weightSearch field
+  // (on the OrderLineItem) takes over instead of this.
+  const [previewWeightSearch, setPreviewWeightSearch] = useState("");
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
   const [filterShippingMethod, setFilterShippingMethod] = useState("");
@@ -541,27 +547,17 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
     });
   };
 
-  // Switches "คลังหมูของฉัน" to browse a specific product's stock — reuses
-  // an existing line already on that product if there is one, otherwise
-  // adds one (an empty, weightless line gets dropped from the order
-  // automatically at submit time — see itemsToSubmit's own filter — so
-  // just browsing a product with no intent to actually add it never
-  // pollutes the order). Lets an admin check every product's stock levels
-  // without first needing to commit an "เพิ่มสินค้าอีกชนิด" line for it.
+  // Switches "คลังหมูของฉัน" to browse a specific product's stock — purely a
+  // view switch, no line item created. Lets an admin check every product's
+  // stock levels without first needing to commit an "เพิ่มสินค้าอีกชนิด" line
+  // for it (a real line only appears once a piece is actually picked — see
+  // the panel's own handlePieceClick below).
   const selectPanelProductType = (productType: string) => {
-    const existingIndex = items.findIndex(it => it.productType === productType);
-    if (existingIndex !== -1) {
-      setSidePanelTargetIndex(existingIndex);
-      return;
-    }
-    const newIndex = items.length;
-    setItems(prev => [...prev, makeDefaultLineItem(productType)]);
-    setSidePanelTargetIndex(newIndex);
+    setViewProductType(productType);
   };
 
   const removeLineItem = (index: number) => {
     setItems(prev => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
-    setSidePanelTargetIndex(prev => Math.max(0, prev >= index ? prev - 1 : prev));
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -1163,7 +1159,8 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
             : { ...initialForm, sellerName: currentUser?.name || "" }
         );
         setItems([makeDefaultLineItem(DEFAULT_PRODUCT_TYPE)]);
-        setSidePanelTargetIndex(0);
+        setViewProductType(DEFAULT_PRODUCT_TYPE);
+        setPreviewWeightSearch("");
         setAlertData({ show: false, message: "", customerName: "" });
         setSlipVerification(null);
         setSlipIssueReason("");
@@ -1843,13 +1840,37 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
 
         <div className={styles.sideContent}>
           {currentUser && (() => {
-            // Clamped so removing a line never leaves this pointing past the
-            // end of the array.
-            const targetIndex = Math.min(sidePanelTargetIndex, items.length - 1);
-            const targetItem = items[targetIndex];
-            const targetProductType = targetItem.productType;
+            const targetProductType = viewProductType;
             const targetProductLabel = PRODUCT_TYPES[targetProductType]?.label || targetProductType;
             const productRacks = (currentUser.racks || []).filter((r: any) => (r.productType || DEFAULT_PRODUCT_TYPE) === targetProductType);
+            // A real line for this product may or may not exist yet —
+            // browsing never creates one (see selectPanelProductType); this
+            // virtual fallback just shows empty/no-selection until a real
+            // line does exist, either already or via handlePieceClick below.
+            const existingIndex = items.findIndex(it => it.productType === targetProductType);
+            const hasRealItem = existingIndex !== -1;
+            const targetItem: OrderLineItem = hasRealItem ? items[existingIndex] : { ...makeDefaultLineItem(targetProductType), weightSearch: previewWeightSearch };
+            const handleWeightSearchChange = (value: string) => {
+              if (hasRealItem) updateItem(existingIndex, { weightSearch: value });
+              else setPreviewWeightSearch(value);
+            };
+            // Picking a piece while browsing a product with no real line yet
+            // creates one now, seeded with that piece — same weight/price
+            // derivation handleTogglePieceInOrderForItem itself uses for a
+            // fresh pick, just with no existing line to fold into.
+            const handlePieceClick = (piece: any) => {
+              if (hasRealItem) {
+                handleTogglePieceInOrderForItem(existingIndex, piece);
+                return;
+              }
+              const searchTarget = parseFloat(previewWeightSearch);
+              const hasActiveSearch = previewWeightSearch !== "" && !isNaN(searchTarget) && searchTarget > 0;
+              const weightStr = hasActiveSearch ? String(searchTarget) : String(piece.remainingWeight);
+              const priceStr = computeItemPrice({ promotion: "AUTO", weightStr, productType: targetProductType, priceStr: "" }, settings);
+              const rackDetails: RackDetail[] = [{ assignmentId: piece.id, rackNo: piece.rackNo, weight: piece.remainingWeight }];
+              setItems(prev => [...prev, { ...makeDefaultLineItem(targetProductType), weightSearch: previewWeightSearch, weightStr, priceStr, rackDetails }]);
+              setPreviewWeightSearch("");
+            };
 
             return (
             <div className={`${styles.card} glass-panel`} style={{ marginBottom: '24px' }}>
@@ -1907,7 +1928,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                   step="0.01"
                   min="0"
                   value={targetItem.weightSearch}
-                  onChange={(e) => updateItem(targetIndex, { weightSearch: e.target.value })}
+                  onChange={(e) => handleWeightSearchChange(e.target.value)}
                   className={styles.input}
                   placeholder="เช่น 1.5"
                 />
@@ -1945,7 +1966,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                           return (
                             <div
                               key={p.id || idx}
-                              onClick={() => handleTogglePieceInOrderForItem(targetIndex, p)}
+                              onClick={() => handlePieceClick(p)}
                               style={{
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                 padding: '10px 14px', borderRadius: '8px', flexShrink: 0, cursor: 'pointer',
