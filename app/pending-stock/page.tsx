@@ -13,7 +13,7 @@ import { calculateShippingCost } from "../../lib/shipping";
 import { sumUsableSlipAmounts, hasAnySlipIssue, isTotalAmountMatched, buildSlipIssueNote, isSlipIssueReasonComplete, SLIP_ISSUE_OTHER } from "../../lib/slipVerification";
 import { PLATFORM_OPTIONS } from "../../components/PlatformIcons";
 import { SlipVerificationBadge, CombinedSlipSummary, SlipIssueReasonPicker } from "../../components/SlipVerification";
-import { formatMoney, getOrderStatusInfo, DetailSection, DetailRow } from "../../components/OrderDetailShared";
+import { formatMoney } from "../../components/OrderDetailShared";
 import { RackPiece, AssignItemPicker } from "../../components/AssignStockPicker";
 import styles from "../page.module.css";
 
@@ -202,12 +202,6 @@ export default function PendingStockPage() {
       if (saveToastTimer.current) clearTimeout(saveToastTimer.current);
     };
   }, []);
-
-  // The real Order behind a fulfilled entry's orderId — fetched on demand
-  // (not pre-loaded with the entries list) since most entries never get
-  // viewed. Read-only: any actual editing still happens on Order Details.
-  const [viewingOrder, setViewingOrder] = useState<any | null>(null);
-  const [isLoadingOrder, setIsLoadingOrder] = useState(false);
 
   // "ใส่หมู" panel — open for at most one entry at a time. Selections start
   // seeded from whatever's already assigned on that entry so re-opening it
@@ -591,25 +585,6 @@ export default function PendingStockPage() {
     }
   };
 
-  const openOrderView = async (orderId: string) => {
-    setIsLoadingOrder(true);
-    setViewingOrder(null);
-    try {
-      const res = await fetch(`${BASE_PATH}/api/orders?id=${orderId}`);
-      const data = await res.json();
-      const order = (data.orders || [])[0];
-      if (!order) {
-        alert("ไม่พบ order นี้ อาจถูกลบไปแล้ว");
-        return;
-      }
-      setViewingOrder(order);
-    } catch (e) {
-      alert("เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้ง");
-    } finally {
-      setIsLoadingOrder(false);
-    }
-  };
-
   // `reason` only matters for a still-waiting (unfulfilled) entry — it
   // decides whether this delete counts toward Dashboard's cancelled-sales
   // banner (see the `reason` comment on DELETE /api/pending-stock/[id]). A
@@ -696,7 +671,6 @@ export default function PendingStockPage() {
     }
     return true;
   });
-  const fulfilled = entries.filter((e) => e.fulfilledAt);
   const slipCount = allSlipResults.filter(Boolean).length;
   const totalVerifiedSlipAmount = sumUsableSlipAmounts(allSlipResults);
 
@@ -1155,56 +1129,6 @@ export default function PendingStockPage() {
             </div>
           )}
 
-          {fulfilled.length > 0 && (
-            <>
-              <h2 style={{ fontSize: "16px", marginBottom: "12px", color: "var(--text-secondary)" }}>ส่งไป packing แล้ว ({fulfilled.length})</h2>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {fulfilled.map((entry) => (
-                  <div key={entry.id} className="glass-panel" style={{ padding: "12px 18px", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", opacity: 0.6 }}>
-                    <div>
-                      <div style={{ fontWeight: "bold", fontSize: "14px", textDecoration: "line-through" }}>{entry.customerName}</div>
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                        {entry.items.map((it, i) => (
-                          <span key={i}>
-                            {i > 0 && " · "}
-                            {PRODUCT_TYPES[it.productType]?.label || it.productType} {it.weightKg} กก.
-                          </span>
-                        ))}
-                        {" · "}ยอดรวม ฿{formatMoney(entry.actualReceivedAmount ?? itemsTotal(entry.items))}
-                        {entry.note && ` · ${entry.note}`}
-                      </div>
-                      <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                        วันที่ลง order: {entry.entryDate ? formatShipDateOnly(entry.entryDate) : formatDateOnly(entry.createdAt)} · ส่งไป packing เมื่อ {formatDateTime(entry.fulfilledAt!)}
-                        {entry.orderId && <span style={{ color: "var(--accent-green)" }}> · กลายเป็น order แล้ว</span>}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: "8px" }}>
-                      {entry.orderId && (
-                        <button
-                          type="button"
-                          disabled={isLoadingOrder}
-                          onClick={() => openOrderView(entry.orderId!)}
-                          title="ดูข้อมูล order ที่สร้างจากรายการนี้"
-                          style={{ padding: "6px 10px", borderRadius: "8px", background: "rgba(88,166,255,0.1)", border: "1px solid var(--accent-blue)", color: "var(--accent-blue)", cursor: isLoadingOrder ? "wait" : "pointer", fontSize: "12px", fontWeight: "bold" }}
-                        >
-                          📄 ดูข้อมูล order
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() => { if (confirm("ลบรายการนี้?")) deleteEntry(entry.id); }}
-                        title="ลบรายการ (ไม่กระทบ order จริงที่สร้างไปแล้ว)"
-                        style={{ padding: "6px 8px", borderRadius: "8px", background: "rgba(var(--surface-rgb),0.05)", border: "1px solid var(--border-color)", color: "var(--text-secondary)", cursor: isBusy ? "wait" : "pointer", fontSize: "12px" }}
-                      >
-                        🗑
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
         </>
       )}
 
@@ -1290,97 +1214,6 @@ export default function PendingStockPage() {
                 >
                   🚫 ยกเลิกจริง คืนเงิน
                 </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {viewingOrder && (() => {
-        const statusInfo = getOrderStatusInfo(viewingOrder.orderStatus || undefined);
-        return (
-          <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }} onClick={() => setViewingOrder(null)}>
-            <div style={{ background: "var(--modal-bg)", border: "1px solid var(--border-color)", borderRadius: "12px", maxWidth: "760px", width: "92%", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(var(--surface-rgb),0.1)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexShrink: 0 }}>
-                <div>
-                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>ออเดอร์ {viewingOrder.orderNo || "-"}</div>
-                  <h3 style={{ fontSize: "1.3rem", marginBottom: "10px" }}>{viewingOrder.customerName}</h3>
-                  <span style={{ display: "inline-block", fontSize: "12px", fontWeight: "bold", color: statusInfo.color, background: statusInfo.bg, padding: "4px 12px", borderRadius: "999px" }}>
-                    {statusInfo.label}
-                  </span>
-                </div>
-                <button onClick={() => setViewingOrder(null)} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: "20px", cursor: "pointer", lineHeight: 1 }}>✕</button>
-              </div>
-              <div style={{ padding: "20px 24px", overflowY: "auto" }}>
-                <div style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
-                  <div style={{ flex: 1, background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 8px", textAlign: "center" }}>
-                    <div style={{ fontSize: "19px", fontWeight: "bold", color: "var(--text-primary)" }}>฿{formatMoney(viewingOrder.price)}</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>ราคาสินค้า</div>
-                  </div>
-                  <div style={{ flex: 1, background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "12px 8px", textAlign: "center" }}>
-                    <div style={{ fontSize: "19px", fontWeight: "bold", color: "var(--text-primary)" }}>฿{formatMoney(viewingOrder.codAmount)}</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>เก็บปลายทาง</div>
-                  </div>
-                  <div style={{ flex: 1, background: "rgba(63,185,80,0.12)", border: "1px solid rgba(63,185,80,0.35)", borderRadius: "10px", padding: "12px 8px", textAlign: "center" }}>
-                    <div style={{ fontSize: "19px", fontWeight: "bold", color: "var(--accent-green)" }}>฿{formatMoney(viewingOrder.actualReceivedAmount)}</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>ยอดรับจริง</div>
-                  </div>
-                </div>
-
-                {Number(viewingOrder.codAmount) > 0 && (
-                  <div style={{ marginBottom: "24px", marginTop: "-12px", fontSize: "13px" }}>
-                    {viewingOrder.codConfirmed ? (
-                      <span style={{ color: "var(--accent-green)" }}>✅ ยืนยันรับ COD แล้ว — นับเข้ายอดขายแล้ว</span>
-                    ) : (
-                      <span style={{ color: "#ffac33" }}>🔒 รอยืนยันรับ COD — ยังไม่นับเข้ายอดขาย (Hold ไว้)</span>
-                    )}
-                  </div>
-                )}
-
-                <DetailSection title="ข้อมูลลูกค้า">
-                  <DetailRow label="ช่องทาง" value={viewingOrder.platform || "-"} />
-                  <DetailRow label="ชื่อบัญชี" value={viewingOrder.socialMediaName || "-"} />
-                  <DetailRow label="ที่อยู่" value={viewingOrder.customerAddress || "-"} />
-                  <DetailRow label="ใบกำกับภาษี" value={viewingOrder.needsTaxInvoice ? <span style={{ color: "#ffac33", fontWeight: "bold" }}>🧾 ต้องการ</span> : "ไม่ต้องการ"} />
-                </DetailSection>
-
-                <DetailSection title="สินค้า">
-                  <DetailRow label="น้ำหนัก" value={`${viewingOrder.crispyPorkWeight || "-"} กก.`} />
-                  <DetailRow label="จำนวนชิ้น" value={viewingOrder.crispyPorkPiece || "-"} />
-                </DetailSection>
-
-                <DetailSection title="การจัดส่ง">
-                  <DetailRow label="วิธีจัดส่ง" value={viewingOrder.shippingMethod || "-"} />
-                  <DetailRow
-                    label="เลขพัสดุ"
-                    value={viewingOrder.trackingNumber ? <span style={{ color: "var(--accent-green)", fontWeight: "bold" }}>{viewingOrder.trackingNumber}</span> : "-"}
-                  />
-                  <DetailRow
-                    label="สลิปโอนเงิน"
-                    value={viewingOrder.transferSlip ? <a href={viewingOrder.transferSlip} target="_blank" rel="noreferrer" style={{ color: "var(--accent-blue)", textDecoration: "underline" }}>ดูสลิป</a> : "-"}
-                  />
-                  {viewingOrder.extraSlips?.length > 0 && (
-                    <DetailRow
-                      label="สลิปเพิ่มเติม"
-                      value={
-                        <span>
-                          {viewingOrder.extraSlips.map((s: any, i: number) => (
-                            <span key={s.id}>
-                              {i > 0 && " · "}
-                              <a href={s.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent-blue)", textDecoration: "underline" }}>#{i + 1}</a>
-                            </span>
-                          ))}
-                        </span>
-                      }
-                    />
-                  )}
-                </DetailSection>
-
-                {viewingOrder.adminNote && (
-                  <div style={{ background: "rgba(255,172,51,0.1)", border: "1px solid #ffac33", padding: "10px 12px", borderRadius: "8px", color: "#ffac33", fontSize: "14px" }}>
-                    <span style={{ fontWeight: "bold" }}>⚠️ หมายเหตุแอดมิน:</span> {viewingOrder.adminNote}
-                  </div>
-                )}
               </div>
             </div>
           </div>
