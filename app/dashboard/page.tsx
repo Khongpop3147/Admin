@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "../../components/UserProvider";
 import { useSettings } from "../../components/SettingsProvider";
@@ -45,6 +45,14 @@ interface PendingStockEntry {
   items: { price: number; weightKg: number; productType?: string }[];
   fulfilledAt: string | null;
 }
+
+// How often Dashboard silently re-fetches in the background so the numbers
+// stay live without an admin having to reload the page — 20s is frequent
+// enough to feel "realtime" for a business dashboard people leave open in a
+// tab, without hammering the API. Paused while the tab isn't visible (see
+// the `document.hidden` check below) so a forgotten background tab doesn't
+// keep polling forever.
+const DASHBOARD_POLL_INTERVAL_MS = 20000;
 
 function formatMoney(value: unknown): string {
   const num = typeof value === "string" ? parseFloat(value) : (value as number);
@@ -312,7 +320,7 @@ function AdminBarChart({ data, color }: { data: { name: string; sales: number }[
 }
 
 export default function DashboardPage() {
-  const { currentUser, users } = useUser();
+  const { currentUser, users, fetchUsers } = useUser();
   const { settings } = useSettings();
   const router = useRouter();
 
@@ -380,8 +388,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!currentUser) return;
 
-    const fetchOrders = async () => {
-      setIsLoading(true);
+    // `silent` skips the isLoading toggle — used for the background polling
+    // refresh below so live updates don't flash the whole page's content
+    // away every DASHBOARD_POLL_INTERVAL_MS; only the real initial/filter-
+    // change fetch shows the loading state.
+    const fetchOrders = async (silent = false) => {
+      if (!silent) setIsLoading(true);
       try {
         const sellerName = isSuperAdmin ? viewTarget : currentUser.name;
         // entryDateFrom/entryDateTo (not date/dateFrom/dateTo) — Dashboard
@@ -399,12 +411,19 @@ export default function DashboardPage() {
       } catch (e) {
         console.error("Failed to fetch dashboard orders", e);
       } finally {
-        setIsLoading(false);
+        if (!silent) setIsLoading(false);
       }
     };
 
     fetchOrders();
-  }, [activeRange, viewTarget, currentUser, isSuperAdmin]);
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchOrders(true);
+    }, DASHBOARD_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+    // currentUser?.id (not currentUser) — see the fetchUsers polling effect
+    // below for why depending on the object itself would break silent
+    // background polling.
+  }, [activeRange, viewTarget, currentUser?.id, isSuperAdmin]);
 
   // Same date window as fetchOrders above, but against PendingStock's own
   // GET (dateFrom/dateTo on createdAt — see app/api/pending-stock/route.ts)
@@ -430,13 +449,17 @@ export default function DashboardPage() {
     };
 
     fetchPendingStock();
-  }, [activeRange, viewTarget, currentUser, isSuperAdmin]);
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchPendingStock();
+    }, DASHBOARD_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [activeRange, viewTarget, currentUser?.id, isSuperAdmin]);
 
   useEffect(() => {
     if (!currentUser) return;
 
-    const fetchTrend = async () => {
-      setIsTrendLoading(true);
+    const fetchTrend = async (silent = false) => {
+      if (!silent) setIsTrendLoading(true);
       try {
         const sellerName = isSuperAdmin ? viewTarget : currentUser.name;
 
@@ -495,12 +518,41 @@ export default function DashboardPage() {
       } catch (e) {
         console.error("Failed to fetch trend data", e);
       } finally {
-        setIsTrendLoading(false);
+        if (!silent) setIsTrendLoading(false);
       }
     };
 
     fetchTrend();
-  }, [activeRange, rangeFrom, rangeTo, viewTarget, currentUser, isSuperAdmin, statsPeriod, yearRange, selectedYear]);
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchTrend(true);
+    }, DASHBOARD_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [activeRange, rangeFrom, rangeTo, viewTarget, currentUser?.id, isSuperAdmin, statsPeriod, yearRange, selectedYear]);
+
+  // `users` (and its embedded rack ownership) is normally only ever
+  // refreshed by UserProvider after an action THIS browser tab took — a
+  // different admin's device placing an order or moving stock never
+  // triggers it here. companyInventoryTotals reads `users` for the
+  // คลังหมูคงเหลือ/แยกตามประเภท panels, so without this they'd be the one
+  // piece of the page real-time polling above wouldn't actually keep live.
+  //
+  // fetchUsers isn't wrapped in useCallback on the provider side, so its
+  // identity changes on every UserProvider re-render (which happens on
+  // every users update, including this very poll's own result) — depending
+  // on it directly would tear the interval down before it ever fires. Kept
+  // in a ref instead so the interval only needs to be (re)created when
+  // currentUser itself changes.
+  const fetchUsersRef = useRef(fetchUsers);
+  useEffect(() => {
+    fetchUsersRef.current = fetchUsers;
+  });
+  useEffect(() => {
+    if (!currentUser) return;
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchUsersRef.current();
+    }, DASHBOARD_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [currentUser?.id]);
 
   const stats = useMemo(() => {
     const totalWeight = orders.reduce((sum, o) => sum + (parseFloat(o.crispyPorkWeight || "0") || 0), 0);
@@ -669,7 +721,11 @@ export default function DashboardPage() {
       }
     };
     fetchCancelledCount();
-  }, [activeRange, viewTarget, currentUser, isSuperAdmin]);
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchCancelledCount();
+    }, DASHBOARD_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [activeRange, viewTarget, currentUser?.id, isSuperAdmin]);
 
   // How many customers are on the "ลูกค้ารอหมู" waiting list RIGHT NOW —
   // deliberately NOT scoped to the period selector above (activeRange)
@@ -700,7 +756,11 @@ export default function DashboardPage() {
       }
     };
     fetchStillWaiting();
-  }, [viewTarget, currentUser, isSuperAdmin]);
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchStillWaiting();
+    }, DASHBOARD_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [viewTarget, currentUser?.id, isSuperAdmin]);
 
   const perAdminBreakdown = useMemo(() => {
     if (!isSuperAdmin || viewTarget !== "") return [];
