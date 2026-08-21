@@ -688,6 +688,9 @@ export default function DashboardPage() {
       if (!byProduct.has(productType)) byProduct.set(productType, { adminPieces: 0, adminWeight: 0, centralPieces: 0, centralWeight: 0 });
       return byProduct.get(productType)!;
     };
+    // Seed every known product type up front — a variant that's fully sold
+    // out (0 pieces left) should still show as "0", not vanish from the list.
+    Object.keys(PRODUCT_TYPES).forEach(ensureProduct);
 
     users.forEach((u) => {
       // Storefront's own rack holdings are its walk-in shop stock, not
