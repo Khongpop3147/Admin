@@ -8,7 +8,8 @@ import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { isPendingStorefrontMoney, isCodPending, isExcludedFromRevenue, commissionForOrder } from "../../lib/money";
 import { normalizeCustomerName } from "../../lib/nameMatch";
-import { PRODUCT_TYPES, DEFAULT_PRODUCT_TYPE, detectProductTypeFromRackNo } from "../../lib/rackCode";
+import { PRODUCT_TYPES, DEFAULT_PRODUCT_TYPE } from "../../lib/rackCode";
+import { getEffectiveItems } from "../../lib/orderItems";
 import styles from "../page.module.css";
 
 interface Order {
@@ -17,13 +18,15 @@ interface Order {
   codAmount?: number;
   codConfirmed?: boolean;
   isReturned?: boolean;
+  isClaim?: boolean;
   actualReceivedAmount?: number;
   crispyPorkWeight?: string;
+  crispyPorkPiece?: string;
   orderStatus?: string;
   sellerName?: string;
   platform?: string;
   customerName?: string;
-  rackDetails?: string | null;
+  items?: { productType: string; weight: number; pieceCount: number | null; price: number }[];
 }
 
 interface TrendPoint {
@@ -617,45 +620,41 @@ export default function DashboardPage() {
     };
   }, [orders, pendingStockEntries]);
 
-  // Same "สรุปน้ำหนักหมูที่ขาย" total as stats.totalWeight above, just split
-  // out per product. Order.crispyPorkWeight has no productType of its own —
-  // an order can even mix products across its line items — so this reads
-  // the actual rack pieces picked (Order.rackDetails) and detects each
-  // piece's product from its rack-code prefix instead (see
-  // detectProductTypeFromRackNo). An order that never got real stock
-  // assigned (no rackDetails yet) has no pieces to attribute, so it's
-  // invisible here even though its weight still counts in stats.totalWeight
-  // — same tradeoff the inventory breakdown above makes.
-  const weightSoldByProduct = useMemo(() => {
-    const byProduct = new Map<string, number>();
-    Object.keys(PRODUCT_TYPES).forEach((pt) => byProduct.set(pt, 0));
-    const add = (productType: string, weight: number) => {
-      byProduct.set(productType, (byProduct.get(productType) || 0) + weight);
+  // Same "สรุปน้ำหนักหมูที่ขาย"/"ยอดขายสินค้า" totals as stats above, just
+  // split out per product. Order.crispyPorkWeight/price carry no productType
+  // of their own — an order can even mix products across its line items —
+  // so this reads Order.items (OrderItem rows) instead, via the same
+  // getEffectiveItems fallback every other per-product breakdown in the app
+  // uses for orders that predate multi-product support (implicit single
+  // PORK line from the legacy flat fields). Weight is summed unconditionally
+  // (matches stats.totalWeight, which never excludes returns/claims); money
+  // excludes isExcludedFromRevenue orders (matches stats.totalSales).
+  const salesByProduct = useMemo(() => {
+    const byProduct = new Map<string, { weight: number; money: number }>();
+    Object.keys(PRODUCT_TYPES).forEach((pt) => byProduct.set(pt, { weight: 0, money: 0 }));
+    const add = (productType: string, weight: number, money: number) => {
+      const entry = byProduct.get(productType) || { weight: 0, money: 0 };
+      entry.weight += weight;
+      entry.money += money;
+      byProduct.set(productType, entry);
     };
 
     orders.forEach((o) => {
-      if (!o.rackDetails) return;
-      try {
-        const pieces = JSON.parse(o.rackDetails);
-        if (!Array.isArray(pieces)) return;
-        pieces.forEach((p: any) => {
-          if (!p?.rackNo) return;
-          add(detectProductTypeFromRackNo(p.rackNo), Number(p.weight) || 0);
-        });
-      } catch {
-        // malformed rackDetails on an old order — nothing to attribute
-      }
+      const excluded = isExcludedFromRevenue(o);
+      getEffectiveItems(o).forEach((it) => {
+        add(it.productType || DEFAULT_PRODUCT_TYPE, Number(it.weight) || 0, excluded ? 0 : Number(it.price) || 0);
+      });
     });
 
     pendingStockEntries.forEach((e) => {
       if (e.fulfilledAt) return;
       (e.items || []).forEach((it) => {
-        add(it.productType || DEFAULT_PRODUCT_TYPE, Number(it.weightKg) || 0);
+        add(it.productType || DEFAULT_PRODUCT_TYPE, Number(it.weightKg) || 0, Number(it.price) || 0);
       });
     });
 
     return Array.from(byProduct.entries())
-      .map(([productType, weight]) => ({ productType, label: PRODUCT_TYPES[productType]?.label || productType, weight }))
+      .map(([productType, v]) => ({ productType, label: PRODUCT_TYPES[productType]?.label || productType, weight: v.weight, money: v.money }))
       .sort((a, b) => {
         if (a.productType === DEFAULT_PRODUCT_TYPE) return -1;
         if (b.productType === DEFAULT_PRODUCT_TYPE) return 1;
@@ -1056,10 +1055,13 @@ export default function DashboardPage() {
           <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px" }}>
             <h3 style={{ fontSize: "13px", marginBottom: "12px", color: "var(--text-secondary)" }}>🐷 น้ำหนักหมูที่ขาย แยกตามประเภท</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {weightSoldByProduct.map((p) => (
+              {salesByProduct.map((p) => (
                 <div key={p.productType} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "10px 16px" }}>
                   <span style={{ fontSize: "14px", fontWeight: "bold" }}>{p.label}</span>
-                  <span style={{ fontSize: "15px", fontWeight: "bold", color: "#3fb950" }}>{p.weight.toFixed(2)} กก.</span>
+                  <span style={{ display: "flex", gap: "16px", alignItems: "baseline" }}>
+                    <span style={{ fontSize: "15px", fontWeight: "bold", color: "#3fb950" }}>{p.weight.toFixed(2)} กก.</span>
+                    <span style={{ fontSize: "15px", fontWeight: "bold", color: "#ffac33" }}>฿{formatMoney(p.money)}</span>
+                  </span>
                 </div>
               ))}
             </div>
