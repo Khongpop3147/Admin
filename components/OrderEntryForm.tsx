@@ -1304,6 +1304,22 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
             ✅ จบ Order วันนี้
           </button>
         )}
+        {isStorefrontMode && (
+          // Private Client orders always ship "รับหน้าร้าน"/"ส่งเอง", so
+          // they're deliberately excluded from Packing's own ใบเบิกหมู (see
+          // lib/porkSlip.ts's groupOrdersForPrint) — this is their own
+          // separate slip instead. Uses filterDate (defaults to today, same
+          // "day being viewed" the orders list below already filters by)
+          // rather than always today, so printing after switching to a past
+          // day prints that day's slip, not today's.
+          <button
+            type="button"
+            onClick={() => window.open(`${BASE_PATH}/private-clients/print?date=${filterDate || new Date().toLocaleString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 10)}`, '_blank')}
+            style={{ background: '#4facfe', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+          >
+            🖨️ พิมพ์ใบเบิกหมู
+          </button>
+        )}
       </div>
 
       <div className={styles.layout}>

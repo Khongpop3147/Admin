@@ -139,3 +139,40 @@ export function groupOrdersForPrint<T extends PrintableOrder>(
 
   return groups;
 }
+
+// The mirror-image filter of groupOrdersForPrint above: a "ลูกค้าส่วนตัว"
+// (Private Client) order only ever ships "รับหน้าร้าน" or "ส่งเอง" (see
+// OrderEntryForm's mode="walkin" — those are the only two options offered),
+// so groupOrdersForPrint's exclusion rule would filter out every single one
+// of them. This keeps ONLY platform === "PrivateClient" orders instead, for
+// their own separate withdrawal slip (app/private-clients/print). Sorted by
+// order number rather than getShippingRank — a Private Client order is
+// never COD and its shipping method carries none of the EMS/NIM distinction
+// getShippingRank exists to rank, so there's nothing meaningful to rank by
+// beyond the order it was entered in.
+export function groupPrivateClientOrdersForPrint<T extends PrintableOrder>(
+  orders: T[],
+  nicknameByName: Record<string, string>
+): AdminGroup<T>[] {
+  const filtered = orders.filter((o) => o.platform === "PrivateClient");
+
+  const bySeller: Record<string, T[]> = {};
+  filtered.forEach((o) => {
+    const key = o.sellerName || "ไม่ระบุแอดมิน";
+    if (!bySeller[key]) bySeller[key] = [];
+    bySeller[key].push(o);
+  });
+
+  const groups: AdminGroup<T>[] = Object.entries(bySeller).map(([sellerName, groupOrders]) => {
+    const sortedOrders = [...groupOrders].sort((a, b) => (a.orderNo || 0) - (b.orderNo || 0));
+    return {
+      sellerName,
+      displayName: nicknameByName[sellerName] || sellerName,
+      orders: sortedOrders,
+    };
+  });
+
+  groups.sort((a, b) => a.displayName.localeCompare(b.displayName, "th"));
+
+  return groups;
+}

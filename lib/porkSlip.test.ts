@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getShippingRank, getShippingLabel, getRackDisplay, extractShortageNote, groupOrdersForPrint, PrintableOrder } from "./porkSlip";
+import { getShippingRank, getShippingLabel, getRackDisplay, extractShortageNote, groupOrdersForPrint, groupPrivateClientOrdersForPrint, PrintableOrder } from "./porkSlip";
 
 describe("getShippingRank", () => {
   it("ranks NIM COD, NIM prepaid, EMS COD, EMS prepaid in that order", () => {
@@ -207,5 +207,43 @@ describe("groupOrdersForPrint", () => {
     const originalOrder = [...orders];
     groupOrdersForPrint(orders, {});
     expect(orders.map((o) => o.orderNo)).toEqual(originalOrder.map((o) => o.orderNo));
+  });
+});
+
+describe("groupPrivateClientOrdersForPrint", () => {
+  it("keeps only platform === PrivateClient orders — the exact opposite of groupOrdersForPrint's exclusion", () => {
+    const orders = [
+      order({ orderNo: 1, platform: "PrivateClient", shippingMethod: "รับหน้าร้าน" }),
+      order({ orderNo: 2, platform: "Facebook", shippingMethod: "EMS" }),
+      order({ orderNo: 3, platform: "Storefront", shippingMethod: "รับหน้าร้าน" }),
+    ];
+    const groups = groupPrivateClientOrdersForPrint(orders, {});
+    expect(groups.flatMap((g) => g.orders.map((o) => o.orderNo))).toEqual([1]);
+  });
+
+  it("sorts each group by orderNo — no shipping-rank concept for a Private Client order", () => {
+    const orders = [
+      order({ orderNo: 5, platform: "PrivateClient", sellerName: "A" }),
+      order({ orderNo: 2, platform: "PrivateClient", sellerName: "A" }),
+      order({ orderNo: 8, platform: "PrivateClient", sellerName: "A" }),
+    ];
+    const groups = groupPrivateClientOrdersForPrint(orders, {});
+    expect(groups[0].orders.map((o) => o.orderNo)).toEqual([2, 5, 8]);
+  });
+
+  it("groups by seller, uses nicknames, and sorts admin groups alphabetically, same as groupOrdersForPrint", () => {
+    const orders = [
+      order({ orderNo: 1, platform: "PrivateClient", sellerName: "บีแอดมิน" }),
+      order({ orderNo: 2, platform: "PrivateClient", sellerName: "เอแอดมิน" }),
+    ];
+    const groups = groupPrivateClientOrdersForPrint(orders, { "บีแอดมิน": "พี่บี" });
+    expect(groups).toHaveLength(2);
+    expect(groups.find((g) => g.sellerName === "บีแอดมิน")?.displayName).toBe("พี่บี");
+    expect(groups.find((g) => g.sellerName === "เอแอดมิน")?.displayName).toBe("เอแอดมิน");
+  });
+
+  it("returns nothing when there are no Private Client orders", () => {
+    const orders = [order({ orderNo: 1, platform: "Facebook" }), order({ orderNo: 2, platform: "Storefront" })];
+    expect(groupPrivateClientOrdersForPrint(orders, {})).toEqual([]);
   });
 });
