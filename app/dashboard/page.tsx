@@ -690,7 +690,10 @@ export default function DashboardPage() {
     };
 
     users.forEach((u) => {
-      if (u.role === "CENTRAL_INVENTORY") return;
+      // Storefront's own rack holdings are its walk-in shop stock, not
+      // company-wide sellable inventory in the same sense an admin's or
+      // central's racks are — excluded here so it doesn't inflate this total.
+      if (u.role === "CENTRAL_INVENTORY" || u.role === "STOREFRONT") return;
       (u.racks || []).forEach((r) => {
         if (!r.isUsedUp) {
           const p = ensureProduct(r.productType || DEFAULT_PRODUCT_TYPE);
