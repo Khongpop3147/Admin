@@ -726,7 +726,13 @@ export default function DashboardPage() {
         centralPieces: v.centralPieces,
         centralWeight: v.centralWeight,
       }))
-      .sort((a, b) => b.weight - a.weight);
+      .sort((a, b) => {
+        // หมูกรอบธรรมดา (the original/default product) always leads the
+        // list, regardless of which variant currently has more stock.
+        if (a.productType === DEFAULT_PRODUCT_TYPE) return -1;
+        if (b.productType === DEFAULT_PRODUCT_TYPE) return 1;
+        return b.weight - a.weight;
+      });
 
     return { byProduct: byProductList };
   }, [isSuperAdmin, viewTarget, users]);
