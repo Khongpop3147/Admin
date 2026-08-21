@@ -75,9 +75,17 @@ export function getRackDisplay(rackDetailsStr: string): RackDisplay {
 // notes, and manual notes are admin-facing, not something Packing needs
 // printed on the slip. Reformatted down to just "ขาด X กก." — the slip is
 // working notes for the packer, not the fuller admin-facing wording.
+//
+// The product name in the middle ("หมู", "หมูกรอบสันนอก (Lean)", "หมูกรอบ
+// สะโพก (Low fat)", ...) is whatever buildAllocationDiffNote (lib/
+// rackAllocate.ts) was given as its `label` — it varies per product type,
+// so the label itself is matched loosely ([^/]+, stopping short of the
+// " / " that joins multiple notes together) rather than hardcoded to "หมู".
+// A stricter match here previously meant Lean/Low fat shortages silently
+// never made it onto the print slip at all.
 export function extractShortageNote(adminNote: string | null | undefined): string {
   if (!adminNote) return "";
-  const match = adminNote.match(/(?:หมูในคลังไม่พอดี|ไม่มีชิ้นหมูที่ใกล้เคียงพอ) ขาดอีก ([\d.]+) กก\./);
+  const match = adminNote.match(/(?:[^/]+ในคลังไม่พอดี|ไม่มีชิ้น[^/]+ที่ใกล้เคียงพอ) ขาดอีก ([\d.]+) กก\./);
   return match ? `ขาด ${match[1]} กก.` : "";
 }
 

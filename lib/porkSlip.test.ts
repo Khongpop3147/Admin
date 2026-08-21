@@ -44,6 +44,17 @@ describe("extractShortageNote", () => {
     expect(extractShortageNote("ไม่มีชิ้นหมูที่ใกล้เคียงพอ ขาดอีก 1.4 กก.")).toBe("ขาด 1.4 กก.");
   });
 
+  it("extracts a shortage note for a non-PORK product (regression: Lean/Low fat labels weren't matched before, so their shortage never reached the print slip)", () => {
+    expect(extractShortageNote("หมูกรอบสันนอก (Lean)ในคลังไม่พอดี ขาดอีก 0.1 กก.")).toBe("ขาด 0.1 กก.");
+    expect(extractShortageNote("หมูกรอบสะโพก (Low fat)ในคลังไม่พอดี ขาดอีก 0.25 กก.")).toBe("ขาด 0.25 กก.");
+    expect(extractShortageNote("ไม่มีชิ้นหมูกรอบสันนอก (Lean)ที่ใกล้เคียงพอ ขาดอีก 1 กก.")).toBe("ขาด 1 กก.");
+  });
+
+  it("still picks the shortage note when it's not first in a joined admin note", () => {
+    const combined = "ลูกค้าขอห่อพิเศษ / หมูกรอบสันนอก (Lean)ในคลังไม่พอดี ขาดอีก 0.2 กก.";
+    expect(extractShortageNote(combined)).toBe("ขาด 0.2 กก.");
+  });
+
   it("returns empty for an over-allocation note — the print slip only wants shortage, not overage", () => {
     expect(extractShortageNote("หมูในคลังไม่พอดี เกินมา 0.15 กก.")).toBe("");
   });
