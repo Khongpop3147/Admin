@@ -93,6 +93,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         codAmount: entry.codAmount,
         actualReceivedAmount: entry.actualReceivedAmount,
         transferSlip: entry.transferSlip,
+        slipTransferredAt: entry.slipTransferredAt,
         extraSlipUrls: entry.extraSlipUrls,
         paymentStatus: (entry.codAmount ?? 0) > 0 ? "COD" : "Paid",
         customerAddress: entry.customerAddress,

@@ -24,6 +24,11 @@ export interface CreateOrderInput {
   codAmount?: number | null;
   actualReceivedAmount?: number | null;
   transferSlip?: string | null;
+  // The primary slip's own transfer date, straight from Thunder's
+  // verify-slip response (see app/api/verify-slip/route.ts's `date` field)
+  // — whatever shape that comes back as, parsed defensively below since
+  // it's third-party data, not something this app controls the format of.
+  slipTransferredAt?: string | Date | null;
   paymentStatus?: string | null;
   customerAddress?: string | null;
   customerPhone?: string | null;
@@ -46,6 +51,15 @@ export interface CreateOrderInput {
 // below for why the difference matters.
 function isProvidedNumber(v: unknown): boolean {
   return v !== null && v !== undefined && v !== "";
+}
+
+// Thunder's `date` field is third-party data of unverified shape — parses
+// to null rather than an Invalid Date on anything that doesn't resolve to a
+// real timestamp, so a malformed/missing value never gets written to the DB.
+function toValidDate(v: unknown): Date | null {
+  if (!v) return null;
+  const d = new Date(v as string | number | Date);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 // `tx` is a Prisma transaction client — typed loosely (matching this
@@ -94,6 +108,7 @@ export async function createOrderRecord(tx: any, input: CreateOrderInput) {
       codAmount: isProvidedNumber(input.codAmount) ? Number(input.codAmount) : null,
       actualReceivedAmount: isProvidedNumber(input.actualReceivedAmount) ? Number(input.actualReceivedAmount) : null,
       transferSlip: input.transferSlip,
+      slipTransferredAt: toValidDate(input.slipTransferredAt),
       paymentStatus: input.paymentStatus,
       customerAddress: input.customerAddress,
       customerPhone: input.customerPhone,

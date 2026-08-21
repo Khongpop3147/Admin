@@ -98,6 +98,15 @@ export async function PATCH(
     if (body.price !== undefined) updateData.price = Number(body.price) || 0;
     if (body.paymentStatus !== undefined) updateData.paymentStatus = body.paymentStatus;
     if (body.transferSlip !== undefined) updateData.transferSlip = body.transferSlip;
+    // Only ever set when a fresh slip was just uploaded+verified during this
+    // edit (see OrderEntryForm's uploadEditSlipFile) — omitted from the body
+    // entirely otherwise, so re-saving unrelated edits never clobbers a
+    // previously-recorded value with null just because this particular edit
+    // didn't touch the slip.
+    if (body.slipTransferredAt) {
+      const parsed = new Date(body.slipTransferredAt);
+      if (!isNaN(parsed.getTime())) updateData.slipTransferredAt = parsed;
+    }
     if (body.isReturned !== undefined) updateData.isReturned = !!body.isReturned;
     if (body.boxPieceCounts !== undefined) updateData.boxPieceCounts = body.boxPieceCounts;
 

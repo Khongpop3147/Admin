@@ -28,6 +28,15 @@ function todayBangkokDateKey(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// Thunder's `date` field (see app/api/verify-slip/route.ts) is third-party
+// data of unverified shape — parses to null rather than an Invalid Date on
+// anything that doesn't resolve to a real timestamp.
+function toValidDate(v: unknown): Date | null {
+  if (!v) return null;
+  const d = new Date(v as string | number | Date);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // Newest first — the client splits this single list into an "unfulfilled"
 // section (customers still owed pork) and a "fulfilled" history section
 // underneath, both already in the right order for their own display.
@@ -105,6 +114,7 @@ export async function POST(req: Request) {
       codAmount,
       actualReceivedAmount,
       transferSlip,
+      slipTransferredAt,
       extraSlipUrls,
       expectedShipDate,
       entryDate,
@@ -208,6 +218,7 @@ export async function POST(req: Request) {
         codAmount: codAmount != null ? Number(codAmount) || 0 : null,
         actualReceivedAmount: actualReceivedAmount != null ? Number(actualReceivedAmount) || 0 : null,
         transferSlip: typeof transferSlip === "string" && transferSlip ? transferSlip : null,
+        slipTransferredAt: toValidDate(slipTransferredAt),
         extraSlipUrls: Array.isArray(extraSlipUrls) ? extraSlipUrls.filter((u: any) => typeof u === "string" && u.trim()) : [],
         expectedShipDate: typeof expectedShipDate === "string" && expectedShipDate ? expectedShipDate : null,
         entryDate: typeof entryDate === "string" && ENTRY_DATE_RE.test(entryDate) ? entryDate : todayBangkokDateKey(),

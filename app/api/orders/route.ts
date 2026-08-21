@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     const {
       customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion,
       shippingMethod,
-      transferSlip, paymentStatus, customerAddress, customerPhone, customerZip, needsTaxInvoice, orderStatus, rackDetails, sellerName, trackingNumber,
+      transferSlip, slipTransferredAt, paymentStatus, customerAddress, customerPhone, customerZip, needsTaxInvoice, orderStatus, rackDetails, sellerName, trackingNumber,
       bypassDuplicateCheck, adminNote, entryDate, extraSlipUrls, items, isClaim
     } = body;
 
@@ -167,7 +167,7 @@ export async function POST(req: Request) {
       const order = await createOrderRecord(tx, {
         customerName, platform, socialMediaName, crispyPorkPiece, crispyPorkWeight, packedPork, promotion, price,
         shippingMethod, additionalShippingCost, codAmount, actualReceivedAmount,
-        transferSlip, paymentStatus, customerAddress, customerPhone, customerZip, needsTaxInvoice, orderStatus,
+        transferSlip, slipTransferredAt, paymentStatus, customerAddress, customerPhone, customerZip, needsTaxInvoice, orderStatus,
         rackDetails, sellerName, trackingNumber, adminNote, entryDate, extraSlipUrls, items: validItems,
         isClaim: !!isClaim,
       });

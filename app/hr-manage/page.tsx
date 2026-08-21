@@ -23,6 +23,9 @@ interface Order extends PrintableOrder {
   // Null for an order whose tracking predates this field.
   trackingSetAt: string | null;
   transferSlip: string | null;
+  // The transfer date from the primary slip's own bank data — null on any
+  // order verified before this field existed (that data was never saved).
+  slipTransferredAt: string | null;
   adminNote: string | null;
   price: number | null;
   actualReceivedAmount: number | null;
@@ -670,6 +673,12 @@ export default function HrManagePage() {
                       label="สลิปโอนเงิน"
                       value={viewingOrder.transferSlip ? <a href={viewingOrder.transferSlip} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิป</a> : '-'}
                     />
+                    {viewingOrder.transferSlip && (
+                      <DetailRow
+                        label="วันที่โอนเงิน"
+                        value={viewingOrder.slipTransferredAt ? new Date(viewingOrder.slipTransferredAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : 'ไม่ทราบ (สลิปก่อนมีฟีเจอร์นี้)'}
+                      />
+                    )}
                   </DetailSection>
 
                   {viewingOrder.adminNote && (

@@ -977,6 +977,10 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
           adminNote: combinedAdminNote,
           paymentStatus: editOrderData.paymentStatus,
           transferSlip: editOrderData.transferSlip,
+          // Omitted (not sent as null) unless a fresh slip was just
+          // re-verified in this edit — see the PATCH handler's own comment
+          // for why that distinction matters.
+          ...(editSlipVerification?.date ? { slipTransferredAt: editSlipVerification.date } : {}),
           extraSlipUrls: editExtraSlips.map(s => s.url).filter(Boolean),
           editedBy: currentUser?.name,
         }),
@@ -1134,6 +1138,7 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
             pricePerKg: getPricePerKg(it.productType, settings),
           })),
           extraSlipUrls: extraSlips.map(s => s.url).filter(Boolean),
+          slipTransferredAt: slipVerification?.date || null,
           bypassDuplicateCheck,
         }),
       });
@@ -2624,6 +2629,12 @@ export default function OrderEntryForm({ mode }: { mode: "normal" | "walkin" }) 
                         label="สลิปโอนเงิน"
                         value={selectedOrder.transferSlip ? <a href={selectedOrder.transferSlip} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'underline' }}>ดูสลิป</a> : '-'}
                       />
+                      {selectedOrder.transferSlip && (
+                        <DetailRow
+                          label="วันที่โอนเงิน"
+                          value={selectedOrder.slipTransferredAt ? new Date(selectedOrder.slipTransferredAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : 'ไม่ทราบ (สลิปก่อนมีฟีเจอร์นี้)'}
+                        />
+                      )}
                       {selectedOrder.extraSlips?.length > 0 && (
                         <DetailRow
                           label="สลิปเพิ่มเติม"

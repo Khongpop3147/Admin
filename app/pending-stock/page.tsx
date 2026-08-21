@@ -522,6 +522,7 @@ export default function PendingStockPage() {
           codAmount: isCod ? codAmount : null,
           actualReceivedAmount: expectedTotal,
           transferSlip: isCod ? "" : transferSlip,
+          slipTransferredAt: isCod ? null : (slipVerification?.date || null),
           extraSlipUrls: isCod ? [] : extraSlips.map((s) => s.url).filter(Boolean),
           ...(isEditing ? {} : { bypassDuplicateCheck }),
         }),

@@ -36,6 +36,15 @@ model Order {
   isClaim               Boolean  @default(false)
   actualReceivedAmount  Float?
   transferSlip          String?
+  // The date/time the customer actually transferred money, per the primary
+  // slip's own bank data (Thunder's verify-slip response carries this, but
+  // it used to be discarded — never saved). Only ever set going forward
+  // from when this field shipped; null on every order verified before that,
+  // since that data was never persisted and can't be recovered without
+  // re-verifying each slip again. Covers transferSlip only, not each of
+  // extraSlips (a split-payment second slip) — those still have no date of
+  // their own recorded.
+  slipTransferredAt     DateTime?
   paymentStatus         String?
   customerAddress       String?
   // Entered as their own fields (not parsed out of customerAddress) so an
@@ -311,6 +320,11 @@ model PendingStock {
   // that. Carries straight through to the real Order's own extraSlips once
   // "ส่งไป packing" converts this entry (see send-to-packing/route.ts).
   extraSlipUrls String[] @default([])
+  // Mirrors Order.slipTransferredAt — the primary slip's own transfer date
+  // from Thunder's verify response, carried straight through to the real
+  // Order's own slipTransferredAt at send-to-packing time, same as
+  // transferSlip itself.
+  slipTransferredAt DateTime?
   // Purely an admin's own best guess ("น่าจะส่งได้ประมาณ...") for their own
   // planning — optional, never required, and never read by any date/
   // scheduling logic (send-to-packing still always uses the real day it's

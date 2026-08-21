@@ -19,6 +19,15 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 const ENTRY_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Thunder's `date` field (see app/api/verify-slip/route.ts) is third-party
+// data of unverified shape — parses to null rather than an Invalid Date on
+// anything that doesn't resolve to a real timestamp.
+function toValidDate(v: unknown): Date | null {
+  if (!v) return null;
+  const d = new Date(v as string | number | Date);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // Edits a still-waiting entry (customer info, items, shipping/COD, slip,
 // note, expected ship date) — only while it hasn't been sent to packing
 // yet; once fulfilled, the real Order (viewable via "ดูข้อมูล order") is
@@ -57,6 +66,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       codAmount,
       actualReceivedAmount,
       transferSlip,
+      slipTransferredAt,
       extraSlipUrls,
       expectedShipDate,
       entryDate,
@@ -135,6 +145,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           codAmount: codAmount != null ? Number(codAmount) || 0 : null,
           actualReceivedAmount: actualReceivedAmount != null ? Number(actualReceivedAmount) || 0 : null,
           transferSlip: typeof transferSlip === "string" && transferSlip ? transferSlip : null,
+          // Only a fresh re-verification (new slip uploaded during this
+          // edit) ever provides a real value here — keeps the existing
+          // recorded date otherwise, same "preserve unless resent" pattern
+          // entryDate below already follows.
+          slipTransferredAt: toValidDate(slipTransferredAt) ?? entry.slipTransferredAt,
           extraSlipUrls: Array.isArray(extraSlipUrls) ? extraSlipUrls.filter((u: any) => typeof u === "string" && u.trim()) : [],
           expectedShipDate: typeof expectedShipDate === "string" && expectedShipDate ? expectedShipDate : null,
           entryDate: typeof entryDate === "string" && ENTRY_DATE_RE.test(entryDate) ? entryDate : entry.entryDate,
