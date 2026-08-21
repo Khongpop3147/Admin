@@ -8,6 +8,7 @@ import { useSettings } from "../../components/SettingsProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { previousDayStr } from "../../lib/packingCutoff";
+import { getRackDisplay } from "../../lib/porkSlip";
 import PasswordField from "../../components/PasswordField";
 import styles from "../page.module.css";
 
@@ -297,6 +298,12 @@ export default function UsersPage() {
         "ชื่อโซเชียล": o.socialMediaName || "",
         "จำนวนชิ้น": o.crispyPorkPiece || "",
         "น้ำหนัก (กก.)": o.crispyPorkWeight || "",
+        // The requested/billed weight above (crispyPorkWeight) isn't always
+        // exactly what was on hand — a shortage/excess of a few hundred
+        // grams gets picked instead when the exact target isn't available
+        // (see lib/rackAllocate.ts). This reads the real rack pieces
+        // actually assigned (rackDetails) for what physically shipped.
+        "น้ำหนักที่แพ็คจริง (กก.)": getRackDisplay(o.rackDetails || "").totalWeight || "",
         "โปรโมชั่น": o.promotion || "",
         "ราคาสินค้า": o.price ?? "",
         "วิธีจัดส่ง": o.shippingMethod || "",
