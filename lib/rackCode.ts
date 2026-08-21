@@ -96,22 +96,27 @@ export function getBaseRackKey(rackNo: string, productType?: string | null): str
 }
 
 // For callers that only have a bare rackNo with no productType in scope
-// (e.g. rendering a mixed-product order's rack list) — detects the format
-// from the string shape itself. A prefixed code always starts literally
-// with its product's codePrefix ("L-", "LF-", ...); classic codes never
-// contain a dash before the digits, so trying every prefixed format first is
-// unambiguous. Longest codePrefix first so a prefix that's a literal string
-// extension of another's (e.g. "LF-" starting with the same letter as "L-")
-// never gets misparsed by the shorter one. Prefer getBaseRackKey(rackNo,
-// productType) directly wherever productType IS already known.
-export function getBaseRackKeyAuto(rackNo: string): string {
+// (e.g. rendering a mixed-product order's rack list, or tallying weight
+// sold per product from Order.rackDetails, which stores no productType of
+// its own) — detects the format from the string shape itself. A prefixed
+// code always starts literally with its product's codePrefix ("L-", "LF-",
+// ...); classic codes never contain a dash before the digits, so trying
+// every prefixed format first is unambiguous. Longest codePrefix first so a
+// prefix that's a literal string extension of another's (e.g. "LF-"
+// starting with the same letter as "L-") never gets misparsed by the
+// shorter one. Prefer the productType directly wherever it's already known.
+export function detectProductTypeFromRackNo(rackNo: string): string {
   const prefixedTypes = Object.keys(PRODUCT_TYPES)
     .filter((key) => PRODUCT_TYPES[key].format === "prefixed")
     .sort((a, b) => (PRODUCT_TYPES[b].codePrefix?.length || 0) - (PRODUCT_TYPES[a].codePrefix?.length || 0));
   for (const productType of prefixedTypes) {
-    if (parseRackCode(rackNo, productType)) return getBaseRackKey(rackNo, productType);
+    if (parseRackCode(rackNo, productType)) return productType;
   }
-  return getBaseRackKey(rackNo, DEFAULT_PRODUCT_TYPE);
+  return DEFAULT_PRODUCT_TYPE;
+}
+
+export function getBaseRackKeyAuto(rackNo: string): string {
+  return getBaseRackKey(rackNo, detectProductTypeFromRackNo(rackNo));
 }
 
 // The literal string every rack code for a given letter prefix + product

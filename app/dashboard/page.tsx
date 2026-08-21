@@ -8,7 +8,7 @@ import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
 import { isPendingStorefrontMoney, isCodPending, isExcludedFromRevenue, commissionForOrder } from "../../lib/money";
 import { normalizeCustomerName } from "../../lib/nameMatch";
-import { PRODUCT_TYPES, DEFAULT_PRODUCT_TYPE } from "../../lib/rackCode";
+import { PRODUCT_TYPES, DEFAULT_PRODUCT_TYPE, detectProductTypeFromRackNo } from "../../lib/rackCode";
 import styles from "../page.module.css";
 
 interface Order {
@@ -23,6 +23,7 @@ interface Order {
   sellerName?: string;
   platform?: string;
   customerName?: string;
+  rackDetails?: string | null;
 }
 
 interface TrendPoint {
@@ -41,7 +42,7 @@ interface PendingStockEntry {
   id: string;
   actualReceivedAmount: number | null;
   codAmount: number | null;
-  items: { price: number; weightKg: number }[];
+  items: { price: number; weightKg: number; productType?: string }[];
   fulfilledAt: string | null;
 }
 
@@ -564,6 +565,52 @@ export default function DashboardPage() {
     };
   }, [orders, pendingStockEntries]);
 
+  // Same "สรุปน้ำหนักหมูที่ขาย" total as stats.totalWeight above, just split
+  // out per product. Order.crispyPorkWeight has no productType of its own —
+  // an order can even mix products across its line items — so this reads
+  // the actual rack pieces picked (Order.rackDetails) and detects each
+  // piece's product from its rack-code prefix instead (see
+  // detectProductTypeFromRackNo). An order that never got real stock
+  // assigned (no rackDetails yet) has no pieces to attribute, so it's
+  // invisible here even though its weight still counts in stats.totalWeight
+  // — same tradeoff the inventory breakdown above makes.
+  const weightSoldByProduct = useMemo(() => {
+    const byProduct = new Map<string, number>();
+    Object.keys(PRODUCT_TYPES).forEach((pt) => byProduct.set(pt, 0));
+    const add = (productType: string, weight: number) => {
+      byProduct.set(productType, (byProduct.get(productType) || 0) + weight);
+    };
+
+    orders.forEach((o) => {
+      if (!o.rackDetails) return;
+      try {
+        const pieces = JSON.parse(o.rackDetails);
+        if (!Array.isArray(pieces)) return;
+        pieces.forEach((p: any) => {
+          if (!p?.rackNo) return;
+          add(detectProductTypeFromRackNo(p.rackNo), Number(p.weight) || 0);
+        });
+      } catch {
+        // malformed rackDetails on an old order — nothing to attribute
+      }
+    });
+
+    pendingStockEntries.forEach((e) => {
+      if (e.fulfilledAt) return;
+      (e.items || []).forEach((it) => {
+        add(it.productType || DEFAULT_PRODUCT_TYPE, Number(it.weightKg) || 0);
+      });
+    });
+
+    return Array.from(byProduct.entries())
+      .map(([productType, weight]) => ({ productType, label: PRODUCT_TYPES[productType]?.label || productType, weight }))
+      .sort((a, b) => {
+        if (a.productType === DEFAULT_PRODUCT_TYPE) return -1;
+        if (b.productType === DEFAULT_PRODUCT_TYPE) return 1;
+        return b.weight - a.weight;
+      });
+  }, [orders, pendingStockEntries]);
+
   // Ranks customers within the currently-selected range/admin filter (same
   // `orders` stats above reads) by order count and by total kg. Grouped by
   // normalizeCustomerName (strips "คุณ " prefix + whitespace + casing) only
@@ -944,6 +991,18 @@ export default function DashboardPage() {
             <StatCard label="น้ำหนักหมูที่ขาย" value={`${stats.totalWeight.toFixed(2)} กก.`} color="#3fb950" />
             <StatCard label="ยอดขายสินค้า" value={`฿${formatMoney(stats.totalSales)}`} color="#ffac33" />
             <StatCard label="ยอดรับจริงรวม" value={`฿${formatMoney(stats.totalReceived)}`} color="#3fb950" />
+          </div>
+
+          <div className="glass-panel" style={{ padding: "16px 24px", borderRadius: "16px", marginBottom: "24px" }}>
+            <h3 style={{ fontSize: "13px", marginBottom: "12px", color: "var(--text-secondary)" }}>🐷 น้ำหนักหมูที่ขาย แยกตามประเภท</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {weightSoldByProduct.map((p) => (
+                <div key={p.productType} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(var(--surface-rgb),0.04)", borderRadius: "10px", padding: "10px 16px" }}>
+                  <span style={{ fontSize: "14px", fontWeight: "bold" }}>{p.label}</span>
+                  <span style={{ fontSize: "15px", fontWeight: "bold", color: "#3fb950" }}>{p.weight.toFixed(2)} กก.</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {stillWaitingCount > 0 && (
