@@ -59,6 +59,25 @@ describe("extractShortageNote", () => {
     expect(extractShortageNote("หมูในคลังไม่พอดี เกินมา 0.15 กก.")).toBe("");
   });
 
+  it("sums shortages across multiple product lines on the same order (regression: only the first shortage used to reach the print slip, silently dropping the rest)", () => {
+    const combined = "หมูในคลังไม่พอดี ขาดอีก 0.2 กก. / หมูกรอบสันนอก (Lean)ในคลังไม่พอดี ขาดอีก 0.15 กก.";
+    expect(extractShortageNote(combined)).toBe("ขาด 0.35 กก.");
+  });
+
+  it("sums three product lines' shortages together", () => {
+    const combined = [
+      "หมูในคลังไม่พอดี ขาดอีก 0.1 กก.",
+      "หมูกรอบสันนอก (Lean)ในคลังไม่พอดี ขาดอีก 0.2 กก.",
+      "หมูกรอบสะโพก (Low fat)ในคลังไม่พอดี ขาดอีก 0.05 กก.",
+    ].join(" / ");
+    expect(extractShortageNote(combined)).toBe("ขาด 0.35 กก.");
+  });
+
+  it("only sums the shortage lines, ignoring an over-allocated line mixed into the same order", () => {
+    const combined = "หมูในคลังไม่พอดี เกินมา 0.03 กก. / หมูกรอบสะโพก (Low fat)ในคลังไม่พอดี ขาดอีก 0.23 กก.";
+    expect(extractShortageNote(combined)).toBe("ขาด 0.23 กก.");
+  });
+
   it("returns empty for a slip-only note (no shortage)", () => {
     expect(extractShortageNote("[หมายเหตุสลิป: ยอดเงินไม่ตรง แต่ตรวจสอบแล้วถูกต้อง]")).toBe("");
   });

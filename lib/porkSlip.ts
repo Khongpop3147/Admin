@@ -83,10 +83,20 @@ export function getRackDisplay(rackDetailsStr: string): RackDisplay {
 // " / " that joins multiple notes together) rather than hardcoded to "หมู".
 // A stricter match here previously meant Lean/Low fat shortages silently
 // never made it onto the print slip at all.
+//
+// A multi-product order can be short on more than one line at once (e.g.
+// PORK short 0.2kg AND Lean short 0.15kg — each line gets its own
+// buildAllocationDiffNote call, joined together with " / "). Matched with
+// /g and summed rather than taking just the first hit — the packer needs
+// one combined "how much more do I owe this customer" number, and a plain
+// single .match() here previously silently dropped every shortage after
+// the first one off the printed slip.
 export function extractShortageNote(adminNote: string | null | undefined): string {
   if (!adminNote) return "";
-  const match = adminNote.match(/(?:[^/]+ในคลังไม่พอดี|ไม่มีชิ้น[^/]+ที่ใกล้เคียงพอ) ขาดอีก ([\d.]+) กก\./);
-  return match ? `ขาด ${match[1]} กก.` : "";
+  const matches = [...adminNote.matchAll(/(?:[^/]+ในคลังไม่พอดี|ไม่มีชิ้น[^/]+ที่ใกล้เคียงพอ) ขาดอีก ([\d.]+) กก\./g)];
+  if (matches.length === 0) return "";
+  const total = matches.reduce((sum, m) => sum + parseFloat(m[1]), 0);
+  return `ขาด ${Number(total.toFixed(2))} กก.`;
 }
 
 export interface PrintableOrder extends ShippingInfo {
