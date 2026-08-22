@@ -1123,7 +1123,7 @@ export default function RacksPage() {
                     </div>
                   </div>
 
-                  <div className={styles.rackScrollInner} style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '8px', marginBottom: '16px' }}>
+                  <div className={styles.draftPieceList} style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '8px', marginBottom: '16px' }}>
                       {draftRacks
                         .map((rack, idx) => ({ ...rack, originalIdx: idx }))
                         .filter(r => !searchDraft || r.rackNo.toLowerCase().includes(searchDraft.toLowerCase()))

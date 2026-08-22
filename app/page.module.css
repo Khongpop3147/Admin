@@ -538,6 +538,25 @@
     max-height: none !important;
     overflow: visible !important;
   }
+
+  /* The batch-add draft list ("เพิ่มชิ้นหมูใหม่") is its own class, NOT
+     .rackScrollInner — a big Excel import can be dozens/hundreds of rows,
+     so flattening it like .rackScrollInner's other three modals would
+     leave the whole page growing without bound, burying the save button
+     further with every piece added. Keeps its own capped, independently
+     scrolling box instead; overscroll-behavior: contain is the actual fix
+     for the double-scroll-fighting .rackScrollInner's flattening exists to
+     avoid — it stops scroll from "chaining" into the outer modal once this
+     box hits its own top/bottom, so the two scrollers never fight. Bounding
+     the list's own height also keeps the toolbar right above it (search/
+     select-all/add/clear) from ever scrolling out of view in the first
+     place, without needing to make it sticky.
+     */
+  .draftPieceList {
+    max-height: 45vh !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
 }
 
 /* Several toolbar rows on that same page cram a search box + 3-4 small
