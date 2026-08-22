@@ -47,6 +47,7 @@ interface PendingStockEntry {
   codAmount: number | null;
   items: { price: number; weightKg: number; productType?: string }[];
   fulfilledAt: string | null;
+  createdBy: string | null;
 }
 
 // How often Dashboard silently re-fetches in the background so the numbers
@@ -778,8 +779,31 @@ export default function DashboardPage() {
       entry.commission += commissionForOrder(o, settings);
       if (o.isReturned) entry.returnedCount++;
     });
+
+    // Still-waiting ลูกค้ารอหมู entries — same "counts the instant it's
+    // logged, not once it becomes a real Order" rule stats.orderCount/
+    // totalSales above already follow, keyed by createdBy (the admin who
+    // logged it, PendingStock's equivalent of sellerName). No returnedCount
+    // contribution — a not-yet-shipped entry can't have been returned.
+    // Commission mirrors commissionForOrder's own COD-holds-back rule (no
+    // codConfirmed concept pre-shipment, so any codAmount > 0 is pending).
+    pendingStockEntries.forEach((e) => {
+      if (e.fulfilledAt) return;
+      const sellerName = e.createdBy || "ไม่ระบุ";
+      const displayName = users.find((u) => u.name === sellerName)?.nickname || sellerName;
+      if (!map.has(sellerName)) map.set(sellerName, { name: displayName, orderCount: 0, weight: 0, sales: 0, commission: 0, returnedCount: 0 });
+      const entry = map.get(sellerName)!;
+      const itemsPrice = (e.items || []).reduce((s, it) => s + (Number(it.price) || 0), 0);
+      const itemsWeight = (e.items || []).reduce((s, it) => s + (Number(it.weightKg) || 0), 0);
+      const isPendingCod = (Number(e.codAmount) || 0) > 0;
+      entry.orderCount++;
+      entry.weight += itemsWeight;
+      entry.sales += itemsPrice;
+      entry.commission += isPendingCod ? 0 : itemsPrice * settings.commissionRate;
+    });
+
     return Array.from(map.values()).sort((a, b) => b.sales - a.sales);
-  }, [orders, isSuperAdmin, viewTarget, settings, users]);
+  }, [orders, pendingStockEntries, isSuperAdmin, viewTarget, settings, users]);
 
   const inventoryTargetUser = useMemo(() => {
     if (!isSuperAdmin) return currentUser;
