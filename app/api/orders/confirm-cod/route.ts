@@ -23,7 +23,7 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma2 = prisma;
 export async function POST(req: Request) {
   try {
     const session = await getSessionUser();
-    if (!session || !(session.role === "PACKING" || isSuperAdminRole(session.role))) {
+    if (!session || !(session.role === "HR" || isSuperAdminRole(session.role))) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึง" }, { status: 403 });
     }
 

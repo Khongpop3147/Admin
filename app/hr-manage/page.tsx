@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 import { useUser } from "../../components/UserProvider";
 import { isSuperAdminRole } from "../../lib/roles";
 import { BASE_PATH } from "../../lib/basePath";
@@ -62,6 +64,9 @@ const hasTrackDateMismatch = (o: Order) => hasTrackDateMismatchNote(o.adminNote)
 
 export default function HrManagePage() {
   const { currentUser, users } = useUser();
+  const router = useRouter();
+  const codFileInputRef = useRef<HTMLInputElement>(null);
+  const [isConfirmingCod, setIsConfirmingCod] = useState(false);
   // selectedDate means "วันที่จะจัดส่ง" (shipping date), same framing
   // Packing/Order Details use — defaults to tomorrow (today's entries ship
   // tomorrow), and gets converted to the underlying entryDate at the fetch
@@ -176,6 +181,65 @@ export default function HrManagePage() {
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, [selectedDate, canAccess]);
+
+  // Reads every non-empty cell in the courier's file (not tied to a specific
+  // column name, since every courier formats their report differently) and
+  // lets the backend match whichever values happen to be real tracking
+  // numbers on unconfirmed COD orders — same logic Packing's own upload used
+  // before this moved here.
+  const handleConfirmCod = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsConfirmingCod(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows: any[][] = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+      const candidates = new Set<string>();
+      rows.forEach((row) => {
+        row.forEach((cell) => {
+          if (cell === undefined || cell === null || cell === "") return;
+          const str = String(cell).trim();
+          if (str.length >= 4) candidates.add(str);
+        });
+      });
+
+      if (candidates.size === 0) {
+        alert("ไม่พบข้อมูลในไฟล์ที่อัปโหลด");
+        return;
+      }
+
+      const res = await fetch(`${BASE_PATH}/api/orders/confirm-cod`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackingNumbers: Array.from(candidates) }),
+      });
+
+      const result = await res.json();
+      if (res.ok && result.success) {
+        const names = result.confirmed.map((o: any) => `${o.customerName} (${o.trackingNumber})`).join("\n");
+        alert(
+          `ยืนยันรับ COD สำเร็จ ${result.confirmed.length} ออเดอร์:\n${names || "-"}\n\n` +
+          `(ยอด COD รวมที่ปลดล็อกเข้ายอดขาย: ฿${formatMoney(result.confirmed.reduce((s: number, o: any) => s + (Number(o.actualReceivedAmount) || 0), 0))})`
+        );
+        fetch(`${BASE_PATH}/api/orders?entryDate=${previousDayStr(selectedDate)}`)
+          .then((r) => r.json())
+          .then((d) => setOrders(d.orders || []))
+          .catch(() => {});
+      } else {
+        alert(result.error || "เกิดข้อผิดพลาดขณะยืนยันรับ COD");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดขณะอ่านไฟล์");
+    } finally {
+      setIsConfirmingCod(false);
+      if (codFileInputRef.current) codFileInputRef.current.value = "";
+    }
+  };
 
   // Debounced — searching goes to the server (every date, not just
   // selectedDate), so this shouldn't fire on every keystroke.
@@ -299,6 +363,35 @@ export default function HrManagePage() {
       <div className={styles.header} style={{ textAlign: "left", marginBottom: "24px" }}>
         <h1 className={styles.title} style={{ fontSize: "2rem" }}>HR Manage</h1>
         <p className={styles.subtitle}>ดูสถานะออเดอร์ของแต่ละแอดมิน และออเดอร์ EMS ที่ยังไม่มีเลข Tracking</p>
+      </div>
+
+      <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "24px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          type="file"
+          accept=".xlsx, .xls, .csv"
+          ref={codFileInputRef}
+          onChange={handleConfirmCod}
+          style={{ display: "none" }}
+        />
+        <button
+          type="button"
+          onClick={() => codFileInputRef.current?.click()}
+          disabled={isConfirmingCod}
+          className={styles.toolbarBtn}
+          style={{ background: "rgba(63,185,80,0.2)", border: "1px solid rgba(63,185,80,0.4)", color: "var(--accent-green)" }}
+          title="อัปโหลดไฟล์ Excel ที่มีเลขพัสดุ COD ที่ลูกค้าจ่ายเงินแล้ว เพื่อปลดล็อกยอดเข้า Dashboard"
+        >
+          {isConfirmingCod ? "กำลังตรวจสอบ..." : "🔓 ยืนยันรับ COD"}
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push("/hr-manage/cod-status")}
+          className={styles.toolbarBtn}
+          style={{ background: "rgba(88,166,255,0.15)", border: "1px solid rgba(88,166,255,0.4)", color: "var(--accent-blue)" }}
+          title="ดูว่าออเดอร์ COD วันไหนยืนยันรับแล้ว วันไหนยังไม่ยืนยัน"
+        >
+          📊 สถานะ COD
+        </button>
       </div>
 
       <div className="glass-panel" style={{ padding: "20px 24px", borderRadius: "16px", marginBottom: "24px" }}>

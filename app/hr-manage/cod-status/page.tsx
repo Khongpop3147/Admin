@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { useUser } from "../../../components/UserProvider";
 import { isSuperAdminRole } from "../../../lib/roles";
 import { BASE_PATH } from "../../../lib/basePath";
@@ -35,13 +34,7 @@ function addDays(dateStr: string, delta: number): string {
 
 export default function CodStatusPage() {
   const { currentUser } = useUser();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (currentUser && !isSuperAdminRole(currentUser.role) && currentUser.role !== "PACKING") {
-      router.replace("/orders");
-    }
-  }, [currentUser, router]);
+  const canAccess = !!currentUser && (isSuperAdminRole(currentUser.role) || currentUser.role === "HR");
 
   const [rangeFrom, setRangeFrom] = useState(() => addDays(todayBangkokStr(), -13));
   const [rangeTo, setRangeTo] = useState(() => todayBangkokStr());
@@ -50,6 +43,7 @@ export default function CodStatusPage() {
   const [nicknameByName, setNicknameByName] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    if (!canAccess) return;
     fetch(`${BASE_PATH}/api/users`)
       .then((res) => res.json())
       .then((data) => {
@@ -60,17 +54,17 @@ export default function CodStatusPage() {
         setNicknameByName(map);
       })
       .catch(() => {});
-  }, []);
+  }, [canAccess]);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!canAccess) return;
     setIsLoading(true);
     fetch(`${BASE_PATH}/api/orders?entryDateFrom=${rangeFrom}&entryDateTo=${rangeTo}`)
       .then((res) => res.json())
       .then((data) => setOrders(data.orders || []))
       .catch(() => {})
       .finally(() => setIsLoading(false));
-  }, [rangeFrom, rangeTo, currentUser]);
+  }, [rangeFrom, rangeTo, canAccess]);
 
   // Only real COD orders — codAmount 0/null never went through COD at all,
   // so there's nothing to confirm one way or the other. Grouped by entryDate
@@ -101,6 +95,15 @@ export default function CodStatusPage() {
   const totalUnconfirmedAmount = groupedByDate.reduce((s, g) => s + g.unconfirmedAmount, 0);
 
   if (!currentUser) return null;
+
+  if (!canAccess) {
+    return (
+      <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", color: "var(--text-primary)" }}>
+        <h1 style={{ fontSize: "24px", fontWeight: "bold" }}>ไม่มีสิทธิ์เข้าถึง</h1>
+        <p style={{ color: "var(--text-secondary)" }}>เฉพาะ Super Admin และ HR เท่านั้นที่เข้าหน้านี้ได้</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.container}>

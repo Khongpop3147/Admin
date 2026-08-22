@@ -86,7 +86,6 @@ export default function PackingPage() {
   const [viewingRacks, setViewingRacks] = useState<Order | null>(null);
   const [nicknameByName, setNicknameByName] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const codFileInputRef = useRef<HTMLInputElement>(null);
   // Tracks which date the most recently *fired* fetch was for, so that if the
   // admin flips the date picker quickly (e.g. A -> B -> A) and the requests
   // resolve out of order, a late-arriving response for an old date can't
@@ -842,61 +841,6 @@ export default function PackingPage() {
     }
   };
 
-  // Reads every non-empty cell in the courier's file (not tied to a specific
-  // column name, since every courier formats their report differently) and
-  // lets the backend match whichever values happen to be real tracking
-  // numbers on unconfirmed COD orders.
-  const handleConfirmCod = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsLoading(true);
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows: any[][] = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-
-      const candidates = new Set<string>();
-      rows.forEach((row) => {
-        row.forEach((cell) => {
-          if (cell === undefined || cell === null || cell === "") return;
-          const str = String(cell).trim();
-          if (str.length >= 4) candidates.add(str);
-        });
-      });
-
-      if (candidates.size === 0) {
-        alert("ไม่พบข้อมูลในไฟล์ที่อัปโหลด");
-        return;
-      }
-
-      const res = await fetch(`${BASE_PATH}/api/orders/confirm-cod`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackingNumbers: Array.from(candidates) }),
-      });
-
-      const result = await res.json();
-      if (res.ok && result.success) {
-        const names = result.confirmed.map((o: any) => `${o.customerName} (${o.trackingNumber})`).join("\n");
-        alert(
-          `ยืนยันรับ COD สำเร็จ ${result.confirmed.length} ออเดอร์:\n${names || "-"}\n\n` +
-          `(ยอด COD รวมที่ปลดล็อกเข้ายอดขาย: ฿${formatMoney(result.confirmed.reduce((s: number, o: any) => s + (Number(o.actualReceivedAmount) || 0), 0))})`
-        );
-        fetchOrders();
-      } else {
-        alert(result.error || "เกิดข้อผิดพลาดขณะยืนยันรับ COD");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("เกิดข้อผิดพลาดขณะอ่านไฟล์");
-    } finally {
-      setIsLoading(false);
-      if (codFileInputRef.current) codFileInputRef.current.value = "";
-    }
-  };
-
   const handleToggleReturned = async (order: Order) => {
     const nextValue = !order.isReturned;
     if (nextValue && !confirm(`ยืนยันว่าออเดอร์ "${order.customerName}" ถูกตีกลับใช่ไหม? ค่าคอมของแอดมินจะโดนหัก 50 บาทสำหรับออเดอร์นี้`)) {
@@ -1079,31 +1023,6 @@ export default function PackingPage() {
             style={{ background: '#f39c12', color: '#fff' }}
           >
             📤 นำเข้าเลขพัสดุ
-          </button>
-
-          <input
-            type="file"
-            accept=".xlsx, .xls, .csv"
-            ref={codFileInputRef}
-            onChange={handleConfirmCod}
-            style={{ display: 'none' }}
-          />
-          <button
-            onClick={() => codFileInputRef.current?.click()}
-            className={styles.toolbarBtn}
-            style={{ background: 'rgba(63,185,80,0.2)', border: '1px solid rgba(63,185,80,0.4)', color: 'var(--accent-green)' }}
-            title="อัปโหลดไฟล์ Excel ที่มีเลขพัสดุ COD ที่ลูกค้าจ่ายเงินแล้ว เพื่อปลดล็อกยอดเข้า Dashboard"
-          >
-            🔓 ยืนยันรับ COD
-          </button>
-
-          <button
-            onClick={() => router.push("/packing/cod-status")}
-            className={styles.toolbarBtn}
-            style={{ background: 'rgba(88,166,255,0.15)', border: '1px solid rgba(88,166,255,0.4)', color: 'var(--accent-blue)' }}
-            title="ดูว่าออเดอร์ COD วันไหนยืนยันรับแล้ว วันไหนยังไม่ยืนยัน"
-          >
-            📊 สถานะ COD
           </button>
 
           {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "PACKING") && (
