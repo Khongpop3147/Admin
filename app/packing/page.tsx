@@ -1097,6 +1097,15 @@ export default function PackingPage() {
             🔓 ยืนยันรับ COD
           </button>
 
+          <button
+            onClick={() => router.push("/packing/cod-status")}
+            className={styles.toolbarBtn}
+            style={{ background: 'rgba(88,166,255,0.15)', border: '1px solid rgba(88,166,255,0.4)', color: 'var(--accent-blue)' }}
+            title="ดูว่าออเดอร์ COD วันไหนยืนยันรับแล้ว วันไหนยังไม่ยืนยัน"
+          >
+            📊 สถานะ COD
+          </button>
+
           {(isSuperAdminRole(currentUser?.role) || currentUser?.role === "PACKING") && (
             <button
               onClick={async () => {
