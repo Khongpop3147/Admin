@@ -44,12 +44,26 @@ export async function POST(req: Request) {
     // Only COD orders that haven't been confirmed yet are eligible — a
     // tracking number that matches a non-COD order or an already-confirmed
     // one is silently skipped (not an error, just nothing to do there).
-    const matchedOrders = await prisma.order.findMany({
+    //
+    // A multi-box order stores every box's tracking number joined into one
+    // string ("A,B" — see bulk-tracking's own trackingNumbers.join(',')), so
+    // matching the WHOLE field against the uploaded list would never hit
+    // for a multi-box COD order — the courier's file lists each box's
+    // number on its own row, never the joined pair. Fetches every
+    // still-unconfirmed COD order (small in practice — dozens, not
+    // thousands) and matches candidate numbers against each order's own
+    // comma-split parts instead, so either box's number confirms the whole
+    // order.
+    const candidateSet = new Set(cleanedNumbers);
+    const codPendingOrders = await prisma.order.findMany({
       where: {
-        trackingNumber: { in: cleanedNumbers },
         codAmount: { gt: 0 },
         codConfirmed: false,
       },
+    });
+    const matchedOrders = codPendingOrders.filter((o) => {
+      const parts = (o.trackingNumber || "").split(",").map((s) => s.trim()).filter(Boolean);
+      return parts.some((p) => candidateSet.has(p));
     });
 
     if (matchedOrders.length > 0) {
@@ -65,8 +79,10 @@ export async function POST(req: Request) {
       });
     }
 
-    const matchedTrackingNumbers = new Set(matchedOrders.map((o) => o.trackingNumber));
-    const unmatched = cleanedNumbers.filter((t) => !matchedTrackingNumbers.has(t));
+    const matchedTrackingParts = new Set(
+      matchedOrders.flatMap((o) => (o.trackingNumber || "").split(",").map((s) => s.trim()).filter(Boolean))
+    );
+    const unmatched = cleanedNumbers.filter((t) => !matchedTrackingParts.has(t));
 
     return NextResponse.json({
       success: true,
